@@ -99,7 +99,13 @@ The memory usage of Omega can be controlled using the `-m` option to the run scr
 ```
 Min Required Memory (GB) = (Disk Space of Reads) + (1GB * num_threads)
 ``` 
-The program will run faster if more memory is made available. 
+The program will run faster if more memory is made available.
+
+#### Restarting Omega3 for repeat assembly and handling assembly crashes
+
+Omega3 assembler can be restarted with changed assembly and scaffolding parameters using the `-osg` option. Setting this option while invoking `runOmega3.sh` will reuse the overlap graph constructed earlier and only perform the graph simplification step. This will significantly reduce executime time of assemblies on the same dataset with different parameters.    
+
+Omega3 assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Omega3 will attempt to continue the assembly. Do not set the `-osg` option in this case.   
 
 #### Setting assembly parameters
 
@@ -108,42 +114,74 @@ The assembly parameters can be modified to attempt better assembly. This can be 
 The configurable parameters include the following:
 
 ```
+##############################################################
+###   Assembly and scaffolding configurations for Omega3   ###
+##############################################################
 
-##########################################
-### Assembly configuration file for Omega3
-##########################################
+#### Parameters for building an overlap graph ####
 
-# Minimum overlap length to create an edge
-minOvl=40
+# Minimum overlap length (bp) required to insert an edge between two reads during graph construction 
+# Increase this to reduce N50 and mis-assemblies
+MinOverlap4BuildGraph = 40  
 
-# minimum reads count in an edge to be not dead end edge (default: 20)
-minReadsCountInEdgeToBeNotDeadEnd = 20
-# minimum edge length to be not dead end edge (default: 1000)
+
+###################################################
+
+
+#### Parameters for simplifying an overlap graph ####
+# You can run graph simplification using different settings below on the same assembly graph without re-doing graph construction.
+
+# Parameters for Omega output
+
+# Print contigs or not. Options are "false" (default) or "true". Printing takes a non-trivial amount of wall-clock time.
+PrintContigs = false
+# Print scaffolds or not. Options are "true" (default) or "false"
+PrintScaffolds = true
+# Minimum length of contigs or scaffolds to be printed (default: 1000 bp)
+minSequenceLengthTobePrinted = 1000
+
+
+# Minimum overlap length (bp) required to keep an edge between two reads during graph simplification
+# This minimum overlap length must be equal to (Default) or larger than the MinOverlap4BuildGraph above
+# This allows you to try different minimum overlap lengths for assembly without re-doing assembly graph construction
+# Edges with shorter overlap length than this parameter will be ignored during graph simplification
+# Increase this to reduce N50 and mis-assemblies
+MinOverlap4SimplifyGraph = 40
+
+# Minimum overlap length difference (bp) to clip branches (default: 25 bp)
+# If a read has multiple edges, Omega clips the branches with overlap lengths less than the largest overlap of this read by this difference or more.
+# Increase this to reduce N50 and mis-assemblies
+minOverlapDifference4ClipBranches = 25 
+
+
+# Parameters for joins edges or scaffolding edges using paired-end information 
+# Minumum number of paired-end reads that provide unique support to merge two edges (default: 3)
+# Increase this to reduce N50 and mis-assemblies
+minUniquePEsupport=3  
+# Minumum number of paired-end reads that provide non-unique support to merge two edges (default: 0)
+minNonUniquePEsupport=0
+
+
+# Parameters for dead-end edge removal
+
+# Minimum number of reads in an edge to be not dead-end edge (default: 10)
+minReadsCountInEdgeToBeNotDeadEnd = 10
+# Minimum edge length (bp) to be not dead-end edge (default: 1000)
 minEdgeLengthToBeNotDeadEnd = 1000
-
-# minimum reads count for an edge to be kept even if it has 0 flow (default: 15)
-minReadsCountToHave0Flow = 15
-# minimum edge length or an edge to be kept even if it has 0 flow (default: 1500)
-minEdgeLengthToHave0Flow = 1500
-
-# minimum reads count in an edge to be 1 minimum flow (default: 10)
-minReadsCountInEdgeToBe1MinFlow = 10
-# minimum edge length to be 1 minimum flow (default: 1000)
-minEdgeLengthToBe1MinFlow = 1000
-
-# minimum overlap length difference to clip branches (default: 15)
-minOvlDiffToClip = 15
-
-# minimum fold difference to consider branches to be short (default: 5)
+# Minimum fold difference between two branches' lengths to consider a branch to be short (default: 5)
 minFoldToBeShortBranch = 5
 
-# minumum unique mate pair support to join edge (default: 3)
-minUinqSupport=3
-# minumum non-unique mate pair support to join edge (default: 0)
-minNonUniqSupport=0
+# Parameters for flow analysis
 
-# minimum contig length to be reported (default: 1000)
-minContigLengthTobeReported = 1000
+# Minimum number of reads for an edge to be kept even if it has 0 flow (default: 15)
+minReadsCountToHave0Flow = 15
+# Minimum edge length for an edge to be kept even if it has 0 flow (default: 1500)
+minEdgeLengthToHave0Flow = 1500
+# Minimum number of reads in an edge to be assigned with 1 minimum flow (default: 20)
+minReadsCountInEdgeToBe1MinFlow = 20
+# Minimum edge length to be assigned with 1 minimum flow (default: 2000 bp)
+minEdgeLengthToBe1MinFlow = 2000
+
 ```
 #### Omega3 Assembler Output
 

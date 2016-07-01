@@ -104,13 +104,6 @@ int main(int argc, char **argv) {
 		overlapGraph->simplifyScaffoldGraph();
 	} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
 
-	/*edge_file = outputFilenamePrefix+"_scaffoldEdges0.txt";
-	contig_file = outputFilenamePrefix+"_scaffolds0.fasta";
-	edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverage0.txt";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file,edge_cov_file,"scaff", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();*/
-
 	iteration = 0;
 	do
 	{

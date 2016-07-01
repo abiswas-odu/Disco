@@ -168,8 +168,6 @@ public:
     static vector<string> readPairedFilenamesList;
     static vector<string> readInterPairedFilenamesList;
     static vector<string> edgeFilenamesList;
-    static vector<UINT64> meanInnerDist;
-    static vector<UINT64> stdDivInnerDist;
     static string outFilenamePrefix;
     static string containedReadsFile;
     static UINT64 parallelThreadPoolSize;
@@ -193,12 +191,6 @@ public:
 
     // Get paired interleaved read filenames
     static vector<string> getInterPairedReadFilenames() {return readInterPairedFilenamesList;}
-
-    // Get read filenames
-	static vector<UINT64> getMeanInnerDist() {return meanInnerDist;}
-
-	// Get read filenames
-	static vector<UINT64> getStdDivInnerDist() {return stdDivInnerDist;}
 
     // Get edge filenames
     static vector<string> getEdgeFilenames() {return edgeFilenamesList;}

@@ -13,7 +13,7 @@ readFile1=""
 readFile2=""
 readFileS=""
 readFileP=""
-asmParaFileP="${exePath}/parameter.cfg"
+asmParaFileP="${exePath}/omega3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
 ovlLength=40
@@ -151,8 +151,8 @@ else
 fi
 
 if [ -d "${dataOutPath}/assembly" ] ; then
-   echo "Previous result directory \"assembly\" exists. Will nuke previous run..."
-   `rm -rf ${dataOutPath}/assembly`
+   echo "Previous result directory \"assembly\" exists. Will not nuke previous run. Exiting..."
+   exit 1
 fi
 `mkdir ${dataOutPath}/assembly`
 

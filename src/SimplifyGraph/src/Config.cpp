@@ -28,8 +28,6 @@ Config::~Config() {
 vector<string> Config::readSingleFilenamesList;
 vector<string> Config::readPairedFilenamesList;
 vector<string> Config::readInterPairedFilenamesList;
-vector<UINT64> Config::meanInnerDist;
-vector<UINT64> Config::stdDivInnerDist;
 vector<string> Config::edgeFilenamesList;
 string Config::outFilenamePrefix = "new_omega_out";
 string Config::containedReadsFile = "";
