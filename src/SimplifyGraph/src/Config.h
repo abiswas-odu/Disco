@@ -91,6 +91,12 @@ extern unsigned int minNonUniqSupport;
 
 // minimum contig length to be reported (default: 1000)
 extern unsigned int minContigLengthTobeReported;
+
+// print contigs or not
+extern bool printContigs;
+
+// print scaffolds or not
+extern bool printScaffolds;
 //============================================================================
 
 

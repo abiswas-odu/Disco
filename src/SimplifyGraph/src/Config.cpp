@@ -54,6 +54,10 @@ unsigned int minUinqSupport=3;
 unsigned int minNonUniqSupport=0;
 
 unsigned int minContigLengthTobeReported = 1000;
+
+bool printContigs=false;
+
+bool printScaffolds=false;
 //=============================================================================
 // print help usage
 //=============================================================================
@@ -109,18 +113,24 @@ void Config::setParameters()
 					minReadsCountToHave0Flow=stoi(parVal);
 				else if(parName=="minEdgeLengthToHave0Flow")
 					minEdgeLengthToHave0Flow=stoi(parVal);
-				else if(parName== "minContigLengthTobeReported")
+				else if(parName== "minSequenceLengthTobePrinted")
 					minContigLengthTobeReported=stoi(parVal);
-				else if(parName== "minOvlDiffToClip")
+				else if(parName== "minOverlapDifference4ClipBranches")
 					minOvlDiffToClip=stoi(parVal);
 				else if(parName== "minFoldToBeShortBranch")
 					minFoldToBeShortBranch=stoi(parVal);
-				else if(parName== "minUinqSupport")
+				else if(parName== "minUniquePEsupport")
 					minUinqSupport=stoi(parVal);
-				else if(parName== "minNonUniqSupport")
+				else if(parName== "minNonUniquePEsupport")
 					minNonUniqSupport=stoi(parVal);
-				else if(parName== "minOvl")
+				else if(parName== "MinOverlap4BuildGraph")
 					minOvl=stoi(parVal);
+				else if(parName== "MinOverlap4SimplifyGraph")
+					minOvl=stoi(parVal);
+				else if(parName== "PrintContigs")
+					printContigs=false;
+				else if(parName== "PrintScaffolds")
+					printScaffolds=false;
 				else
 					MYEXIT("Unknown parameter in parameter file: "+parName);
 			}

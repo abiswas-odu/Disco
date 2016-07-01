@@ -15,7 +15,7 @@
 #include "DataSet.h"
 #include "Edge.h"
 
-#define minimumUniqueSupport 5		// Minimum number of support required to merge to edges (both using matepair paths and scaffolding step)
+#define minimumUniqueSupport 2		// Minimum number of support required to merge to edges (both using matepair paths and scaffolding step)
 								// CP: should we consider using different thresholds for matepair paths and scaffolding?
 								// BH: If we want we can use different thresholds.
 #define loopLimit 15			// Number of time to loop in the main function.
