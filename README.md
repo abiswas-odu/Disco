@@ -92,7 +92,7 @@ For all the options of omega3, use `./runOmega3.sh -h`
 
 In case the program crashes due to exceeding wall clock time, the assembler can be restarted with the same command. 
 
-### Controlling memory usage
+#### Controlling memory usage
 
 The memory usage of Omega can be controlled using the `-m` option to the run script as shown above. The default memory usage is to take all the system resources. In case that has to be avoided or the program crashes ot is too slow due to memory page swapping, the user can set a ubber bound on the memory. The minumum memory to assemble a dataset is:
 
