@@ -151,8 +151,8 @@ else
 fi
 
 if [ -d "${dataOutPath}/assembly" ] ; then
-   echo "Previous result directory \"assembly\" exists. Will not nuke previous run. Exiting..."
-   exit 1
+   echo "Previous result directory \"assembly\" exists. Will nuke previous run..."
+   `rm -rf ${dataOutPath}/assembly`
 fi
 `mkdir ${dataOutPath}/assembly`
 
