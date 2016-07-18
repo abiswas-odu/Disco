@@ -43,7 +43,6 @@ class OverlapGraph
 		UINT64 maxMemMB;
 		UINT8 twinEdgeOrientation(UINT8 orientation);				// Orientation of the reverse edge.
 	public:
-		OverlapGraph(void);											// Default constructor.
 		OverlapGraph(HashTable *ht,UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix);								// Another constructor.
 		~OverlapGraph();											// Destructor.
 		bool markTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph); // Mark transitive edges of a read.

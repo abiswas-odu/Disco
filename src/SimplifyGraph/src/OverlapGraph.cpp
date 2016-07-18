@@ -1096,7 +1096,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
  *  Description:  simplify graph right after graph construction
  * =====================================================================================
  */
-void OverlapGraph::simplifyGraphInitial(void)
+void OverlapGraph::graphPathFindInitial(void)
 {
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";

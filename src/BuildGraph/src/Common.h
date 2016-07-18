@@ -43,18 +43,7 @@ typedef long INT32;
 typedef unsigned long long UINT64;
 typedef long long INT64;
 
-
-#define aStatisticsThreshold 3
-#define minDelta 1000
-#define deadEndLength 10
-#define minimumSupport 3
-#define loopLimit 15
-#define	coverageDepthLB 40
-#define coverageDepthUB 200
-#define insertSizeRangeSD 3	// 3 means mean +/- 3 SD
-
 //Multi-thread parallel options
-#define DEF_THREAD_COUNT 4
 #define MEGA_PAR_GRAPH_SIZE 80000
 #define MAX_PAR_GRAPH_SIZE 40000
 #define MID_PAR_GRAPH_SIZE 20000

@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 	UINT64 minimumOverlapLength;
 	vector<string> pairedEndFileNames, singleEndFileNames;
 	string allFileName;
-	UINT64 maxThreads = DEF_THREAD_COUNT;
+	UINT64 maxThreads = omp_get_max_threads();
 	UINT64 writeGraphSize = MID_PAR_GRAPH_SIZE;
 	UINT64 maxMemSizeGB = getMaxMemory();
 	cout<<"Max available memory: "<<maxMemSizeGB<< " GB"<<endl;

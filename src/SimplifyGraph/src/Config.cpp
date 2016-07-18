@@ -1,7 +1,7 @@
 //============================================================================
 // Name        : Config.cpp
-// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey
-// Version     : v1.2
+// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
+// Version     : v3
 // Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : Config cpp file
 //============================================================================

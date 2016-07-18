@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 			readPairedFilenameList, readInterPairedFilenameList, simplifyPartialPath,
 			minOvl, threadPoolSize);
 
-	overlapGraph->simplifyGraphInitial();
+	overlapGraph->graphPathFindInitial();
 
 	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
 	ofstream g_out(graph_file.c_str());

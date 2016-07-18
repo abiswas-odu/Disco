@@ -66,21 +66,6 @@ bool isOverlappintInterval(UINT64 mean1, UINT64 sd1, UINT64 mean2, UINT64 sd2)
 }
 
 /**********************************************************************************************************************
-	Default Constructor
-**********************************************************************************************************************/
-OverlapGraph::OverlapGraph(void)
-{
-	// Initialize the variables.
-	numberOfNodes = 0;
-	numberOfEdges = 0;
-	parallelThreadPoolSize=DEF_THREAD_COUNT;
-	writeParGraphSize=MAX_PAR_GRAPH_SIZE;
-
-}
-
-
-
-/**********************************************************************************************************************
 	Another Constructor. Build the overlap graph using the hash table.
 BNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNMM
 

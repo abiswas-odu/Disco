@@ -182,7 +182,7 @@ class OverlapGraph
 		// Some simple simplification.
 		void simplifyGraph(void);
 
-		void simplifyGraphInitial(void);
+		void graphPathFindInitial(void);
 
 		// Calculate the minimum cost flow of the overlap graph using file
 		void calculateFlowStream(void);
