@@ -8,7 +8,7 @@ else
 fi;
 
 #Basic parameters defaults
-numThreads=2
+numThreads=`nproc`
 readFile1=""
 readFile2=""
 readFileS=""
@@ -37,7 +37,7 @@ case $key in
     echo -e "<OPTIONS>\n"
     echo -e "   -h\t help.\n"
     echo -e "   -m\t maximum memory to be used (DEFAULT: $maxMem GB).\n"
-    echo -e "   -n\t number of threads (DEFAULT: 2).\n"
+    echo -e "   -n\t number of threads (DEFAULT: $numThreads).\n"
     echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
     exit 1
@@ -151,10 +151,10 @@ else
 fi
 
 if [ -d "${dataOutPath}/assembly" ] ; then
-   echo "Previous result directory \"assembly\" exists. Will not nuke previous run. Exiting..."
-   exit 1
+   echo "Previous result directory \"assembly\" exists. Will nuke previous run..."
+else
+   `mkdir ${dataOutPath}/assembly`
 fi
-`mkdir ${dataOutPath}/assembly`
 
 #Build graph
 if [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
