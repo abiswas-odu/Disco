@@ -1965,10 +1965,9 @@ void OverlapGraph::printContigs(ostream & out, string edge_file,string edge_cov_
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
-		populate_edge(*it);
-		string contigString = (*it)->getEdgeString();
-
-		if(contigString.length() >= minContigLengthTobeReported){
+		if((*it)->getEdgeLength() >= minContigLengthTobeReported){
+			populate_edge(*it);
+			string contigString = (*it)->getEdgeString();
 			#pragma omp critical
 			{
 				++printed_contigs;
