@@ -38,22 +38,22 @@ string Config::paramFileName="parameter.cfg";
 // global variables with default value
 unsigned int minOvl=40;
 
-unsigned int minReadsCountInEdgeToBeNotDeadEnd = 20;
-unsigned int minEdgeLengthToBeNotDeadEnd = 1000;
+unsigned int minReadsCountInEdgeToBeNotDeadEnd = 5;
+unsigned int minEdgeLengthToBeNotDeadEnd = 500;
 
-unsigned int minReadsCountToHave0Flow = 15;
-unsigned int minEdgeLengthToHave0Flow = 1500;
+unsigned int minReadsCountToHave0Flow = 10;
+unsigned int minEdgeLengthToHave0Flow = 1000;
 
 unsigned int minReadsCountInEdgeToBe1MinFlow = 10;
 unsigned int minEdgeLengthToBe1MinFlow = 1000;
 
-unsigned int minOvlDiffToClip = 15;
+unsigned int minOvlDiffToClip = 25;
 unsigned int minFoldToBeShortBranch = 5;
 
 unsigned int minUinqSupport=3;
 unsigned int minNonUniqSupport=0;
 
-unsigned int minContigLengthTobeReported = 1000;
+unsigned int minContigLengthTobeReported = 500;
 
 bool printContigs=false;
 

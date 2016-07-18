@@ -67,25 +67,55 @@ int main(int argc, char **argv) {
 			readPairedFilenameList, readInterPairedFilenameList, simplifyPartialPath,
 			minOvl, threadPoolSize);
 
+	string edge_file = outputFilenamePrefix+"_contigEdges_1.txt";
+	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_1.txt";
+	string contig_file = outputFilenamePrefix+"_contigsFinal_1.fasta";
+	ofstream f_out;
+	f_out.open(contig_file.c_str());
+	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+	f_out.close();
+
 	overlapGraph->graphPathFindInitial();
 
-	std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
+	edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
+	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
+	contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
+	f_out.open(contig_file.c_str());
+	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+	f_out.close();
+
+	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
 	ofstream g_out(graph_file.c_str());
 	g_out << *overlapGraph;
-	g_out.close();
+	g_out.close();*/
 
 	overlapGraph->simplifyGraph();
+
+	edge_file = outputFilenamePrefix+"_contigEdges_3.txt";
+	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_3.txt";
+	contig_file = outputFilenamePrefix+"_contigsFinal_3.fasta";
+	f_out.open(contig_file.c_str());
+	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+	f_out.close();
 
 	// Flow analysis
 	overlapGraph->calculateFlowStream();
 	overlapGraph->removeAllEdgesWithoutFlow();
+
+	edge_file = outputFilenamePrefix+"_contigEdges_4.txt";
+	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_4.txt";
+	contig_file = outputFilenamePrefix+"_contigsFinal_4.fasta";
+	f_out.open(contig_file.c_str());
+	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+	f_out.close();
+
+
 	overlapGraph->simplifyGraph();
 
 	//Print contig edge file for scaffolding
-	string edge_file = outputFilenamePrefix+"_contigEdgesFinal.txt";
-	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal.txt";
-	string contig_file = outputFilenamePrefix+"_contigsFinal.fasta";
-	ofstream f_out;
+	edge_file = outputFilenamePrefix+"_contigEdgesFinal.txt";
+	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal.txt";
+	contig_file = outputFilenamePrefix+"_contigsFinal.fasta";
 	f_out.open(contig_file.c_str());
 	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
 	f_out.close();
