@@ -1096,11 +1096,12 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
  *  Description:  simplify graph right after graph construction
  * =====================================================================================
  */
-void OverlapGraph::graphPathFindInitial(void)
+void OverlapGraph::graphPathFindInitial(string containedReadsFileName)
 {
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
+	m_dataset->storeContainedReadInformation(containedReadsFileName);
 	calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {

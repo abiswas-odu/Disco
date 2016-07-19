@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
 	f_out.close();
 
-	overlapGraph->graphPathFindInitial();
+	overlapGraph->graphPathFindInitial(containedReadsFileName);
 
 	edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
 	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";

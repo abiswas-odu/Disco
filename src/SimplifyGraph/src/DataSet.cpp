@@ -279,11 +279,12 @@ UINT32 DataSet::getReadCoverage(UINT64 readID, UINT64 indx) const
 	}
 	return cov;
 }
-
-vector<UINT64> DataSet::getMatePairList(Read *read)
+/****
+ * Returns the mate id of a read, 0 otherwise
+ */
+UINT64 DataSet::getMatePair(UINT64 r1ID)
 {
-	vector<UINT64> mpList;
-	UINT64 r1ID = read->getReadID();
+	UINT64 r2ID=0;
 	for(size_t i=0; i < dataSetInfo->size();i++)
 	{
 		if(dataSetInfo->at(i).isPaired)
@@ -293,33 +294,48 @@ vector<UINT64> DataSet::getMatePairList(Read *read)
 				if(dataSetInfo->at(i).isReadInterleaved)			//Check if the read is from an interleaved read file.
 				{
 					int testForR = (r1ID-dataSetInfo->at(i).r1Start);
-					UINT64 r2ID = 0;
 					if (testForR % 2)  //If odd reverse read
 						r2ID = r1ID-1;
 					else				//If odd forward read
 						r2ID = r1ID+1;
 					if(r2ID!=0 && !at(r2ID)->isContainedRead())
-						mpList.push_back(r2ID);
+						return r2ID;
 					break;
 				}
 				else
 				{
 					UINT64 r2ID = (r1ID-dataSetInfo->at(i).r1Start) + dataSetInfo->at(i).r2Start;
 					if(!at(r2ID)->isContainedRead())
-						mpList.push_back(r2ID);
+						return r2ID;
 					break;
 				}
 			}
 			else if(r1ID>=dataSetInfo->at(i).r2Start && r1ID<=dataSetInfo->at(i).r2End)  //Interleaved file check not required as r2Start and r2End are 0s in interleaved files
 			{
-				UINT64 r2ID = (r1ID-dataSetInfo->at(i).r2Start) + dataSetInfo->at(i).r1Start;
+				r2ID = (r1ID-dataSetInfo->at(i).r2Start) + dataSetInfo->at(i).r1Start;
 				if(!at(r2ID)->isContainedRead())
-					mpList.push_back(r2ID);
+					return r2ID;
 				break;
 			}
 		}
 	}
-	return mpList;
+	return r2ID;
+}
 
+vector<UINT64> DataSet::getMatePairList(Read *read)
+{
+	vector<UINT64> mpList;
+	UINT64 r1ID = read->getReadID();
+	UINT64 r2ID = getMatePair(r1ID);
+	if(r2ID!=0)
+		mpList.push_back(r2ID);
+	for(UINT64 i=0;i<read->getContainedReadCount();i++)
+	{
+		UINT64 c1ID = read->getContainedReadID(i);
+		UINT64 c2ID = getMatePair(c1ID);
+		if(c2ID!=0)
+			mpList.push_back(c2ID);
+	}
+	return mpList;
 }
 

@@ -57,9 +57,6 @@ class DataSet
 		// Load reads from an edge file, in this case, only the length is available
 		void loadReadsFromEdgeFile(const std::string &edge_file);
 
-		// Load contained read information from file
-		void storeContainedReadInformation(string containedReadFile);
-
 		//Check if read is good or bad
 		bool testRead(const string & read);
 	public:
@@ -86,6 +83,9 @@ class DataSet
 
 		void setSequenceLoaded(bool isLoaded) {isSequenceLoaded=isLoaded;}
 
+		// Load contained read information from file
+		void storeContainedReadInformation(string containedReadFile);
+
 		/* ====================  ACCESSORS     ======================================= */ 
 		UINT64 size() const{ return m_vec_reads->size();}
 
@@ -100,6 +100,8 @@ class DataSet
 		UINT32 getReadCoverage(UINT64 readID, UINT64 indx) const;
 
 		vector<UINT64> getMatePairList(Read *read);
+
+		UINT64 getMatePair(UINT64 r1ID);
 
 };
 
