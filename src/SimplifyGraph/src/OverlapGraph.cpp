@@ -2395,7 +2395,7 @@ void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanc
 	}
 	// BH: we do not go deeper than 100 levels. We can put this in the config file.
 	// CP: when reaching the maximum depth, return 0 path found and exit the recursive call loop
-	if(level > 100) return; // Do not go very deep.
+	if(level > 5) return; // Do not go very deep.
 
 
 	if(level == 0)
