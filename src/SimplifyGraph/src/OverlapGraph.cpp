@@ -1102,10 +1102,10 @@ void OverlapGraph::graphPathFindInitial(void)
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
 	calculateMeanAndSdOfInnerDistance();
-	findSupportByMatepairsAndMerge();
 	UINT64 counter(0);
 	do {
 		counter = contractCompositeEdgesPar();
+		findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
@@ -2076,7 +2076,7 @@ void OverlapGraph::merge2Edges(Edge *edge1, Edge *edge2)
 
 
 /**********************************************************************************************************************
-	Check for paths in the overlap graph between each matepair and calculate the support by using the paths.
+	Check for paths in the overlap graph between each mate-pair and calculate the support by using the paths.
 **********************************************************************************************************************/
 UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 {
@@ -2086,14 +2086,10 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 	// if the file set is not mate-pair, then just skip
 	//if(meanOfInsertSizes.size() == 0) // no mate-pair
 	//  return 0;
-	// a path is defined by a vector of edges,
-	vector <Edge *> copyOfPath;
-	// This list of flags is used to mark the edges that are common in all paths found.
-	vector <UINT64> copyOfFlags;
 	UINT64 noPathsFound = 0, pathsFound = 0, mpOnSameEdge=0;
 
 	vector <pairedEdges> listOfPairedEdges;
-
+	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 	{
 		Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
@@ -2108,24 +2104,35 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			//if(meanOfInsertSizes.at(read1->getMatePairList()->at(j).datasetNumber) == 0)
 			//	continue;
 			//Orientation is F/R so its always 2
+			// a path is defined by a vector of edges,
+			vector <Edge *> copyOfPath;
+			// This list of flags is used to mark the edges that are common in all paths found.
+			vector <UINT64> copyOfFlags;
 			if(findPathBetweenMatepairs(read1, read2, 2,
 					m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags) == true)
 			{
 				// Matepair on different edge
 				if(copyOfPath.size() == 0)
-					noPathsFound++;
+				{
+					#pragma omp atomic
+						noPathsFound++;
+				}
 				else
-					pathsFound++;
+				{
+					#pragma omp atomic
+						pathsFound++;
+				}
 			}
 			else // Mate pair on the same edge
 			{
-				mpOnSameEdge++;
+				#pragma omp atomic
+					mpOnSameEdge++;
 			}
 			if(copyOfPath.size() > 1)	// Path found
 			{
 				for(UINT64 k = 0; k < copyOfFlags.size(); k++)
 				{
-				// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
+					// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
 					if(copyOfFlags.at(k) == 1)
 					{
 						UINT64 l;
@@ -2134,14 +2141,16 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 							// already present in the list
 							if(listOfPairedEdges.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges.at(l).edge2 == copyOfPath.at(k+1))
 							{
-								listOfPairedEdges.at(l).support = listOfPairedEdges.at(l).support + 1;	// only increase the support
+								#pragma omp atomic
+								listOfPairedEdges.at(l).support++;	// only increase the support
 								break;
 							}
 							// already present in the list
 							else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
 									&& listOfPairedEdges.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
 							{
-								listOfPairedEdges.at(l).support = listOfPairedEdges.at(l).support + 1;	// only increase the support
+								#pragma omp atomic
+									listOfPairedEdges.at(l).support++;	// only increase the support
 								break;
 							}
 						}
@@ -2153,12 +2162,15 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 								// do not want to add support between edge (a,a) and (a,a)
 							//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
 							{
-								pairedEdges newPair;
-								newPair.edge1 = copyOfPath.at(k);
-								newPair.edge2 = copyOfPath.at(k+1);
-								newPair.support = 1;
-								newPair.isFreed = false;
-								listOfPairedEdges.push_back(newPair);
+								#pragma omp critical(updatePairEdges)
+								{
+									pairedEdges newPair;
+									newPair.edge1 = copyOfPath.at(k);
+									newPair.edge2 = copyOfPath.at(k+1);
+									newPair.support = 1;
+									newPair.isFreed = false;
+									listOfPairedEdges.push_back(newPair);
+								}
 							}
 						}
 					}
@@ -2228,10 +2240,6 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 	// CP: two variables passed to the exploreGraph function for return values
 	vector <Edge *> firstPath;
 	vector <UINT64> flags;
-
-	copyOfPath.clear();
-	copyOfFlags.clear();
-	//UINT64 flag = 0;
 
 	vector<t_edge_loc_pair> listRead1, listRead2;
 
