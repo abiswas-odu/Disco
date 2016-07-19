@@ -217,8 +217,9 @@ class OverlapGraph
 		bool findPathBetweenMatepairs(const Read * read1, const Read * read2,
 				UINT8 orient, UINT8 datasetNumber, vector <Edge *> &copyOfPath, vector <UINT64> &copyOfFlags);
 
-		UINT64 exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
-				UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags);
+		void exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
+				UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
+				UINT64 &pathFound, vector <Edge *> &listOfEdges, vector <UINT64> &pathLengths);
 
 		UINT64 findSupportByMatepairsAndMerge(void);
 		UINT64 scaffolder(void);

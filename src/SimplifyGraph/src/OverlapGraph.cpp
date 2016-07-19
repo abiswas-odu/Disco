@@ -2108,8 +2108,10 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			vector <Edge *> copyOfPath;
 			// This list of flags is used to mark the edges that are common in all paths found.
 			vector <UINT64> copyOfFlags;
-			if(findPathBetweenMatepairs(read1, read2, 2,
-					m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags) == true)
+			bool findPaths=false;
+			findPaths = findPathBetweenMatepairs(read1, read2, 2,
+				m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags);
+			if(findPaths == true)
 			{
 				// Matepair on different edge
 				if(copyOfPath.size() == 0)
@@ -2135,34 +2137,32 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
 					if(copyOfFlags.at(k) == 1)
 					{
-						UINT64 l;
-						for(l = 0; l < listOfPairedEdges.size(); l++)
+						#pragma omp critical(updatePairEdges)
 						{
-							// already present in the list
-							if(listOfPairedEdges.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges.at(l).edge2 == copyOfPath.at(k+1))
+							UINT64 l;
+							for(l = 0; l < listOfPairedEdges.size(); l++)
 							{
-								#pragma omp atomic
-								listOfPairedEdges.at(l).support++;	// only increase the support
-								break;
-							}
-							// already present in the list
-							else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
-									&& listOfPairedEdges.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
-							{
-								#pragma omp atomic
+								// already present in the list
+								if(listOfPairedEdges.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges.at(l).edge2 == copyOfPath.at(k+1))
+								{
 									listOfPairedEdges.at(l).support++;	// only increase the support
-								break;
+									break;
+								}
+								// already present in the list
+								else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
+										&& listOfPairedEdges.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
+								{
+									listOfPairedEdges.at(l).support++;	// only increase the support
+									break;
+								}
 							}
-						}
-						if(l == listOfPairedEdges.size()) // not present in the list
-						{
-								// add in the list with support 1
-							if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
-									|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
-								// do not want to add support between edge (a,a) and (a,a)
-							//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
+							if(l == listOfPairedEdges.size()) // not present in the list
 							{
-								#pragma omp critical(updatePairEdges)
+									// add in the list with support 1
+								if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
+										|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
+									// do not want to add support between edge (a,a) and (a,a)
+								//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
 								{
 									pairedEdges newPair;
 									newPair.edge1 = copyOfPath.at(k);
@@ -2202,7 +2202,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			merge2Edges(listOfPairedEdges.at(i).edge1, listOfPairedEdges.at(i).edge2);
 
 			// BH: once we merge edge1 and edge2. We make sure that we do not try to merge these edges again.
-			// We mark all the pair of edes that contains edge1 and edge2 or their reverse edges.
+			// We mark all the pair of edges that contains edge1 and edge2 or their reverse edges.
 			for(UINT64 j = i + 1; j<listOfPairedEdges.size(); j++)
 			{
 				if( listOfPairedEdges.at(j).edge1 == e1f || listOfPairedEdges.at(j).edge1 == e1r
@@ -2318,7 +2318,12 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 						(m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance + insertSizeRangeSD * m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistanceSD))
 				{
 					// from first edge  try to find a path to the last edge.
-					UINT64 newPaths= exploreGraph(firstEdge, lastEdge, distanceOnFirstEdge, distanceOnLastEdge, datasetNumber, 0, firstPath, flags);
+					UINT64 newPaths = 0;
+					vector <Edge *> listOfEdges;
+					vector <UINT64> pathLengths;
+					exploreGraph(firstEdge, lastEdge, distanceOnFirstEdge, distanceOnLastEdge, datasetNumber,
+							0, firstPath, flags,newPaths,listOfEdges,pathLengths);
+
 					if(newPaths > 0)	// If some path found.
 					{
 						pathFound+=newPaths;	// How many paths found.
@@ -2366,16 +2371,13 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 // BH: when we find the first path we save it and flag is used to indicate that all the edges in the first path are supported.
 //     When we find another path, we unmark the flag for the pair of edges in the first path that are not present in the second path and so on.
 // CP: return the number of paths found
-UINT64 OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
-		UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags)
+void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
+		UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
+		UINT64 &pathFound, vector <Edge *> &listOfEdges, vector <UINT64> &pathLengths)
 {
-	// CP: use static variables to carry their values through the recursive calls of this function
-	static UINT64 pathFound;					// number of paths found
-	static vector <Edge *> listOfEdges;			// list of edges in the current path
 	// length of the path from the beginning of the source read of the first edge to the current edge's source read's beginning
 	INT64 meanDist = m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance;
 	INT64 meanSD = m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistanceSD;
-	static vector <UINT64> pathLengths;
 	if(level == 0)
 	{
 		// clear the variables and resize their capacity to free memory
@@ -2392,7 +2394,7 @@ UINT64 OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 dista
 	}
 	// BH: we do not go deeper than 100 levels. We can put this in the config file.
 	// CP: when reaching the maximum depth, return 0 path found and exit the recursive call loop
-	if(level > 100) return 0; // Do not go very deep.
+	if(level > 100) return; // Do not go very deep.
 
 
 	if(level == 0)
@@ -2440,7 +2442,7 @@ UINT64 OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 dista
 					}
 				}
 				// CP: when found a valid path, return 1 path found and exit the recursive call
-				return 1;
+				return;
 			}
 			else		// add the new edge in the path
 			{
@@ -2466,10 +2468,9 @@ UINT64 OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 dista
 			// CP: if the two edges are compatible and the current path is not already too long, then call self again
 			if(matchEdgeType(firstEdge, nextEdge) && (INT64)pathLengths.at(level) < meanDist + insertSizeRangeSD * meanSD)
 				exploreGraph(nextEdge, lastEdge, nextEdge->getOverlapOffset() + nextEdge->getDestinationRead()->getReadLength(),
-						distanceOnLastEdge, datasetNumber, level+1, firstPath, flags);
+						distanceOnLastEdge, datasetNumber, level+1, firstPath, flags,pathFound,listOfEdges,pathLengths);
 		}
 	}
-	return pathFound;
 }
 /**********************************************************************************************************************
 	Original Scaffolder function.
