@@ -46,6 +46,8 @@ class DataSet
 		/* ====================  DATA MEMBERS  ======================================= */
 		vector<Read*> *m_vec_reads;    /* vector pointers to Reads */
 
+		vector<bool> *m_readsUsed;
+
 		vector<DataSetInfo> *dataSetInfo;
 
 		bool isSequenceLoaded;
