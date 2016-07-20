@@ -1101,12 +1101,12 @@ void OverlapGraph::graphPathFindInitial(string containedReadsFileName)
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
-	m_dataset->storeContainedReadInformation(containedReadsFileName);
-	calculateMeanAndSdOfInnerDistance();
+	//m_dataset->storeContainedReadInformation(containedReadsFileName);
+	//calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
 		counter = contractCompositeEdgesPar();
-		findSupportByMatepairsAndMerge();
+		//findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
@@ -2186,7 +2186,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 
 	for(UINT64 i = 0; i<listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minimumUniqueSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
 			cout << setw(4) << i + 1 << " Merging (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
@@ -2531,7 +2531,7 @@ UINT64 OverlapGraph::scaffolder(void)
 
 	for(UINT64 i = 0; i < listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minimumUniqueSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
 			cout << setw(4) << i + 1 << " (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
