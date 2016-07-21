@@ -1101,13 +1101,13 @@ void OverlapGraph::graphPathFindInitial(string containedReadsFileName)
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
-	//m_dataset->storeContainedReadInformation(containedReadsFileName);
-	//calculateMeanAndSdOfInnerDistance();
+	m_dataset->storeContainedReadInformation(containedReadsFileName);
+	calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
-		counter = contractCompositeEdgesPar();
-		//findSupportByMatepairsAndMerge();
+		findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
+		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
 	/* disconnect the edges incident to nodes and have small overlap lengths */
@@ -2090,7 +2090,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 	UINT64 noPathsFound = 0, pathsFound = 0, mpOnSameEdge=0;
 
 	vector <pairedEdges> listOfPairedEdges;
-	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
+	#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
 	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 	{
 		Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
@@ -2146,14 +2146,14 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 								// already present in the list
 								if(listOfPairedEdges.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges.at(l).edge2 == copyOfPath.at(k+1))
 								{
-									listOfPairedEdges.at(l).support++;	// only increase the support
+									listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
 									break;
 								}
 								// already present in the list
 								else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
 										&& listOfPairedEdges.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
 								{
-									listOfPairedEdges.at(l).support++;	// only increase the support
+									listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
 									break;
 								}
 							}
@@ -2168,7 +2168,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 									pairedEdges newPair;
 									newPair.edge1 = copyOfPath.at(k);
 									newPair.edge2 = copyOfPath.at(k+1);
-									newPair.support = 1;
+									newPair.uniqSupport = 1;
 									newPair.isFreed = false;
 									listOfPairedEdges.push_back(newPair);
 								}
@@ -2180,13 +2180,21 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 		}
 	}
 
+	cout << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
+	cout << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
+	cout << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
+	cout << "Total matepairs on same edge " << mpOnSameEdge << endl;
+	cout << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
+
 	sort(listOfPairedEdges.begin(), listOfPairedEdges.end());
+
+	cout<<"List of pair edges:"<<listOfPairedEdges.size()<<endl;
 
 	UINT64 pairsOfEdgesMerged = 0;
 
 	for(UINT64 i = 0; i<listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minUinqSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
 			cout << setw(4) << i + 1 << " Merging (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
@@ -2195,7 +2203,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					<< listOfPairedEdges.at(i).edge1->m_flow << " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID()
 					<< "," << setw(10) << listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadID() << ") Length: "
 					<< setw(8) << listOfPairedEdges.at(i).edge2->getOverlapOffset() + listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadLength() << " Flow: " << setw(3) << listOfPairedEdges.at(i).edge2->m_flow
-					<< " are supported " << setw(4) << listOfPairedEdges.at(i).support<<" times"<< endl;
+					<< " are supported " << setw(4) << listOfPairedEdges.at(i).uniqSupport<<" times"<< endl;
 
 			Edge * e1f = listOfPairedEdges.at(i).edge1, *e1r = listOfPairedEdges.at(i).edge1->getReverseEdge();
 			Edge * e2f = listOfPairedEdges.at(i).edge2, *e2r = listOfPairedEdges.at(i).edge2->getReverseEdge();
@@ -2216,11 +2224,6 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 		}
 	}
 	cout << pairsOfEdgesMerged <<" Pairs of Edges merged out of " << listOfPairedEdges.size() << " supported pairs of edges" <<endl;
-	cout << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
-	cout << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
-	cout << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
-	cout << "Total matepairs on same edge " << mpOnSameEdge << endl;
-	cout << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
 	CLOCKSTOP;
 	return pairsOfEdgesMerged;
 
@@ -2395,7 +2398,7 @@ void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanc
 	}
 	// BH: we do not go deeper than 100 levels. We can put this in the config file.
 	// CP: when reaching the maximum depth, return 0 path found and exit the recursive call loop
-	if(level > 5) return; // Do not go very deep.
+	if(level > 100) return; // Do not go very deep.
 
 
 	if(level == 0)
@@ -2516,7 +2519,7 @@ UINT64 OverlapGraph::scaffolder(void)
 				pairedEdges newPair;
 				newPair.edge1 = edge1;
 				newPair.edge2 = edge2;
-				newPair.support = support;
+				newPair.uniqSupport = support;
 				newPair.distance = gapDistance;
 				newPair.isFreed = false;
 				listOfPairedEdges.push_back(newPair);
@@ -2531,7 +2534,7 @@ UINT64 OverlapGraph::scaffolder(void)
 
 	for(UINT64 i = 0; i < listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).support >= minUinqSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
 			cout << setw(4) << i + 1 << " (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
@@ -2540,7 +2543,7 @@ UINT64 OverlapGraph::scaffolder(void)
 					<< " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID() << "," << setw(10)
 					<< listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadID() << ") Length: " << setw(8)
 					<< listOfPairedEdges.at(i).edge2->getOverlapOffset() << " Flow: " << setw(3) << listOfPairedEdges.at(i).edge2->m_flow << " are supported "
-					<< setw(4) << listOfPairedEdges.at(i).support << " times. Average distance: "<< setw(4) << listOfPairedEdges.at(i).distance << endl;
+					<< setw(4) << listOfPairedEdges.at(i).uniqSupport << " times. Average distance: "<< setw(4) << listOfPairedEdges.at(i).distance << endl;
 			Edge * e1f = listOfPairedEdges.at(i).edge1, *e1r = listOfPairedEdges.at(i).edge1->getReverseEdge();
 			Edge * e2f = listOfPairedEdges.at(i).edge2, *e2r = listOfPairedEdges.at(i).edge2->getReverseEdge();
 			mergeEdgesDisconnected(listOfPairedEdges.at(i).edge1, listOfPairedEdges.at(i).edge2,listOfPairedEdges.at(i).distance);		// Merge the edges.

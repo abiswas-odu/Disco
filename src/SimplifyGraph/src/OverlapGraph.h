@@ -37,12 +37,13 @@ struct pairedEdges
 		 */
 		Edge * edge1;
 		Edge * edge2;
-		UINT64 support;			// number of matepairs supporting these two edges
+		UINT64 uniqSupport;			// number of matepairs uniquely supporting these two edges
+		UINT64 nonUniqsupport;			// number of matepairs non-uniquely supporting these two edges
 		INT64 distance;		// sum of the end of read1 to the end of edge 1 and the beginning of read2 to the beginning of edge2
 		bool isFreed;
 		bool operator < (const pairedEdges& rhs) const
 		{
-		       return support > rhs.support;
+		       return uniqSupport > rhs.uniqSupport;
 		}
 
 };

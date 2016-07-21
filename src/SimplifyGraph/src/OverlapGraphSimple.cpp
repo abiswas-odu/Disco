@@ -436,7 +436,7 @@ OverlapGraphSimple::OverlapGraphSimple(string edge_file, string composite_out_ed
 	// Composite edge contraction with remove dead end nodes from partial graph
 	//Do only one round in parallel. Others can be done serial for speed...
 	contractParCompositeEdges(parGraph, markedNodes);
-	removeParDeadEndNodes(parGraph, markedNodes, nodeList);
+	//removeParDeadEndNodes(parGraph, markedNodes, nodeList);
 	UINT64 counter(0);
 	do {
 		counter = contractParCompositeEdges_Serial(parGraph, markedNodes);
