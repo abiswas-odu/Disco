@@ -2212,6 +2212,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 
 			// BH: once we merge edge1 and edge2. We make sure that we do not try to merge these edges again.
 			// We mark all the pair of edges that contains edge1 and edge2 or their reverse edges.
+			#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
 			for(UINT64 j = i + 1; j<listOfPairedEdges.size(); j++)
 			{
 				if( listOfPairedEdges.at(j).edge1 == e1f || listOfPairedEdges.at(j).edge1 == e1r
@@ -2398,7 +2399,7 @@ void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanc
 	}
 	// BH: we do not go deeper than 100 levels. We can put this in the config file.
 	// CP: when reaching the maximum depth, return 0 path found and exit the recursive call loop
-	if(level > 100) return; // Do not go very deep.
+	if(level > EXPLORE_DEPTH) return; // Do not go very deep.
 
 
 	if(level == 0)

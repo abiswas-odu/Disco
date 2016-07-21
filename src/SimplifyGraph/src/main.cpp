@@ -2,7 +2,7 @@
 // Name        : main.cpp
 // Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
 // Version     : v3.0
-// Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+// Copyright   : 2017 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : Main code
 //============================================================================
 
@@ -67,19 +67,12 @@ int main(int argc, char **argv) {
 			readPairedFilenameList, readInterPairedFilenameList, simplifyPartialPath,
 			minOvl, threadPoolSize);
 
-	string edge_file = outputFilenamePrefix+"_contigEdges_1.txt";
-	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_1.txt";
-	string contig_file = outputFilenamePrefix+"_contigsFinal_1.fasta";
-	ofstream f_out;
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
 	overlapGraph->graphPathFindInitial(containedReadsFileName);
 
-	edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
-	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
-	contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
+	string edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
+	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
+	string contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
+	ofstream f_out;
 	f_out.open(contig_file.c_str());
 	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
 	f_out.close();

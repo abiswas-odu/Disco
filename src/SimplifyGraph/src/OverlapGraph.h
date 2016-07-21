@@ -18,6 +18,7 @@
 #define loopLimit 15			// Number of time to loop in the main function.
 #define insertSizeRangeSD 3		// 3 means mean +/- 3 SD
 #define MAX_INNER_DIST_TRESH 1000
+#define EXPLORE_DEPTH 10
 
 extern char **environ;
 
