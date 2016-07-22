@@ -105,13 +105,16 @@ int main(int argc, char **argv) {
 
 	overlapGraph->simplifyGraph();
 
-	//Print contig edge file for scaffolding
-	edge_file = outputFilenamePrefix+"_contigEdgesFinal.txt";
-	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal.txt";
-	contig_file = outputFilenamePrefix+"_contigsFinal.fasta";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
+	//Print contig files before scaffolding
+	if(printContigs)
+	{
+		edge_file = outputFilenamePrefix+"_contigEdgesFinal.txt";
+		edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal.txt";
+		contig_file = outputFilenamePrefix+"_contigsFinal.fasta";
+		f_out.open(contig_file.c_str());
+		overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+		f_out.close();
+	}
 
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
 
@@ -140,15 +143,16 @@ int main(int argc, char **argv) {
 
 	} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
 
-	edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal.txt";
-	contig_file = outputFilenamePrefix+"_scaffoldsFinal.fasta";
-	edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal.txt";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"scaff", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
+	if(printScaffolds)
+	{
+		edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal.txt";
+		contig_file = outputFilenamePrefix+"_scaffoldsFinal.fasta";
+		edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal.txt";
+		f_out.open(contig_file.c_str());
+		overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"scaff", readSingleFilenameList, readPairedFilenameList);
+		f_out.close();
+	}
 	delete overlapGraph;
-
 	CLOCKSTOP;
 	return 0;
 }

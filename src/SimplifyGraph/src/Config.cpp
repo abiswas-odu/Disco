@@ -57,7 +57,7 @@ unsigned int minContigLengthTobeReported = 500;
 
 bool printContigs=false;
 
-bool printScaffolds=false;
+bool printScaffolds=true;
 //=============================================================================
 // print help usage
 //=============================================================================
@@ -123,14 +123,14 @@ void Config::setParameters()
 					minUinqSupport=stoi(parVal);
 				else if(parName== "minNonUniquePEsupport")
 					minNonUniqSupport=stoi(parVal);
-				else if(parName== "MinOverlap4BuildGraph")
-					minOvl=stoi(parVal);
 				else if(parName== "MinOverlap4SimplifyGraph")
 					minOvl=stoi(parVal);
-				else if(parName== "PrintContigs")
-					printContigs=false;
-				else if(parName== "PrintScaffolds")
-					printScaffolds=false;
+				else if(parName == "PrintContigs") {
+					if(parVal=="true") printContigs = true;
+				}
+				else if(parName== "PrintScaffolds") {
+					if(parVal=="false") printScaffolds = false;
+				}
 				else
 					MYEXIT("Unknown parameter in parameter file: "+parName);
 			}

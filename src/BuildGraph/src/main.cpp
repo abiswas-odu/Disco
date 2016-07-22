@@ -23,6 +23,9 @@ int main(int argc, char **argv)
 {
 	CLOCKSTART;
 
+	cout<<"Software: Omega Assembler"<<endl;
+	cout<<"Version : 3.0.1"<<endl;
+
 	vector<string> pairedEndFileNames, singleEndFileNames;
 	string allFileName;
 	string parameterFile;
