@@ -1,6 +1,6 @@
-# omega3
+# Omega3
 
-Omeag3 is a multi threaded memory efficient overlap-layout-consensus (OLC) metagenome assembler - **omega3**. 
+Omega3 is a multi threaded memory efficient overlap-layout-consensus (OLC) metagenome assembler - **Omega3**. 
 
 ### Setup and Installation
 1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on both Linux and MacOS systems, but not under Windows.
