@@ -125,6 +125,8 @@ void Config::setParameters()
 					minNonUniqSupport=stoi(parVal);
 				else if(parName== "MinOverlap4SimplifyGraph")
 					minOvl=stoi(parVal);
+				else if(parName== "MinOverlap4BuildGraph")
+					continue;
 				else if(parName == "PrintContigs") {
 					if(parVal=="true") printContigs = true;
 				}

@@ -14,7 +14,9 @@
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
 TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
-string outputFilenamePrefix = "omega2";
+string outputFilenamePrefix = "omega3";
+
+
 
 int main(int argc, char **argv) {
 
@@ -67,12 +69,19 @@ int main(int argc, char **argv) {
 			readPairedFilenameList, readInterPairedFilenameList, simplifyPartialPath,
 			minOvl, threadPoolSize);
 
+	string edge_file = outputFilenamePrefix+"_contigEdges_1.txt";
+	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_1.txt";
+	string contig_file = outputFilenamePrefix+"_contigsFinal_1.fasta";
+	ofstream f_out;
+	f_out.open(contig_file.c_str());
+	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
+	f_out.close();
+
 	overlapGraph->graphPathFindInitial(containedReadsFileName);
 
-	string edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
-	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
-	string contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
-	ofstream f_out;
+	edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
+	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
+	contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
 	f_out.open(contig_file.c_str());
 	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
 	f_out.close();
