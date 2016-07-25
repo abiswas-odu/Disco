@@ -85,7 +85,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 	CLOCKSTOP;
 }
 DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-		vector<std::string> &read_PairInterFiles)
+		vector<std::string> &read_PairInterFiles,string usedReadFileName)
 {
 	CLOCKSTART;
 	m_vec_reads = new vector<Read *>;
@@ -143,6 +143,25 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 		newDataSet.r2End = 0;
 	}
 	m_vec_reads->shrink_to_fit();
+
+	// Open file and read used reads is available...
+	ifstream usedReadFilePointer;
+	usedReadFilePointer.open(usedReadFileName.c_str());
+	if(!usedReadFilePointer.is_open()){
+		FILE_LOG(logWARNING) << "No used read file present: " << usedReadFileName << "\n";
+	}
+	else
+	{
+		string text;
+		UINT64 usedReadCtr=0;
+		while(getline(usedReadFilePointer,text))
+		{
+			UINT64 readID = stoi(text);
+			at(readID)->setUsedRead(true);
+			usedReadCtr++;
+		}
+		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << "used reads loaded."<<endl;
+	}
 	CLOCKSTOP;
 }
 DataSet::~DataSet()
@@ -214,31 +233,34 @@ bool DataSet::testRead(const string & read)
 /**********************************************************************************************************************
 	This function reads the contained read file generated during graph construction and store matepair information.
 **********************************************************************************************************************/
-void DataSet::storeContainedReadInformation(string containedReadFile)
+void DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
-	cout << "Store contained read information of from file: " << containedReadFile<< endl;
-	ifstream myFile;
-	myFile.open(containedReadFile.c_str());
-	if(!myFile)
-		MYEXIT("Unable to open file: "+containedReadFile);
-
-	string text;
-	while(getline (myFile,text))
+	cout << "Store contained read information..."<< endl;
+	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
-		vector<string> toks = Utils::split(text,'\t');
-		UINT64 containedReadID = atoi(toks[0].c_str());
-		UINT64 containingReadID = atoi(toks[1].c_str());
+		ifstream myFile;
+		myFile.open(containedReadFile[i].c_str());
+		if(!myFile)
+			MYEXIT("Unable to open file: "+containedReadFile[i]);
 
-		vector<string> info = Utils::split(toks[2],',');
-		UINT64 containedReadOri = atoi(info[0].c_str());
-		UINT64 containedReadOverlapStart = atoi(info[8].c_str());
+		string text;
+		while(getline (myFile,text))
+		{
+			vector<string> toks = Utils::split(text,'\t');
+			UINT64 containedReadID = atoi(toks[0].c_str());
+			UINT64 containingReadID = atoi(toks[1].c_str());
 
-		at(containedReadID)->setIsContained(true);
+			vector<string> info = Utils::split(toks[2],',');
+			UINT64 containedReadOri = atoi(info[0].c_str());
+			UINT64 containedReadOverlapStart = atoi(info[8].c_str());
 
-		at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
+			at(containedReadID)->setIsContained(true);
+
+			at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
+		}
+		myFile.close();
 	}
-	myFile.close();
 	CLOCKSTOP;
 }
 

@@ -411,8 +411,9 @@ void mergeList(const Edge *edge1, const Edge *edge2,
 //=============================================================================
 // Create the forward list of reads, list of overlap offsets and list of orientations from the string of edges in the file.
 //=============================================================================
-void createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize)
+UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize, DataSet *d)
 {
+	UINT64 usedReads=0;
 	if(readList.length()>0)
 	{
 		//The reads are in ordered triplets (readID, orientation, offset)
@@ -431,9 +432,12 @@ void createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize)
 			overlapOff = overlapOff << 32;
 			UINT64 packedReadInfo =  readID | overlapOff | orient;
 			listReads[lCtr++] = packedReadInfo;
+			if(d->at(readID)->isUsedRead())
+				usedReads++;
 		}
 		*returnListReads = listReads;
 	}
+	return usedReads;
 //	CLOCKSTOP;
 }
 

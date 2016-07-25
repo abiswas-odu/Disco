@@ -30,7 +30,7 @@ vector<string> Config::readPairedFilenamesList;
 vector<string> Config::readInterPairedFilenamesList;
 vector<string> Config::edgeFilenamesList;
 string Config::outFilenamePrefix = "new_omega_out";
-string Config::containedReadsFile = "";
+vector<string> Config::containedReadsFile;
 string Config::simplifyGraphPath ="";
 UINT64 Config::parallelThreadPoolSize(4);
 string Config::paramFileName="parameter.cfg";
@@ -44,7 +44,7 @@ unsigned int minEdgeLengthToBeNotDeadEnd = 500;
 unsigned int minReadsCountToHave0Flow = 10;
 unsigned int minEdgeLengthToHave0Flow = 1000;
 
-unsigned int minReadsCountInEdgeToBe1MinFlow = 10;
+unsigned int minReadsCountInEdgeToBe1MinFlow = 20;
 unsigned int minEdgeLengthToBe1MinFlow = 1000;
 
 unsigned int minOvlDiffToClip = 25;
@@ -205,7 +205,7 @@ bool Config::setConfig(int argc, char **argv)
 				exit(0);
 			}
 		}
-		// -e: ovelapped edge property graph filename(s) (comma separated edge list)
+		// -e: overlapped edge property graph filename(s) (comma separated file list)
 		else if (argumentsList[i] == "-e") {
 			string inputFilenames=argumentsList[++i];
 			stringstream ss(inputFilenames);
@@ -220,9 +220,17 @@ bool Config::setConfig(int argc, char **argv)
 		else if (argumentsList[i] == "-log") {
 			FILELog::ReportingLevel() = FILELog::FromString(argumentsList[++i]);
 		}
+		// -crd: contained read filename(s) (comma separated file list)
 		else if (argumentsList[i] == "-crd")
 		{
-			Config::containedReadsFile = argumentsList[++i];
+			string inputFilenames=argumentsList[++i];
+			stringstream ss(inputFilenames);
+			string item;
+
+			while (getline(ss, item, ','))
+			{
+				Config::containedReadsFile.push_back(item);
+			}
 		}
 		else if (argumentsList[i] == "-p")
 		{

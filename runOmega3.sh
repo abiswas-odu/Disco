@@ -132,7 +132,7 @@ outGraphPrefix="${dataOutPath}/graph/${outPrefix}"
 outSimplifyPrefix="${dataOutPath}/assembly/${outPrefix}"
 
 logFile="${dataOutPath}/${outPrefix}.log"
-containedReads="${dataOutPath}/graph/${outPrefix}_containedReads.txt"
+#Create edge file list
 i=0
 while [ $i -lt $numThreads ]
 do
@@ -140,6 +140,17 @@ do
    i=$(( $i+1 ))
 done
 edgeFiles=${edgeFiles%?}
+
+#Create contained read file list
+i=0
+while [ $i -lt $numThreads ]
+do
+   containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${i}_containedReads.txt,"
+   i=$(( $i+1 ))
+done
+containedReads=${containedReads%?}
+
+
 echo Starting Time is $(date)
 
 #create output directories

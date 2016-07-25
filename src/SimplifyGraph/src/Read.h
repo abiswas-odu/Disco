@@ -41,6 +41,8 @@ class Read
 
 		bool containedReadFlag;				// True if read is contained...
 
+		bool usedRead;						// True if read is used by previous assembly...
+
 		/* ====================  METHODS      ======================================= */
 		void initEdgeInfo();
 
@@ -72,6 +74,10 @@ class Read
 		void setEdge(Edge *edge, UINT32 readIndx, UINT32 orient);
 
 		void delEdge(Edge *edge, UINT64 readIndx, UINT64 orient);
+
+		void setUsedRead(bool val){
+			usedRead=val;
+		}
 
 		/* ====================  ACCESSORS     ======================================= */ 
 		std::string getStringForward(void) const {return m_seq->toString();}
@@ -111,6 +117,10 @@ class Read
 		vector<t_edge_loc_pair> getFwdEdges() const;
 
 		vector<t_edge_loc_pair> getBwdEdges() const;
+
+		bool isUsedRead() {
+			return usedRead;
+		}
 
 };/* End of class Read */
 

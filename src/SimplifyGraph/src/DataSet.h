@@ -46,8 +46,6 @@ class DataSet
 		/* ====================  DATA MEMBERS  ======================================= */
 		vector<Read*> *m_vec_reads;    /* vector pointers to Reads */
 
-		vector<bool> *m_readsUsed;
-
 		vector<DataSetInfo> *dataSetInfo;
 
 		bool isSequenceLoaded;
@@ -66,7 +64,8 @@ class DataSet
 		DataSet();
 
 		// Load a list of files (either reads or edges)
-		DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles, vector<std::string> &read_PairInterFiles);
+		DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+				vector<std::string> &read_PairInterFiles,string usedReadFileName);
 
 		// Copy constructor
 		DataSet(const DataSet &s_dataset);
@@ -86,7 +85,7 @@ class DataSet
 		void setSequenceLoaded(bool isLoaded) {isSequenceLoaded=isLoaded;}
 
 		// Load contained read information from file
-		void storeContainedReadInformation(string containedReadFile);
+		void storeContainedReadInformation(vector<string> containedReadFile);
 
 		/* ====================  ACCESSORS     ======================================= */ 
 		UINT64 size() const{ return m_vec_reads->size();}
@@ -105,6 +104,7 @@ class DataSet
 
 		UINT64 getMatePair(UINT64 r1ID);
 
+		void writeUsedReads(string usedReadfileName);
 };
 
 bool compareEdgesByReads (const Edge *edge1, const Edge* edge2);

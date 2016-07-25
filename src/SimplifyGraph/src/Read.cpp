@@ -22,6 +22,7 @@ Read::Read(const std::string &seq)
 	containedReads = nullptr;
 	noOfConReads=0;
 	containedReadFlag=false;
+	usedRead=false;
 }
 
 /* 

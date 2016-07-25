@@ -22,7 +22,7 @@
 
 extern char **environ;
 
-#define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
+
 
 
 // This structure is used to store list of pair of edges and their support. Used in two function: 1. when we find path by mate-pairs 2. scaffolder.
@@ -148,7 +148,7 @@ class OverlapGraph
 
 		OverlapGraph(const vector<std::string> &edge_files, 
 				const vector<std::string> &read_SingleFiles, const vector<std::string> &read_PairFiles,
-				vector<std::string> &read_PairInterFiles, string simplifyPartialPath,
+				vector<std::string> &read_PairInterFiles,string usedReadFileName, string simplifyPartialPath,
 				const UINT64 minOvl, const UINT64 parallelThreadPoolSize);
 
 		~OverlapGraph();
@@ -181,7 +181,7 @@ class OverlapGraph
 		// Some simple simplification.
 		void simplifyGraph(void);
 
-		void graphPathFindInitial(string containedReadsFileName);
+		void graphPathFindInitial(vector<string> containedReadsFileName);
 
 		// Calculate the minimum cost flow of the overlap graph using file
 		void calculateFlowStream(void);
@@ -190,11 +190,11 @@ class OverlapGraph
 		void getEdges(t_edge_vec & contigEdges) const;
 		
 		// Print contigs to file, only the ones longer than the specified printing threshold
-		void printContigs(ostream & out, string edge_file,string edge_cov_file,string namePrefix,
+		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix,
 				const vector<std::string> &readSingleFilenameList, const vector<std::string> &readPairedFilenameList);
 
 		// Print edges to a file, with an edgeName
-		void printEdge(Edge *contigEdges, ostream & filePointer, UINT64 edgeNameID) const;
+		void printEdge(Edge *contigEdges, ostream & filePointer,ostream & fileUsedReadPointer , UINT64 edgeNameID) const;
 
 		// Print all edges in the graph to a file
 		void printAllEdges(string edge_file) const;

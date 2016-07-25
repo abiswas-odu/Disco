@@ -316,6 +316,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			string containedReadFile = fnamePrefix+ "_" + SSTR(threadID) +"_containedReads.txt";
 			ifstream filePointer;
 			filePointer.open(containedReadFile.c_str());
+			if(!filePointer)
+				MYEXIT("Unable to open contained reads file: +"+containedReadFile);
 			string text;
 			UINT64 procCtr=0;
 			while(getline(filePointer,text))
@@ -342,7 +344,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			ofstream filePointer;
 			filePointer.open(containedReadFile.c_str());
 			if(!filePointer)
-				MYEXIT("Unable to open file: +"+fnamePrefix+"_containedReads.txt");
+				MYEXIT("Unable to open contained read file: +"+containedReadFile);
 
 			#pragma omp for schedule(guided)
 			for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read

@@ -965,8 +965,8 @@ t_edge_vec OverlapGraph::findEdges(const UINT64 & source, const UINT64 & destina
 
 OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, 
 		const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-		vector<std::string> &read_PairInterFiles, string simplifyPartialPath,
-		UINT64 minOvl = 0, UINT64 parallelThreadPoolSize = 0)
+		vector<std::string> &read_PairInterFiles,string usedReadFileName, string simplifyPartialPath,
+		UINT64 minOvl = 40, UINT64 parallelThreadPoolSize = 1)
 	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
 {
 	CLOCKSTART;
@@ -983,7 +983,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
 	 *  edges files.
 	 */
 	//Load reads before simplification...
-	m_dataset = new DataSet(read_SingleFiles,read_PairFiles, read_PairInterFiles); // construct dataset from reads file(s)
+	m_dataset = new DataSet(read_SingleFiles,read_PairFiles, read_PairInterFiles, usedReadFileName); // construct dataset from reads file(s)
 
 	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
 		<< m_dataset->size() << "\n";
@@ -1096,16 +1096,16 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
  *  Description:  simplify graph right after graph construction
  * =====================================================================================
  */
-void OverlapGraph::graphPathFindInitial(string containedReadsFileName)
+void OverlapGraph::graphPathFindInitial(vector<string> containedReadsFileName)
 {
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
 	m_dataset->storeContainedReadInformation(containedReadsFileName);
-	//calculateMeanAndSdOfInnerDistance();
+	calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
-		//findSupportByMatepairsAndMerge();
+		findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
@@ -1649,7 +1649,7 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & filePointer) const
  * =====================================================================================
  */
 
-void OverlapGraph::printEdge(Edge *contigEdge, ostream & filePointer, UINT64 edgeNameID) const
+void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream & fileUsedReadPointer, UINT64 edgeNameID) const
 {
 	UINT64 source = contigEdge->getSourceRead()->getReadID();
 	UINT64 destination = contigEdge->getDestinationRead()->getReadID();
@@ -1663,25 +1663,25 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & filePointer, UINT64 edg
 				offsetSum+=contigEdge-> getInnerOverlapOffset(j);
 			lastOffset=contigEdge->getInnerOverlapOffset(contigEdge->getListofReadsSize()-1);
 		}
-		filePointer<< "contig_" << setfill('0') << setw(10) << edgeNameID<< "\t";
-		filePointer<<source<<"\t";	// store the edge information first
-		filePointer<<destination<<"\t";
-		filePointer<<orientation<<",";
-		filePointer<<contigEdge->getOverlapOffset()-offsetSum<<",";  //first overlap offset
-		filePointer<<offsetSum+(contigEdge->getDestinationRead()->getReadLength()-lastOffset)<<","; //overlap length
-		filePointer<<0<<",";					//no substitutions
-		filePointer<<0<<"\t";					//no edits
+		edgeFilePointer<< "contig_" << setfill('0') << setw(10) << edgeNameID<< "\t";
+		edgeFilePointer<<source<<"\t";	// store the edge information first
+		edgeFilePointer<<destination<<"\t";
+		edgeFilePointer<<orientation<<",";
+		edgeFilePointer<<contigEdge->getOverlapOffset()-offsetSum<<",";  //first overlap offset
+		edgeFilePointer<<offsetSum+(contigEdge->getDestinationRead()->getReadLength()-lastOffset)<<","; //overlap length
+		edgeFilePointer<<0<<",";					//no substitutions
+		edgeFilePointer<<0<<"\t";					//no edits
 		if(contigEdge->isListofReads())
 		{
 			for(size_t j=0;j<contigEdge->getListofReadsSize();j++)
 			{
 				orientation=contigEdge->getInnerOrientation(j);
-				filePointer<<"("<<contigEdge->getInnerReadID(j)<<","<<orientation<<","
+				edgeFilePointer<<"("<<contigEdge->getInnerReadID(j)<<","<<orientation<<","
 						<<contigEdge->getInnerOverlapOffset(j)<<")";
-
+				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<endl;
 			}
 		}
-		filePointer<<endl;
+		edgeFilePointer<<endl;
 	}
 }
 
@@ -1905,6 +1905,12 @@ void OverlapGraph::readParEdges(string edge_file)
 		vector<string> tok = Utils::split(edge_text,'\t');
 		Read *source = m_dataset->at(atoi(tok[0].c_str()));
 		Read *destination = m_dataset->at(atoi(tok[1].c_str()));
+
+		//Removed used edges; If both source and destination have been used in previous assembly; do not load this edge
+
+		if(source->isUsedRead() && destination->isUsedRead())
+			continue;
+
 		vector<string> infoTok = Utils::split(tok[2],',');
 		UINT64 orientationForward =  atoi(infoTok[0].c_str());
 		UINT64 overlapOffsetForward =   atoi(infoTok[1].c_str());
@@ -1912,8 +1918,14 @@ void OverlapGraph::readParEdges(string edge_file)
 		// Make the forward edge
 		UINT64 *listReadsForward = nullptr;
 		UINT64 lFSize=0;
-		if(tok.size()>3)
-			createFwdList(tok[3], &listReadsForward, lFSize);
+		UINT64 usedReadCtr=0;
+		if(tok.size()>3)			//If composite edge load the inner reads
+			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, m_dataset);		//Returns the count of inner reads that have been used before
+
+		//Removed used edges; If all the inner reads have been used in previous assembly; do not load this edge
+		if(usedReadCtr>0 && usedReadCtr==lFSize)
+			continue;
+
 		Edge *edgeForward = new Edge(source,destination,orientationForward,
 				overlapOffsetForward, listReadsForward, lFSize);
 
@@ -1944,7 +1956,7 @@ void OverlapGraph::readParEdges(string edge_file)
  *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
  * =====================================================================================
  */
-void OverlapGraph::printContigs(ostream & out, string edge_file,string edge_cov_file, string namePrefix, const vector<std::string> &readSingleFilenameList,
+void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix, const vector<std::string> &readSingleFilenameList,
 		const vector<std::string> &readPairedFilenameList)
 {
 	CLOCKSTART;
@@ -1952,17 +1964,29 @@ void OverlapGraph::printContigs(ostream & out, string edge_file,string edge_cov_
 	t_edge_vec contigEdges; 
 	getEdges(contigEdges);
 
-	ofstream filePointer;
-	filePointer.open(edge_file.c_str());
+	//Open contig file
+	ofstream contigFilePointer;
+	contigFilePointer.open(contig_file.c_str());
+	if(!contigFilePointer)
+		MYEXIT("Unable to open file: "+contig_file);
 
-	if(!filePointer)
+	//Open edge file
+	ofstream edgeFilePointer;
+	edgeFilePointer.open(edge_file.c_str());
+	if(!edgeFilePointer)
 		MYEXIT("Unable to open file: "+edge_file);
 
+	//Open coverage file
 	ofstream fileCoveragePointer;
 	fileCoveragePointer.open(edge_cov_file.c_str());
-
 	if(!fileCoveragePointer)
 			MYEXIT("Unable to open file: "+edge_cov_file);
+
+	//Open used read file
+	ofstream fileUsedReadPointer;
+	fileUsedReadPointer.open(usedReadFileName.c_str());
+	if(!fileUsedReadPointer)
+			MYEXIT("Unable to open file: "+usedReadFileName);
 
 	UINT64 printed_contigs(0);
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
@@ -1974,9 +1998,9 @@ void OverlapGraph::printContigs(ostream & out, string edge_file,string edge_cov_
 			#pragma omp critical
 			{
 				++printed_contigs;
-				printEdge(*it,filePointer,printed_contigs);
+				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
 				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
-				out << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
+				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
 				<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", " 
 				<< (*it)->getDestinationRead()->getReadID() 
 				<< ") String Length: " << contigString.length() << "\n";
@@ -1984,13 +2008,13 @@ void OverlapGraph::printContigs(ostream & out, string edge_file,string edge_cov_
 				UINT32 start=0;
 				do
 				{
-					out << contigString.substr(start, 100) << "\n";  // save 100 BP in each line.
+					contigFilePointer << contigString.substr(start, 100) << "\n";  // save 100 BP in each line.
 					start+=100;
 				} while (start < contigString.length());
 			}
 		}
 	}
-	filePointer.close();
+	edgeFilePointer.close();
 	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
 	CLOCKSTOP;
 }

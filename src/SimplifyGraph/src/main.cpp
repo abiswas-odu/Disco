@@ -16,7 +16,10 @@ int OverlapGraph::s_nGoodEdges = 0;
 TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
 string outputFilenamePrefix = "omega3";
 
-
+void SimplifyGraph(const vector<std::string> &edgeFilenameList,
+		const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+		vector<std::string> &read_PairInterFiles, vector<string> containedReadsFileName, string simplifyPartialPath,
+		UINT64 minOvl, UINT64 parallelThreadPoolSize, int interationCount);
 
 int main(int argc, char **argv) {
 
@@ -34,7 +37,7 @@ int main(int argc, char **argv) {
 	vector<string> readInterPairedFilenameList 	= Config::getInterPairedReadFilenames();
 	vector<string> edgeFilenameList 	= Config::getEdgeFilenames();
 	outputFilenamePrefix 			= Config::getOutputFilenamePrefix();
-	string containedReadsFileName = Config::containedReadsFile;
+	vector<string> containedReadsFileName = Config::getContainedReadsFile();
 	string simplifyPartialPath = Config::getSimplifyGraphPath();
 
 	loglevel 				= FILELog::ReportingLevel();
@@ -65,64 +68,48 @@ int main(int argc, char **argv) {
 	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
 	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
 
+	SimplifyGraph(edgeFilenameList, readSingleFilenameList,
+			readPairedFilenameList, readInterPairedFilenameList, containedReadsFileName, simplifyPartialPath,
+			minOvl, threadPoolSize, 1);
+
+	SimplifyGraph(edgeFilenameList, readSingleFilenameList,
+				readPairedFilenameList, readInterPairedFilenameList, containedReadsFileName, simplifyPartialPath,
+				minOvl, threadPoolSize, 2);
+
+	CLOCKSTOP;
+	return 0;
+}
+
+void SimplifyGraph(const vector<std::string> &edgeFilenameList,
+		const vector<std::string> &readSingleFilenameList,const vector<std::string> &readPairedFilenameList,
+		vector<std::string> &readInterPairedFilenameList, vector<string> containedReadsFileName, string simplifyPartialPath,
+		UINT64 minOvl, UINT64 threadPoolSize, int interationCount)
+{
+	CLOCKSTART;
+	cout<<"Graph Simplification Iteration: "<<interationCount<<endl;
+	string usedReadFileName = outputFilenamePrefix+"_UsedReads.txt";
 	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, readSingleFilenameList,
-			readPairedFilenameList, readInterPairedFilenameList, simplifyPartialPath,
-			minOvl, threadPoolSize);
-
-	string edge_file = outputFilenamePrefix+"_contigEdges_1.txt";
-	string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_1.txt";
-	string contig_file = outputFilenamePrefix+"_contigsFinal_1.fasta";
-	ofstream f_out;
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
+				readPairedFilenameList, readInterPairedFilenameList, usedReadFileName, simplifyPartialPath,
+				minOvl, threadPoolSize);
+	//Initial Simplification
 	overlapGraph->graphPathFindInitial(containedReadsFileName);
-
-	edge_file = outputFilenamePrefix+"_contigEdges_2.txt";
-	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_2.txt";
-	contig_file = outputFilenamePrefix+"_contigsFinal_2.fasta";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
 	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
 	ofstream g_out(graph_file.c_str());
 	g_out << *overlapGraph;
 	g_out.close();*/
-
+	//ClipBranches and remove similar edges
 	overlapGraph->simplifyGraph();
-
-	edge_file = outputFilenamePrefix+"_contigEdges_3.txt";
-	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_3.txt";
-	contig_file = outputFilenamePrefix+"_contigsFinal_3.fasta";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
 	// Flow analysis
 	overlapGraph->calculateFlowStream();
 	overlapGraph->removeAllEdgesWithoutFlow();
-
-	edge_file = outputFilenamePrefix+"_contigEdges_4.txt";
-	edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverage_4.txt";
-	contig_file = outputFilenamePrefix+"_contigsFinal_4.fasta";
-	f_out.open(contig_file.c_str());
-	overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-	f_out.close();
-
-
 	overlapGraph->simplifyGraph();
-
 	//Print contig files before scaffolding
 	if(printContigs)
 	{
-		edge_file = outputFilenamePrefix+"_contigEdgesFinal.txt";
-		edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal.txt";
-		contig_file = outputFilenamePrefix+"_contigsFinal.fasta";
-		f_out.open(contig_file.c_str());
-		overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"contig", readSingleFilenameList, readPairedFilenameList);
-		f_out.close();
+		string edge_file = outputFilenamePrefix+"_contigEdgesFinal_"+SSTR(interationCount)+".txt";
+		string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig", readSingleFilenameList, readPairedFilenameList);
 	}
 
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
@@ -154,14 +141,13 @@ int main(int argc, char **argv) {
 
 	if(printScaffolds)
 	{
-		edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal.txt";
-		contig_file = outputFilenamePrefix+"_scaffoldsFinal.fasta";
-		edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal.txt";
-		f_out.open(contig_file.c_str());
-		overlapGraph->printContigs(f_out, edge_file, edge_cov_file,"scaff", readSingleFilenameList, readPairedFilenameList);
-		f_out.close();
+		string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
+		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
+		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff", readSingleFilenameList, readPairedFilenameList);
 	}
+	//Write out used reads
+
 	delete overlapGraph;
 	CLOCKSTOP;
-	return 0;
 }

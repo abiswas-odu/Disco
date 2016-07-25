@@ -45,6 +45,7 @@
 #include <set>
 #include <sys/wait.h>
 
+#define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
 
 // Local headers
 #include "logcpp/log.h"
@@ -175,7 +176,7 @@ public:
     static vector<string> readInterPairedFilenamesList;
     static vector<string> edgeFilenamesList;
     static string outFilenamePrefix;
-    static string containedReadsFile;
+    static vector<string> containedReadsFile;
     static UINT64 parallelThreadPoolSize;
     static string simplifyGraphPath;
     static string paramFileName;
@@ -200,6 +201,9 @@ public:
 
     // Get edge filenames
     static vector<string> getEdgeFilenames() {return edgeFilenamesList;}
+
+    // Get contained read filenames
+    static vector<string> getContainedReadsFile() {return edgeFilenamesList;}
 
     // Get output prefix name
     static string getOutputFilenamePrefix() {return outFilenamePrefix;}
