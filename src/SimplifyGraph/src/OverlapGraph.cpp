@@ -1102,10 +1102,10 @@ void OverlapGraph::graphPathFindInitial(vector<string> containedReadsFileName)
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
 	m_dataset->storeContainedReadInformation(containedReadsFileName);
-	calculateMeanAndSdOfInnerDistance();
+	//calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
-		findSupportByMatepairsAndMerge();
+		//findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
