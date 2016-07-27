@@ -84,6 +84,8 @@ extern unsigned int minEdgeLengthToBe1MinFlow;
 extern unsigned int minOvlDiffToClip;	
 // Minimum fold difference to consider branches to be short (default: 5)
 extern unsigned int minFoldToBeShortBranch;	
+// Minimum size to consider branches to be short (default: 5)
+extern unsigned int minSizeToBeShortBranch;
 
 //Minumum unique mate pair support to join edge (default: 3)
 extern unsigned int minUinqSupport;

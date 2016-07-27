@@ -582,7 +582,7 @@ UINT64 OverlapGraph::removeShortBranches(void)
 				// overlap is small 
 				// edge is not already in the deleting list
 				// edge is smaller than its reverse edge
-				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out)){ 
+				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out) && one_length < minSizeToBeShortBranch){
 					removeEdge(one_edge);
 					++num_nodes_rm;
 					FILE_LOG(logDEBUG1) << "Delete this edge, length: " << one_length << " and " << long_brlens_map.at(neighbor).at(in_out) << "\n";
@@ -1906,10 +1906,33 @@ void OverlapGraph::readParEdges(string edge_file)
 		Read *source = m_dataset->at(atoi(tok[0].c_str()));
 		Read *destination = m_dataset->at(atoi(tok[1].c_str()));
 
-		//Removed used edges; If both source and destination have been used in previous assembly; do not load this edge
-
-		if(source->isUsedRead() && destination->isUsedRead())
-			continue;
+		//Removed used edges; If both source and destination and corresponding
+		//mates have been used in previous assembly; do not load this edge
+		UINT64 sourceMate = m_dataset->getMatePair(source->getReadID());
+		UINT64 destinationMate = m_dataset->getMatePair(destination->getReadID());
+		if(sourceMate==0 || destinationMate==0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead())
+				continue;
+		}
+		else if(sourceMate > 0 && destinationMate > 0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(sourceMate)->isUsedRead() && m_dataset->at(destinationMate)->isUsedRead())
+				continue;
+		}
+		else if(sourceMate > 0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(sourceMate)->isUsedRead())
+				continue;
+		}
+		else
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(destinationMate)->isUsedRead())
+				continue;
+		}
 
 		vector<string> infoTok = Utils::split(tok[2],',');
 		UINT64 orientationForward =  atoi(infoTok[0].c_str());
@@ -2114,9 +2137,11 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 	UINT64 noPathsFound = 0, pathsFound = 0, mpOnSameEdge=0;
 
 	vector <pairedEdges> listOfPairedEdges;
+
 	#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
 	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 	{
+		vector <pairedEdges> listOfPairedEdges_local;
 		Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
 		vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
 		for(UINT64 j = 0; j < r1MPList.size(); j++)		// For each mate-pair read1
@@ -2162,55 +2187,92 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
 					if(copyOfFlags.at(k) == 1)
 					{
-						#pragma omp critical(updatePairEdges)
+						UINT64 l;
+						for(l = 0; l < listOfPairedEdges_local.size(); l++)
 						{
-							UINT64 l;
-							for(l = 0; l < listOfPairedEdges.size(); l++)
+							// already present in the list
+							if(listOfPairedEdges_local.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges_local.at(l).edge2 == copyOfPath.at(k+1))
 							{
-								// already present in the list
-								if(listOfPairedEdges.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges.at(l).edge2 == copyOfPath.at(k+1))
-								{
-									listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
-									break;
-								}
-								// already present in the list
-								else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
-										&& listOfPairedEdges.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
-								{
-									listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
-									break;
-								}
+								listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+								break;
 							}
-							if(l == listOfPairedEdges.size()) // not present in the list
+							// already present in the list
+							else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
+									&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
 							{
-									// add in the list with support 1
-								if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
-										|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
-									// do not want to add support between edge (a,a) and (a,a)
-								//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
-								{
-									pairedEdges newPair;
-									newPair.edge1 = copyOfPath.at(k);
-									newPair.edge2 = copyOfPath.at(k+1);
-									newPair.uniqSupport = 1;
-									newPair.isFreed = false;
-									listOfPairedEdges.push_back(newPair);
-								}
+								listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+								break;
+							}
+						}
+						if(l == listOfPairedEdges_local.size()) // not present in the list
+						{
+								// add in the list with support 1
+							if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
+									|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
+								// do not want to add support between edge (a,a) and (a,a)
+							//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
+							{
+								pairedEdges newPair;
+								newPair.edge1 = copyOfPath.at(k);
+								newPair.edge2 = copyOfPath.at(k+1);
+								newPair.uniqSupport = 1;
+								newPair.isFreed = false;
+								listOfPairedEdges_local.push_back(newPair);
 							}
 						}
 					}
 				}
 			}
 		}
+
+		#pragma omp critical
+		{
+			for(UINT64 k = 0; k < listOfPairedEdges_local.size(); k++)
+			{
+				UINT64 l;
+				for(l = 0; l < listOfPairedEdges.size(); l++)
+				{
+					// already present in the list
+					if(listOfPairedEdges.at(l).edge1 == listOfPairedEdges_local.at(k).edge1 && listOfPairedEdges.at(l).edge2 == listOfPairedEdges_local.at(k).edge2)
+					{
+						listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+						break;
+					}
+					// already present in the list
+					else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == listOfPairedEdges_local.at(k).edge1
+							&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == listOfPairedEdges_local.at(k).edge2)
+					{
+						listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+						break;
+					}
+				}
+				if(l == listOfPairedEdges.size()) // not present in the list
+				{
+						// add in the list with support 1
+					if(listOfPairedEdges_local.at(k).edge1->getSourceRead()->getReadID() != listOfPairedEdges_local.at(k).edge1->getDestinationRead()->getReadID()
+							|| listOfPairedEdges_local.at(k).edge2->getSourceRead()->getReadID() != listOfPairedEdges_local.at(k).edge2->getDestinationRead()->getReadID())
+						// do not want to add support between edge (a,a) and (a,a)
+					//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
+					{
+						pairedEdges newPair;
+						newPair.edge1 = listOfPairedEdges_local.at(k).edge1;
+						newPair.edge2 = listOfPairedEdges_local.at(k).edge2;
+						newPair.uniqSupport = 1;
+						newPair.isFreed = false;
+						listOfPairedEdges_local.push_back(newPair);
+					}
+				}
+			}
+		}
 	}
+
+	sort(listOfPairedEdges.begin(), listOfPairedEdges.end());
 
 	cout << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
 	cout << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
 	cout << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
 	cout << "Total matepairs on same edge " << mpOnSameEdge << endl;
 	cout << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
-
-	sort(listOfPairedEdges.begin(), listOfPairedEdges.end());
 
 	cout<<"List of pair edges:"<<listOfPairedEdges.size()<<endl;
 

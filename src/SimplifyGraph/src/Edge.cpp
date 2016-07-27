@@ -432,8 +432,18 @@ UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize, Da
 			overlapOff = overlapOff << 32;
 			UINT64 packedReadInfo =  readID | overlapOff | orient;
 			listReads[lCtr++] = packedReadInfo;
-			if(d->at(readID)->isUsedRead())
-				usedReads++;
+
+			UINT64 readIDMate = d->getMatePair(readID);
+			if(readIDMate > 0)
+			{
+				if(d->at(readID)->isUsedRead() && d->at(readIDMate)->isUsedRead())
+					usedReads++;
+			}
+			else
+			{
+				if(d->at(readID)->isUsedRead())
+					usedReads++;
+			}
 		}
 		*returnListReads = listReads;
 	}

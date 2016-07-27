@@ -49,6 +49,7 @@ unsigned int minEdgeLengthToBe1MinFlow = 1000;
 
 unsigned int minOvlDiffToClip = 25;
 unsigned int minFoldToBeShortBranch = 5;
+unsigned int minSizeToBeShortBranch = 5000;
 
 unsigned int minUinqSupport=3;
 unsigned int minNonUniqSupport=0;
@@ -125,6 +126,8 @@ void Config::setParameters()
 					minNonUniqSupport=stoi(parVal);
 				else if(parName== "MinOverlap4SimplifyGraph")
 					minOvl=stoi(parVal);
+				else if(parName== "minSizeToBeShortBranch")
+					minSizeToBeShortBranch=stoi(parVal);
 				else if(parName== "MinOverlap4BuildGraph")
 					continue;
 				else if(parName == "PrintContigs") {
