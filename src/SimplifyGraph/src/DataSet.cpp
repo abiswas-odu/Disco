@@ -85,7 +85,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 	CLOCKSTOP;
 }
 DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-		vector<std::string> &read_PairInterFiles,string usedReadFileName)
+		vector<std::string> &read_PairInterFiles)
 {
 	CLOCKSTART;
 	m_vec_reads = new vector<Read *>;
@@ -143,7 +143,13 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 		newDataSet.r2End = 0;
 	}
 	m_vec_reads->shrink_to_fit();
-
+	CLOCKSTOP;
+}
+/*
+ * Load used read from previous rounds of assembly.
+ */
+void DataSet::LoadUsedReads(string usedReadFileName)
+{
 	// Open file and read used reads is available...
 	ifstream usedReadFilePointer;
 	usedReadFilePointer.open(usedReadFileName.c_str());
@@ -160,9 +166,8 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 			at(readID)->setUsedRead(true);
 			usedReadCtr++;
 		}
-		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << "used reads loaded."<<endl;
+		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
 	}
-	CLOCKSTOP;
 }
 DataSet::~DataSet()
 {

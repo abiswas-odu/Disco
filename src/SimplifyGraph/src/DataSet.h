@@ -3,9 +3,9 @@
 
 //============================================================================
 // Name        : DataSet.h
-// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey
-// Version     : v1.2
-// Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
+// Version     : v3.0
+// Copyright   : 2016 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : DataSet header file
 //============================================================================
 
@@ -65,7 +65,7 @@ class DataSet
 
 		// Load a list of files (either reads or edges)
 		DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-				vector<std::string> &read_PairInterFiles,string usedReadFileName);
+				vector<std::string> &read_PairInterFiles);
 
 		// Copy constructor
 		DataSet(const DataSet &s_dataset);
@@ -86,6 +86,9 @@ class DataSet
 
 		// Load contained read information from file
 		void storeContainedReadInformation(vector<string> containedReadFile);
+
+		//Set previous used reads
+		void LoadUsedReads(string usedReadFileName);
 
 		/* ====================  ACCESSORS     ======================================= */ 
 		UINT64 size() const{ return m_vec_reads->size();}
@@ -109,5 +112,4 @@ class DataSet
 
 bool compareEdgesByReads (const Edge *edge1, const Edge* edge2);
 
-void printUnorderedMap(const unordered_map<UINT64, UINT64> & readIDMap, ostream & out);
 #endif /* DATASET_H */

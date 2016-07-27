@@ -76,6 +76,13 @@ void Read::delEdge(Edge *edge, UINT64 readIndx, UINT64 orient)
 	}
 	noOfEdges--;
 }
+/*
+ * Clear all edge information from the Read
+ */
+void Read::ClearEdgeInfo()
+{
+	noOfEdges=0;
+}
 std::ostream &operator<<(std::ostream & out, const Read & read)
 {
 	out << "ID: " << setw(10) << setfill(' ') << read.getReadID()

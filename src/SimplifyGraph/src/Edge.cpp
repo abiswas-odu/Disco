@@ -644,7 +644,7 @@ bool operator==(const Edge &subject, const Edge &query)
 }
 
 /*
- * Add edge to the edge list
+ * Add edge to the edge list of a read
  */
 void Read::setEdge(Edge *edge, UINT32 readIndx, UINT32 orient)
 {

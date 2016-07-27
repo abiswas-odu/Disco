@@ -75,6 +75,8 @@ class Read
 
 		void delEdge(Edge *edge, UINT64 readIndx, UINT64 orient);
 
+		void ClearEdgeInfo();
+
 		void setUsedRead(bool val){
 			usedRead=val;
 		}

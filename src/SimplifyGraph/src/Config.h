@@ -3,9 +3,9 @@
 
 //============================================================================
 // Name        : Config.h
-// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey
-// Version     : v1.2
-// Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
+// Version     : v3.0
+// Copyright   : 2017 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : Config header file
 //============================================================================
 
@@ -38,9 +38,7 @@
 #include <fstream>
 #include <streambuf>
 #include <map>
-#include <unordered_map>
 #include <typeinfo>
-#include <tuple>
 #include <cstring>
 #include <set>
 #include <sys/wait.h>

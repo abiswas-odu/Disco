@@ -963,9 +963,7 @@ t_edge_vec OverlapGraph::findEdges(const UINT64 & source, const UINT64 & destina
 	return edges;
 }
 
-OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, 
-		const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-		vector<std::string> &read_PairInterFiles,string usedReadFileName, string simplifyPartialPath,
+OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl = 40, UINT64 parallelThreadPoolSize = 1)
 	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
 {
@@ -974,22 +972,9 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
 	m_numberOfEdges	= 0;
 	m_flowComputed 	= false;
 
-	/*  JJ: we only need Edge file to get all the reads and edges,
-	 *  at least the edges that have edges connected to them.
-	 *  However, then we need another data structure to keep track of
-	 *  which reads are already loaded in the m_dataset, which can be
-	 *  expensive.
-	 *  When  with a better way is come up, we should have a function that only reads
-	 *  edges files.
-	 */
-	//Load reads before simplification...
-	m_dataset = new DataSet(read_SingleFiles,read_PairFiles, read_PairInterFiles, usedReadFileName); // construct dataset from reads file(s)
-
-	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
-		<< m_dataset->size() << "\n";
+	m_dataset=dataSet;
 
 	m_graph = new map<UINT64, t_edge_vec* >;
-
 	// loop edgeFilenameList and load partially simplified graphs
 	if(edge_files.size()>0)
 	{
@@ -1096,12 +1081,11 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files,
  *  Description:  simplify graph right after graph construction
  * =====================================================================================
  */
-void OverlapGraph::graphPathFindInitial(vector<string> containedReadsFileName)
+void OverlapGraph::graphPathFindInitial()
 {
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
-	m_dataset->storeContainedReadInformation(containedReadsFileName);
 	//calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
@@ -1146,8 +1130,6 @@ OverlapGraph::~OverlapGraph()
 		delete m_graph;
 		m_graph = nullptr;
 	}
-	if (!m_dataset)
-		delete m_dataset;
 }
 
 /* 
@@ -1979,8 +1961,7 @@ void OverlapGraph::readParEdges(string edge_file)
  *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
  * =====================================================================================
  */
-void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix, const vector<std::string> &readSingleFilenameList,
-		const vector<std::string> &readPairedFilenameList)
+void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix)
 {
 	CLOCKSTART;
 

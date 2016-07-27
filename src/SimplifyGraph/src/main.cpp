@@ -17,8 +17,7 @@ TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
 string outputFilenamePrefix = "omega3";
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
-		const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
-		vector<std::string> &read_PairInterFiles, vector<string> containedReadsFileName, string simplifyPartialPath,
+		string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl, UINT64 parallelThreadPoolSize, int interationCount);
 
 int main(int argc, char **argv) {
@@ -50,13 +49,15 @@ int main(int argc, char **argv) {
 		for(vector<std::string>::iterator it = readSingleFilenameList.begin(); it!=readSingleFilenameList.end(); ++it)
 			FILE_LOG(logINFO) << *it << "\t";
 		for(vector<std::string>::iterator it = readPairedFilenameList.begin(); it!=readPairedFilenameList.end(); ++it)
-					FILE_LOG(logINFO) << *it << "\t";
+			FILE_LOG(logINFO) << *it << "\t";
+		for(vector<std::string>::iterator it = readInterPairedFilenameList.begin(); it!=readInterPairedFilenameList.end(); ++it)
+			FILE_LOG(logINFO) << *it << "\t";
 	}
 	FILE_LOG(logINFO) << endl;
 	FILE_LOG(logINFO) << "File(s) including edges: ";
 	if(loglevel > 1){
 		for(vector<std::string>::iterator it = edgeFilenameList.begin(); it!=edgeFilenameList.end(); ++it)
-			FILE_LOG(logINFO) << *it;
+			FILE_LOG(logINFO) << *it << "\t";
 	}
 	FILE_LOG(logINFO) << endl;
 	FILE_LOG(logINFO) << "Output file names' prefix is: " << outputFilenamePrefix << endl;
@@ -68,31 +69,54 @@ int main(int argc, char **argv) {
 	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
 	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
 
-	SimplifyGraph(edgeFilenameList, readSingleFilenameList,
-			readPairedFilenameList, readInterPairedFilenameList, containedReadsFileName, simplifyPartialPath,
+	//Load reads before simplification...
+	DataSet *dataSet = new DataSet(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList); // construct dataset from reads file(s)
+	dataSet->storeContainedReadInformation(containedReadsFileName);
+
+	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
+		<< dataSet->size() << "\n";
+
+	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 			minOvl, threadPoolSize, 1);
 
-	SimplifyGraph(edgeFilenameList, readSingleFilenameList,
-				readPairedFilenameList, readInterPairedFilenameList, containedReadsFileName, simplifyPartialPath,
-				minOvl, threadPoolSize, 2);
+	//Clear edge information stored in the reads before the second iteration
+	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
+	for(UINT64 i = 1; i < dataSet->size() ; i++) // For each read.
+	{
+		dataSet->at(i)->ClearEdgeInfo();
+	}
 
+	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
+				minOvl, threadPoolSize, 2);
+	delete dataSet;
 	CLOCKSTOP;
 	return 0;
 }
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
-		const vector<std::string> &readSingleFilenameList,const vector<std::string> &readPairedFilenameList,
-		vector<std::string> &readInterPairedFilenameList, vector<string> containedReadsFileName, string simplifyPartialPath,
-		UINT64 minOvl, UINT64 threadPoolSize, int interationCount)
+		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 threadPoolSize, int interationCount)
 {
 	CLOCKSTART;
 	cout<<"Graph Simplification Iteration: "<<interationCount<<endl;
-	string usedReadFileName = outputFilenamePrefix+"_UsedReads.txt";
-	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, readSingleFilenameList,
-				readPairedFilenameList, readInterPairedFilenameList, usedReadFileName, simplifyPartialPath,
+
+	//Load and mark used reads during iteration 2 and 3
+	if(interationCount==2)
+	{
+		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
+		dataSet->LoadUsedReads(usedReadFileName);
+	}
+	else if(interationCount==3)
+	{
+		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-2)+".txt";
+		dataSet->LoadUsedReads(usedReadFileName);
+		usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
+		dataSet->LoadUsedReads(usedReadFileName);
+	}
+
+	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 				minOvl, threadPoolSize);
 	//Initial Simplification
-	overlapGraph->graphPathFindInitial(containedReadsFileName);
+	overlapGraph->graphPathFindInitial();
 	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
 	ofstream g_out(graph_file.c_str());
 	g_out << *overlapGraph;
@@ -109,7 +133,8 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string edge_file = outputFilenamePrefix+"_contigEdgesFinal_"+SSTR(interationCount)+".txt";
 		string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig", readSingleFilenameList, readPairedFilenameList);
+		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig");
 	}
 
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
@@ -144,7 +169,8 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
 		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff", readSingleFilenameList, readPairedFilenameList);
+		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
 	}
 	//Write out used reads
 

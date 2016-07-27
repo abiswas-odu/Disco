@@ -146,9 +146,7 @@ class OverlapGraph
 		/* ====================  LIFECYCLE     ======================================= */
 		OverlapGraph(void);
 
-		OverlapGraph(const vector<std::string> &edge_files, 
-				const vector<std::string> &read_SingleFiles, const vector<std::string> &read_PairFiles,
-				vector<std::string> &read_PairInterFiles,string usedReadFileName, string simplifyPartialPath,
+		OverlapGraph(const vector<std::string> &edge_files, string simplifyPartialPath, DataSet *dataSet,
 				const UINT64 minOvl, const UINT64 parallelThreadPoolSize);
 
 		~OverlapGraph();
@@ -181,7 +179,7 @@ class OverlapGraph
 		// Some simple simplification.
 		void simplifyGraph(void);
 
-		void graphPathFindInitial(vector<string> containedReadsFileName);
+		void graphPathFindInitial();
 
 		// Calculate the minimum cost flow of the overlap graph using file
 		void calculateFlowStream(void);
@@ -190,8 +188,7 @@ class OverlapGraph
 		void getEdges(t_edge_vec & contigEdges) const;
 		
 		// Print contigs to file, only the ones longer than the specified printing threshold
-		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix,
-				const vector<std::string> &readSingleFilenameList, const vector<std::string> &readPairedFilenameList);
+		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix);
 
 		// Print edges to a file, with an edgeName
 		void printEdge(Edge *contigEdges, ostream & filePointer,ostream & fileUsedReadPointer , UINT64 edgeNameID) const;
