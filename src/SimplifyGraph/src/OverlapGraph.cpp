@@ -2235,32 +2235,26 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					// already present in the list
 					if(listOfPairedEdges.at(l).edge1 == listOfPairedEdges_local.at(k).edge1 && listOfPairedEdges.at(l).edge2 == listOfPairedEdges_local.at(k).edge2)
 					{
-						listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+						listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
 						break;
 					}
 					// already present in the list
-					else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == listOfPairedEdges_local.at(k).edge1
-							&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == listOfPairedEdges_local.at(k).edge2)
+					else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == listOfPairedEdges_local.at(k).edge1
+							&& listOfPairedEdges.at(l).edge1->getReverseEdge() == listOfPairedEdges_local.at(k).edge2)
 					{
-						listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+						listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
 						break;
 					}
 				}
 				if(l == listOfPairedEdges.size()) // not present in the list
 				{
 						// add in the list with support 1
-					if(listOfPairedEdges_local.at(k).edge1->getSourceRead()->getReadID() != listOfPairedEdges_local.at(k).edge1->getDestinationRead()->getReadID()
-							|| listOfPairedEdges_local.at(k).edge2->getSourceRead()->getReadID() != listOfPairedEdges_local.at(k).edge2->getDestinationRead()->getReadID())
-						// do not want to add support between edge (a,a) and (a,a)
-					//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
-					{
-						pairedEdges newPair;
-						newPair.edge1 = listOfPairedEdges_local.at(k).edge1;
-						newPair.edge2 = listOfPairedEdges_local.at(k).edge2;
-						newPair.uniqSupport = 1;
-						newPair.isFreed = false;
-						listOfPairedEdges_local.push_back(newPair);
-					}
+					pairedEdges newPair;
+					newPair.edge1 = listOfPairedEdges_local.at(k).edge1;
+					newPair.edge2 = listOfPairedEdges_local.at(k).edge2;
+					newPair.uniqSupport = 1;
+					newPair.isFreed = false;
+					listOfPairedEdges.push_back(newPair);
 				}
 			}
 		}
