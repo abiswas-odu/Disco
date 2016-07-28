@@ -16,9 +16,11 @@
 #include "Edge.h"
 
 #define loopLimit 15			// Number of time to loop in the main function.
-#define insertSizeRangeSD 3		// 3 means mean +/- 3 SD
+#define allowedUsedReads 3
+#define EXPLORE_DEPTH 100
+#define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
 #define MAX_INNER_DIST_TRESH 1000
-#define EXPLORE_DEPTH 10
+
 
 extern char **environ;
 
@@ -155,6 +157,8 @@ class OverlapGraph
 		UINT64 getNumberOfEdges(void) const {return m_numberOfEdges;}
 
 		UINT64 getNumberOfNodes(void) const {return m_numberOfNodes;}
+
+		bool isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination);
 
 		/* ====================  MUTATORS      ======================================= */
 		void setMinOvl(const UINT64 & minOvl = 50){m_minOvl = minOvl;}

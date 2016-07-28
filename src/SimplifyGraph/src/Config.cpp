@@ -33,7 +33,9 @@ string Config::outFilenamePrefix = "new_omega_out";
 vector<string> Config::containedReadsFile;
 string Config::simplifyGraphPath ="";
 UINT64 Config::parallelThreadPoolSize(4);
-string Config::paramFileName="parameter.cfg";
+string Config::paramFileName="omega3.cfg";
+string Config::paramFileName2="omega3_2.cfg";
+string Config::paramFileName3="omega3_3.cfg";
 
 // global variables with default value
 unsigned int minOvl=40;
@@ -85,12 +87,12 @@ void Config::printHelp()
 		<< endl;
 }
 
-void Config::setParameters()
+void Config::setParameters(string pFile)
 {
 	ifstream filePointer;
-	filePointer.open(paramFileName.c_str());
+	filePointer.open(pFile.c_str());
 	if(!filePointer.is_open()) {
-		MYEXIT("Unable to open parameter file: "+paramFileName);
+		MYEXIT("Unable to open parameter file: "+pFile);
 	}
 	else {
 		string par_text="";
@@ -238,6 +240,14 @@ bool Config::setConfig(int argc, char **argv)
 		else if (argumentsList[i] == "-p")
 		{
 			Config::paramFileName = argumentsList[++i];
+		}
+		else if (argumentsList[i] == "-p2")
+		{
+			Config::paramFileName2 = argumentsList[++i];
+		}
+		else if (argumentsList[i] == "-p3")
+		{
+			Config::paramFileName3 = argumentsList[++i];
 		}
 		else if (argumentsList[i] == "-simPth")
 		{

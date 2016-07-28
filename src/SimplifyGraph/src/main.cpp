@@ -20,17 +20,15 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl, UINT64 parallelThreadPoolSize, int interationCount);
 
+void SetParameters(int interationCount);
+
 int main(int argc, char **argv) {
 
-	// Parse command line options:0
+	// Parse and print command line options
 	if(!Config::setConfig(argc, argv)){
 		cerr << "Error: wrong configurations" << endl;
 		return false;
 	}
-	CLOCKSTART;
-	//Read parameter file and set assembly parameters
-	Config::setParameters();
-
 	vector<string> readSingleFilenameList 	= Config::getSingleReadFilenames();
 	vector<string> readPairedFilenameList 	= Config::getPairedReadFilenames();
 	vector<string> readInterPairedFilenameList 	= Config::getInterPairedReadFilenames();
@@ -38,12 +36,8 @@ int main(int argc, char **argv) {
 	outputFilenamePrefix 			= Config::getOutputFilenamePrefix();
 	vector<string> containedReadsFileName = Config::getContainedReadsFile();
 	string simplifyPartialPath = Config::getSimplifyGraphPath();
-
 	loglevel 				= FILELog::ReportingLevel();
 	UINT64 threadPoolSize = Config::getThreadPoolSize();
-
-	FILE_LOG(logINFO) << "Log level is " << FILELog::ReportingLevel() << ":\t" << Config::getLogLevel() << endl;
-	FILE_LOG(logINFO) << "Minimum overlap length is: " << minOvl << endl;
 	FILE_LOG(logINFO) << "File(s) including reads: ";
 	if(loglevel > 1){
 		for(vector<std::string>::iterator it = readSingleFilenameList.begin(); it!=readSingleFilenameList.end(); ++it)
@@ -61,14 +55,8 @@ int main(int argc, char **argv) {
 	}
 	FILE_LOG(logINFO) << endl;
 	FILE_LOG(logINFO) << "Output file names' prefix is: " << outputFilenamePrefix << endl;
-	FILE_LOG(logINFO) << "Maximum read count in dead-end edge is: " << minReadsCountInEdgeToBeNotDeadEnd << endl;
-	FILE_LOG(logINFO) << "Maximum edge length in dead-end edge is: " << minEdgeLengthToBeNotDeadEnd << endl;
-	FILE_LOG(logINFO) << "Minimum read count in edges with flow is: " << minReadsCountInEdgeToBe1MinFlow << endl;
-	FILE_LOG(logINFO) << "Minimum edge length of edges with flow is: " << minEdgeLengthToBe1MinFlow << endl;
-	FILE_LOG(logINFO) << "Minimum edge length for edges to be reported is: " << minContigLengthTobeReported << endl;
-	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
-	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
 
+	CLOCKSTART;
 	//Load reads before simplification...
 	DataSet *dataSet = new DataSet(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList); // construct dataset from reads file(s)
 	dataSet->storeContainedReadInformation(containedReadsFileName);
@@ -76,18 +64,35 @@ int main(int argc, char **argv) {
 	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
 		<< dataSet->size() << "\n";
 
+	//Read parameter file and set assembly parameters
+	SetParameters(1);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 			minOvl, threadPoolSize, 1);
 
 	//Clear edge information stored in the reads before the second iteration
 	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
-	for(UINT64 i = 1; i < dataSet->size() ; i++) // For each read.
+	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 	{
 		dataSet->at(i)->ClearEdgeInfo();
 	}
 
+	//Read parameter file and set assembly parameters
+	SetParameters(2);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 				minOvl, threadPoolSize, 2);
+
+	//Clear edge information stored in the reads before the second iteration
+	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
+	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
+	{
+		dataSet->at(i)->ClearEdgeInfo();
+	}
+
+	//Read parameter file and set assembly parameters
+	SetParameters(3);
+	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
+				minOvl, threadPoolSize, 3);
+
 	delete dataSet;
 	CLOCKSTOP;
 	return 0;
@@ -176,4 +181,26 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 
 	delete overlapGraph;
 	CLOCKSTOP;
+}
+
+void SetParameters(int interationCount)
+{
+	//Load parameters based on iteration count...
+	if(interationCount==1)
+		Config::setParameters(Config::getParamFileName());
+	else if(interationCount==2)
+		Config::setParameters(Config::getParamFileName2());
+	else
+		Config::setParameters(Config::getParamFileName3());
+
+	FILE_LOG(logINFO) << "Log level is " << FILELog::ReportingLevel() << ":\t" << Config::getLogLevel() << endl;
+	FILE_LOG(logINFO) << "Minimum overlap length is: " << minOvl << endl;
+	FILE_LOG(logINFO) << "Maximum read count in dead-end edge is: " << minReadsCountInEdgeToBeNotDeadEnd << endl;
+	FILE_LOG(logINFO) << "Maximum edge length in dead-end edge is: " << minEdgeLengthToBeNotDeadEnd << endl;
+	FILE_LOG(logINFO) << "Minimum read count in edges with flow is: " << minReadsCountInEdgeToBe1MinFlow << endl;
+	FILE_LOG(logINFO) << "Minimum edge length of edges with flow is: " << minEdgeLengthToBe1MinFlow << endl;
+	FILE_LOG(logINFO) << "Minimum edge length for edges to be reported is: " << minContigLengthTobeReported << endl;
+	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
+	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
+
 }

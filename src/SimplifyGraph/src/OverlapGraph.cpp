@@ -3,7 +3,7 @@
  * Name        : OverlapGraph.cpp
  * Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
  * Version     : v1.2
- * Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+ * Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.F
  * Description : OverlapGraph cpp file
  *============================================================================
  */
@@ -430,7 +430,7 @@ UINT64 OverlapGraph::removeDeadEndNodes(void)
 	CLOCKSTART;
 	vector<UINT64> nodes_to_remove;
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
-	for(UINT64 i = 1; i < m_dataset->size() ; i++) // For each read.
+	for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
 	{
 		auto it = m_graph->find(i);
 		if(it != m_graph->end() && !it->second->empty())	// If the read has some edges.
@@ -1888,6 +1888,57 @@ void OverlapGraph::readParEdges(string edge_file)
 		Read *source = m_dataset->at(atoi(tok[0].c_str()));
 		Read *destination = m_dataset->at(atoi(tok[1].c_str()));
 
+		vector<string> infoTok = Utils::split(tok[2],',');
+		UINT64 orientationForward =  atoi(infoTok[0].c_str());
+		UINT64 overlapOffsetForward =   atoi(infoTok[1].c_str());
+
+		// Make the forward edge list
+		UINT64 *listReadsForward = nullptr;
+		UINT64 lFSize=0;
+		UINT64 usedReadCtr=0;
+		if(tok.size()>3)			//If composite edge load the inner reads
+			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, m_dataset);		//Returns the count of inner reads that have been used before
+
+		//Do not load edge into graph if the edge was used in previous assemblies...
+		if(isUsedEdge(lFSize,usedReadCtr,source,destination))
+		{
+			delete[] listReadsForward;
+			listReadsForward = nullptr;
+		}
+		else
+		{
+			Edge *edgeForward = new Edge(source,destination,orientationForward,
+					overlapOffsetForward, listReadsForward, lFSize);
+
+			// Make the reverse edge
+			UINT64 *listReadsReverse = nullptr;
+			UINT64 lRSize=0;
+			if(tok.size()>3)
+				createRevList(edgeForward, &listReadsReverse, lRSize, m_dataset);
+			UINT64 overlapOffsetReverse = edgeForward->getEdgeLength()-source->getReadLength();
+			Edge *edgeReverse = new Edge(destination,source,twinEdgeOrientation(orientationForward),
+					overlapOffsetReverse, listReadsReverse, lRSize);
+
+			edgeForward->setReverseEdge(edgeReverse);
+			edgeReverse->setReverseEdge(edgeForward);
+
+			//Insert edge in graph
+			if(!existsEdge(edgeForward))
+				insertEdge(edgeForward);
+		}
+
+	}
+	filePointer.close();
+	CLOCKSTOP;
+}
+/*
+ * Check if an edge can be considered as used.
+ */
+bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination)
+{
+	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
+	if(lFSize >= allowedUsedReads && usedReadCtr>0 && usedReadCtr > (lFSize-allowedUsedReads))
+	{
 		//Removed used edges; If both source and destination and corresponding
 		//mates have been used in previous assembly; do not load this edge
 		UINT64 sourceMate = m_dataset->getMatePair(source->getReadID());
@@ -1895,64 +1946,56 @@ void OverlapGraph::readParEdges(string edge_file)
 		if(sourceMate==0 || destinationMate==0)
 		{
 			if(source->isUsedRead() && destination->isUsedRead())
-				continue;
+				return true;
 		}
 		else if(sourceMate > 0 && destinationMate > 0)
 		{
 			if(source->isUsedRead() && destination->isUsedRead() &&
 					m_dataset->at(sourceMate)->isUsedRead() && m_dataset->at(destinationMate)->isUsedRead())
-				continue;
+				return true;
 		}
 		else if(sourceMate > 0)
 		{
 			if(source->isUsedRead() && destination->isUsedRead() &&
 					m_dataset->at(sourceMate)->isUsedRead())
-				continue;
+				return true;
 		}
 		else
 		{
 			if(source->isUsedRead() && destination->isUsedRead() &&
 					m_dataset->at(destinationMate)->isUsedRead())
-				continue;
+				return true;
 		}
-
-		vector<string> infoTok = Utils::split(tok[2],',');
-		UINT64 orientationForward =  atoi(infoTok[0].c_str());
-		UINT64 overlapOffsetForward =   atoi(infoTok[1].c_str());
-
-		// Make the forward edge
-		UINT64 *listReadsForward = nullptr;
-		UINT64 lFSize=0;
-		UINT64 usedReadCtr=0;
-		if(tok.size()>3)			//If composite edge load the inner reads
-			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, m_dataset);		//Returns the count of inner reads that have been used before
-
-		//Removed used edges; If all the inner reads have been used in previous assembly; do not load this edge
-		if(usedReadCtr>0 && usedReadCtr==lFSize)
-			continue;
-
-		Edge *edgeForward = new Edge(source,destination,orientationForward,
-				overlapOffsetForward, listReadsForward, lFSize);
-
-		// Make the reverse edge
-		UINT64 *listReadsReverse = nullptr;
-		UINT64 lRSize=0;
-		if(tok.size()>3)
-			createRevList(edgeForward, &listReadsReverse, lRSize, m_dataset);
-		UINT64 overlapOffsetReverse = edgeForward->getEdgeLength()-source->getReadLength();
-		Edge *edgeReverse = new Edge(destination,source,twinEdgeOrientation(orientationForward),
-				overlapOffsetReverse, listReadsReverse, lRSize);
-
-		edgeForward->setReverseEdge(edgeReverse);
-		edgeReverse->setReverseEdge(edgeForward);
-
-		//Insert edge in graph
-		if(!existsEdge(edgeForward))
-			insertEdge(edgeForward);
-
 	}
-	filePointer.close();
-	CLOCKSTOP;
+	else if(lFSize < allowedUsedReads)
+	{
+		UINT64 sourceMate = m_dataset->getMatePair(source->getReadID());
+		UINT64 destinationMate = m_dataset->getMatePair(destination->getReadID());
+		if(sourceMate==0 || destinationMate==0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead())
+				return true;
+		}
+		else if(sourceMate > 0 && destinationMate > 0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(sourceMate)->isUsedRead() && m_dataset->at(destinationMate)->isUsedRead())
+				return true;
+		}
+		else if(sourceMate > 0)
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(sourceMate)->isUsedRead())
+				return true;
+		}
+		else
+		{
+			if(source->isUsedRead() && destination->isUsedRead() &&
+					m_dataset->at(destinationMate)->isUsedRead())
+				return true;
+		}
+	}
+	return false;
 }
 
 /* 

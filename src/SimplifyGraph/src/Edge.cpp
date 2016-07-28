@@ -433,15 +433,16 @@ UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize, Da
 			UINT64 packedReadInfo =  readID | overlapOff | orient;
 			listReads[lCtr++] = packedReadInfo;
 
+			//Check if mate exists and has been used in previous assembly
 			UINT64 readIDMate = d->getMatePair(readID);
-			if(readIDMate > 0)
+			if(readIDMate > 0)		//Mate exists
 			{
-				if(d->at(readID)->isUsedRead() && d->at(readIDMate)->isUsedRead())
+				if(d->at(readID)->isUsedRead() && d->at(readIDMate)->isUsedRead()) //Check if both have been used
 					usedReads++;
 			}
 			else
 			{
-				if(d->at(readID)->isUsedRead())
+				if(d->at(readID)->isUsedRead()) //Check if read has been used
 					usedReads++;
 			}
 		}

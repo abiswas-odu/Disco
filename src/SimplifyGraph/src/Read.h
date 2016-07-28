@@ -28,8 +28,10 @@ class Read
 		 * second: index(location) of this read on the edge and orientation
 		*/
 		Edge ** edgeP;						//Array of pointers to the edges containing the read
-		UINT32 * edgeOriIndex;				//MSB: Orientation of the read sequence in the Edge, 31 LSB index on the edge...
-		UINT64 *containedReads;				//Array of contained reads(2MSB:Read Orientation, next 30 MSB: overlap start, 32LSB: contained read ID, )											//31 LSB : Index of the read on the edge starting from source
+		UINT32 * edgeOriIndex;				//MSB: Orientation of the read sequence in the Edge,
+											//31 LSB : Index of the read on the edge starting from source
+		UINT64 *containedReads;				//Array of contained reads(2MSB:Read Orientation, next 30 MSB: overlap start, 32LSB: contained read ID, )
+
 		UINT64 m_readID;         // Unique Identification of the read.
 
 		UINT16 noOfEdges;					//Number of edges this read belongs to

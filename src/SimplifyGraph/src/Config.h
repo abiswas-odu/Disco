@@ -180,12 +180,14 @@ public:
     static UINT64 parallelThreadPoolSize;
     static string simplifyGraphPath;
     static string paramFileName;
+    static string paramFileName2;
+    static string paramFileName3;
 
     // Get options
     static bool setConfig(int argc, char **argv);
 
     //Read and set parameter file
-    static void setParameters();
+    static void setParameters(string pFile);
 
     // Print help
     static void printHelp();
@@ -219,6 +221,12 @@ public:
 
     //Get parameter file name
     static string getParamFileName() {return paramFileName;}
+
+    //Get parameter file name
+    static string getParamFileName2() {return paramFileName2;}
+
+    //Get parameter file name
+    static string getParamFileName3() {return paramFileName3;}
 
     //
 };
