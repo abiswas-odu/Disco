@@ -1086,14 +1086,14 @@ void OverlapGraph::graphPathFindInitial()
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
-	//calculateMeanAndSdOfInnerDistance();
 	UINT64 counter(0);
 	do {
-		//findSupportByMatepairsAndMerge();
 		removeDeadEndNodes();
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
+	calculateMeanAndSdOfInnerDistance();
+	findSupportByMatepairsAndMerge();
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
