@@ -14,6 +14,8 @@ readFile2=""
 readFileS=""
 readFileP=""
 asmParaFileP="${exePath}/omega3.cfg"
+asmParaFileP2="${exePath}/omega3_2.cfg"
+asmParaFileP3="${exePath}/omega3_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
 phymem=`grep MemTotal /proc/meminfo | awk '{print $2}'`
@@ -43,6 +45,14 @@ case $key in
     ;;
     -p|--parameterFile)     # overlap length to consider
     asmParaFileP="$2"
+    shift # past argument
+    ;;
+    -p2|--parameterFile2)     # overlap length to consider
+    asmParaFileP2="$2"
+    shift # past argument
+    ;;
+    -p3|--parameterFile3)     # overlap length to consider
+    asmParaFileP3="$2"
     shift # past argument
     ;;
     -d|--outdir)			# output directory
@@ -175,45 +185,55 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then
       ${exePath}/buildG -pe 1 ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
-      ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cp ${outSimplifyPrefix}_contigsFinal.fasta ${dataOutPath}`
-      `cp ${outSimplifyPrefix}_scaffoldsFinal.fasta ${dataOutPath}`
+      ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
-      ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cp ${outSimplifyPrefix}_contigsFinal.fasta ${dataOutPath}`
-      `cp ${outSimplifyPrefix}_scaffoldsFinal.fasta ${dataOutPath}`
+      ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -pe 2 ${readFile1} ${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
-      map --profile ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cp ${outSimplifyPrefix}_contigsFinal.fasta ${dataOutPath}`
-      `cp ${outSimplifyPrefix}_scaffoldsFinal.fasta ${dataOutPath}`
+      ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -pe 1 ${readFileP} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
-      ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-   	  `cp ${outSimplifyPrefix}_contigsFinal.fasta ${dataOutPath}`
-      `cp ${outSimplifyPrefix}_scaffoldsFinal.fasta ${dataOutPath}`
+      ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 elif [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -pe 2 ${readFile1} ${readFile2} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
-      ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cp ${outSimplifyPrefix}_contigsFinal.fasta ${dataOutPath}`
-      `cp ${outSimplifyPrefix}_scaffoldsFinal.fasta ${dataOutPath}`
+      ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 else
    echo "Invalid combination of input files. You can specify oe single end file with one interleaved paired file or speprate paired file. Exiting..."

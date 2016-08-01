@@ -166,7 +166,7 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 	std::fill_n(allMarked, nodeCount, false);
 
 	double beginPSec = omp_get_wtime();
-	cout<<"Composite edge parallel section start: Threads "<<p_ThreadPoolSize<<endl;
+	FILE_LOG(logINFO)<<"Composite edge parallel section start: Threads "<<p_ThreadPoolSize<<endl;
 	#pragma omp parallel num_threads(4)
 	{
 		UINT64 startReadID=0,prevReadID=0;
@@ -307,7 +307,7 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 	}//end of multi-threading
 	delete allMarked;
 	double endPSec = omp_get_wtime();
-	cout<<"Composite edge parallel section end: Time "<<double(endPSec - beginPSec)<<endl;
+	FILE_LOG(logINFO)<<"Composite edge parallel section end: Time "<<double(endPSec - beginPSec)<<endl;
 	//Delete all edges marked as invalid
 	for (map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++)
 	{
@@ -1937,7 +1937,7 @@ void OverlapGraph::readParEdges(string edge_file)
 bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination)
 {
 	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
-	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize/3))	//Composite edge
+	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize/10))	//Composite edge
 	{
 		//Removed used edges; If both source and destination and corresponding
 		//mates have been used in previous assembly; do not load this edge
@@ -2162,93 +2162,94 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 
 	vector <pairedEdges> listOfPairedEdges;
 
-	#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
-	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
+	#pragma omp parallel num_threads(p_ThreadPoolSize)
 	{
 		vector <pairedEdges> listOfPairedEdges_local;
-		Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
-		vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
-		for(UINT64 j = 0; j < r1MPList.size(); j++)		// For each mate-pair read1
+		#pragma omp for schedule(guided)
+		for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 		{
-			Read * read2 = m_dataset->at(r1MPList[j]);
-			// CP: read1 and read2 are paired-ends
-			if(read1->getReadID() > read2->getReadID()) 		// To avoid finding path twice
-				continue;
-			// CP: ignore this pair if their dataset has an average insert size of 0
-			//if(meanOfInsertSizes.at(read1->getMatePairList()->at(j).datasetNumber) == 0)
-			//	continue;
-			//Orientation is F/R so its always 2
-			// a path is defined by a vector of edges,
-			vector <Edge *> copyOfPath;
-			// This list of flags is used to mark the edges that are common in all paths found.
-			vector <UINT64> copyOfFlags;
-			bool findPaths=false;
-			findPaths = findPathBetweenMatepairs(read1, read2, 2,
-				m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags);
-			if(findPaths == true)
+			Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
+			vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
+			for(UINT64 j = 0; j < r1MPList.size(); j++)		// For each mate-pair read1
 			{
-				// Matepair on different edge
-				if(copyOfPath.size() == 0)
+				Read * read2 = m_dataset->at(r1MPList[j]);
+				// CP: read1 and read2 are paired-ends
+				if(read1->getReadID() > read2->getReadID()) 		// To avoid finding path twice
+					continue;
+				// CP: ignore this pair if their dataset has an average insert size of 0
+				//if(meanOfInsertSizes.at(read1->getMatePairList()->at(j).datasetNumber) == 0)
+				//	continue;
+				//Orientation is F/R so its always 2
+				// a path is defined by a vector of edges,
+				vector <Edge *> copyOfPath;
+				// This list of flags is used to mark the edges that are common in all paths found.
+				vector <UINT64> copyOfFlags;
+				bool findPaths=false;
+				findPaths = findPathBetweenMatepairs(read1, read2, 2,
+					m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags);
+				if(findPaths == true)
 				{
-					#pragma omp atomic
-						noPathsFound++;
-				}
-				else
-				{
-					#pragma omp atomic
-						pathsFound++;
-				}
-			}
-			else // Mate pair on the same edge
-			{
-				#pragma omp atomic
-					mpOnSameEdge++;
-			}
-			if(copyOfPath.size() > 1)	// Path found
-			{
-				for(UINT64 k = 0; k < copyOfFlags.size(); k++)
-				{
-					// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
-					if(copyOfFlags.at(k) == 1)
+					// Matepair on different edge
+					if(copyOfPath.size() == 0)
 					{
-						UINT64 l;
-						for(l = 0; l < listOfPairedEdges_local.size(); l++)
+						#pragma omp atomic
+							noPathsFound++;
+					}
+					else
+					{
+						#pragma omp atomic
+							pathsFound++;
+					}
+				}
+				else // Mate pair on the same edge
+				{
+					#pragma omp atomic
+						mpOnSameEdge++;
+				}
+				if(copyOfPath.size() > 1)	// Path found
+				{
+					for(UINT64 k = 0; k < copyOfFlags.size(); k++)
+					{
+						// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
+						if(copyOfFlags.at(k) == 1)
 						{
-							// already present in the list
-							if(listOfPairedEdges_local.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges_local.at(l).edge2 == copyOfPath.at(k+1))
+							UINT64 l;
+							for(l = 0; l < listOfPairedEdges_local.size(); l++)
 							{
-								listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
-								break;
+								// already present in the list
+								if(listOfPairedEdges_local.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges_local.at(l).edge2 == copyOfPath.at(k+1))
+								{
+									listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+									break;
+								}
+								// already present in the list
+								else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
+										&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
+								{
+									listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+									break;
+								}
 							}
-							// already present in the list
-							else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
-									&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
+							if(l == listOfPairedEdges_local.size()) // not present in the list
 							{
-								listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
-								break;
-							}
-						}
-						if(l == listOfPairedEdges_local.size()) // not present in the list
-						{
-								// add in the list with support 1
-							if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
-									|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
-								// do not want to add support between edge (a,a) and (a,a)
-							//if(copyOfPath.at(k)!=copyOfPath.at(k+1) && copyOfPath.at(k)!=copyOfPath.at(k+1)->getReverseEdge())
-							{
-								pairedEdges newPair;
-								newPair.edge1 = copyOfPath.at(k);
-								newPair.edge2 = copyOfPath.at(k+1);
-								newPair.uniqSupport = 1;
-								newPair.isFreed = false;
-								listOfPairedEdges_local.push_back(newPair);
+									// add in the list with support 1
+								if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
+										|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
+									// do not want to add support between edge (a,a) and (a,a)
+								{
+									pairedEdges newPair;
+									newPair.edge1 = copyOfPath.at(k);
+									newPair.edge2 = copyOfPath.at(k+1);
+									newPair.uniqSupport = 1;
+									newPair.isFreed = false;
+									listOfPairedEdges_local.push_back(newPair);
+								}
 							}
 						}
 					}
 				}
 			}
 		}
-
 		#pragma omp critical
 		{
 			for(UINT64 k = 0; k < listOfPairedEdges_local.size(); k++)
@@ -2259,49 +2260,42 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					// already present in the list
 					if(listOfPairedEdges.at(l).edge1 == listOfPairedEdges_local.at(k).edge1 && listOfPairedEdges.at(l).edge2 == listOfPairedEdges_local.at(k).edge2)
 					{
-						listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
+						listOfPairedEdges.at(l).uniqSupport+=listOfPairedEdges_local.at(k).uniqSupport;	// only increase the support
 						break;
 					}
-					// already present in the list
+					// already present in the list as reverse
 					else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == listOfPairedEdges_local.at(k).edge1
 							&& listOfPairedEdges.at(l).edge1->getReverseEdge() == listOfPairedEdges_local.at(k).edge2)
 					{
-						listOfPairedEdges.at(l).uniqSupport++;	// only increase the support
+						listOfPairedEdges.at(l).uniqSupport+=listOfPairedEdges_local.at(k).uniqSupport;	// only increase the support
 						break;
 					}
 				}
-				if(l == listOfPairedEdges.size()) // not present in the list
-				{
-						// add in the list with support 1
-					pairedEdges newPair;
-					newPair.edge1 = listOfPairedEdges_local.at(k).edge1;
-					newPair.edge2 = listOfPairedEdges_local.at(k).edge2;
-					newPair.uniqSupport = 1;
-					newPair.isFreed = false;
-					listOfPairedEdges.push_back(newPair);
-				}
+				if(l == listOfPairedEdges.size()) // not present in the list; add to global list
+					listOfPairedEdges.push_back(listOfPairedEdges_local.at(k));
 			}
 		}
 	}
 
-	sort(listOfPairedEdges.begin(), listOfPairedEdges.end());
+	FILE_LOG(logINFO) << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
+	FILE_LOG(logINFO) << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
+	FILE_LOG(logINFO) << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
+	FILE_LOG(logINFO) << "Total matepairs on same edge " << mpOnSameEdge << endl;
+	FILE_LOG(logINFO) << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
 
-	cout << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
-	cout << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
-	cout << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
-	cout << "Total matepairs on same edge " << mpOnSameEdge << endl;
-	cout << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
-
-	cout<<"List of pair edges:"<<listOfPairedEdges.size()<<endl;
+	FILE_LOG(logINFO)<<"List of pair edges:"<<listOfPairedEdges.size()<<endl;
 
 	UINT64 pairsOfEdgesMerged = 0;
+
+	//Sorting ensures we are merging edge pairs with higher support first
+	sort(listOfPairedEdges.begin(), listOfPairedEdges.end());
 
 	for(UINT64 i = 0; i<listOfPairedEdges.size(); i++)
 	{
 		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
-			cout << setw(4) << i + 1 << " Merging (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
+			FILE_LOG(logINFO) << setw(4) << i + 1 << " Merging (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
 					<< "," << setw(10) <<listOfPairedEdges.at(i).edge1->getDestinationRead()->getReadID() << ") Length: "
 					<< setw(8) << listOfPairedEdges.at(i).edge1->getOverlapOffset() + listOfPairedEdges.at(i).edge1->getDestinationRead()->getReadLength() << " Flow: " << setw(3)
 					<< listOfPairedEdges.at(i).edge1->m_flow << " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID()
@@ -2315,8 +2309,8 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			merge2Edges(listOfPairedEdges.at(i).edge1, listOfPairedEdges.at(i).edge2);
 
 			// BH: once we merge edge1 and edge2. We make sure that we do not try to merge these edges again.
-			// We mark all the pair of edges that contains edge1 and edge2 or their reverse edges.
-			#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
+			// We mark all the pair of edges that contains edge1 and edge2 or their reverse edges as freed.
+			#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 			for(UINT64 j = i + 1; j<listOfPairedEdges.size(); j++)
 			{
 				if( listOfPairedEdges.at(j).edge1 == e1f || listOfPairedEdges.at(j).edge1 == e1r
@@ -2328,7 +2322,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			}
 		}
 	}
-	cout << pairsOfEdgesMerged <<" Pairs of Edges merged out of " << listOfPairedEdges.size() << " supported pairs of edges" <<endl;
+	FILE_LOG(logINFO) << pairsOfEdgesMerged <<" Pairs of Edges merged out of " << listOfPairedEdges.size() << " supported pairs of edges" <<endl;
 	CLOCKSTOP;
 	return pairsOfEdgesMerged;
 
@@ -2457,7 +2451,7 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 									if(copyOfPath.at(k) == firstPath.at(l) &&  copyOfPath.at(k+1) == firstPath.at(l+1) && flags.at(l) == 1)
 										break;
 								}
-								if(l == firstPath.size() - 1)	// This pair is not supported
+								if(l == firstPath.size() - 1)	// This pair is not uniquely supported
 									copyOfFlags.at(k) = 0;
 							}
 						}
@@ -2642,7 +2636,7 @@ UINT64 OverlapGraph::scaffolder(void)
 		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
 		{
 			pairsOfEdgesMerged++;
-			cout << setw(4) << i + 1 << " (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
+			FILE_LOG(logINFO) << setw(4) << i + 1 << " (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
 					<< "," << setw(10) <<listOfPairedEdges.at(i).edge1->getDestinationRead()->getReadID() << ") Length: "
 					<< setw(8) << listOfPairedEdges.at(i).edge1->getOverlapOffset() << " Flow: " << setw(3) << listOfPairedEdges.at(i).edge1->m_flow
 					<< " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID() << "," << setw(10)
@@ -2762,7 +2756,7 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 	{
 		if(m_dataset->getDataSetInfo()->at(d).isPaired)
 		{
-			cout << "Calculating mean and SD of dataset: " << d << endl;
+			FILE_LOG(logINFO) << "Calculating mean and SD of dataset: " << d << endl;
 			innerDistSizes->clear();
 			#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 			for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
@@ -2829,7 +2823,7 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 
 		if(innerDistSizes->size() == 0) // If no insert size found
 		{
-			cout << "No insert-size found for dataset: " << d << endl;
+			FILE_LOG(logINFO) << "No insert-size found for dataset: " << d << endl;
 			m_dataset->getDataSetInfo()->at(d).avgInnerDistance=0;
 			m_dataset->getDataSetInfo()->at(d).avgInnerDistanceSD=0;
 			continue;
@@ -2850,9 +2844,9 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 		m_dataset->getDataSetInfo()->at(d).avgInnerDistanceSD=sdiv;  // Calculate and insert the standard deviation.
 
 		// Print the values of the current dataset.
-		cout << "Mean set to: " << mean << endl;
-		cout << "SD set to: " << sdiv << endl;
-		cout << "Reads on same edge: " << innerDistSizes->size() << endl;
+		FILE_LOG(logINFO) << "Mean set to: " << mean << endl;
+		FILE_LOG(logINFO) << "SD set to: " << sdiv << endl;
+		FILE_LOG(logINFO) << "Reads on same edge: " << innerDistSizes->size() << endl;
 
 		if((INT64)longestMeanOfInsertDistance < mean)
 		{
@@ -2860,7 +2854,7 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 		}
 
 	}
-	cout << "Mean of longest inner distance : " << longestMeanOfInsertDistance << endl;
+	FILE_LOG(logINFO) << "Mean of longest inner distance : " << longestMeanOfInsertDistance << endl;
 
 	delete innerDistSizes;
 	CLOCKSTOP;
@@ -3146,7 +3140,7 @@ UINT8 OverlapGraph::mergedEdgeOrientationDisconnected(const Edge *edge1, const E
 		returnValue = 3;
 	else
 	{
-		cout<<(int)or1<<" "<<(int)or2<<endl;
+		FILE_LOG(logINFO)<<(int)or1<<" "<<(int)or2<<endl;
 		MYEXIT("Unable to merge.")
 	}
 	return returnValue;

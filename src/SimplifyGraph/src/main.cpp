@@ -102,7 +102,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 threadPoolSize, int interationCount)
 {
 	CLOCKSTART;
-	cout<<"Graph Simplification Iteration: "<<interationCount<<endl;
+	FILE_LOG(logINFO) <<"Graph Simplification Iteration: "<<interationCount<<endl;
 
 	//Load and mark used reads during iteration 2 and 3
 	if(interationCount==2)
@@ -148,10 +148,10 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	do
 	{
 		// Mate pair paths are used to simplify the graph in this step
-		cout << endl;
-		cout << "===============================================================================================================================================" <<endl;
-		cout << "FIRST LOOP ITERATION " << ++iteration << endl;
-		cout << "===============================================================================================================================================" <<endl;
+		FILE_LOG(logINFO) << endl;
+		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+		FILE_LOG(logINFO) << "FIRST LOOP ITERATION " << ++iteration << endl;
+		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
 		counter = overlapGraph->findSupportByMatepairsAndMerge();
 		overlapGraph->simplifyScaffoldGraph();
 	} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
@@ -160,10 +160,10 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	do
 	{
 		// Scaffolder
-		cout << endl;
-		cout << "===============================================================================================================================================" <<endl;
-		cout << "SECOND LOOP ITERATION " << ++iteration << endl;
-		cout << "===============================================================================================================================================" <<endl;
+		FILE_LOG(logINFO) << endl;
+		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+		FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
+		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
 		overlapGraph->simplifyScaffoldGraph();
 		counter = overlapGraph->scaffolder();
 
