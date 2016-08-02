@@ -1940,7 +1940,7 @@ void OverlapGraph::readParEdges(string edge_file)
 bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination)
 {
 	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
-	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize/10))	//Composite edge
+	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr == lFSize)	//Composite edge
 	{
 		//Removed used edges; If both source and destination and corresponding
 		//mates have been used in previous assembly; do not load this edge
@@ -2042,7 +2042,7 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
-		if((*it)->getEdgeLength() >= minContigLengthTobeReported){
+		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
 			populate_edge(*it);
 			string contigString = (*it)->getEdgeString();
 			#pragma omp critical

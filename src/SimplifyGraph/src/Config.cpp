@@ -58,6 +58,8 @@ unsigned int minNonUniqSupport=0;
 
 unsigned int minContigLengthTobeReported = 500;
 
+unsigned int minNumberofReadsTobePrinted = 5;
+
 bool printContigs=false;
 
 bool printScaffolds=true;
@@ -118,6 +120,8 @@ void Config::setParameters(string pFile)
 					minEdgeLengthToHave0Flow=stoi(parVal);
 				else if(parName== "minSequenceLengthTobePrinted")
 					minContigLengthTobeReported=stoi(parVal);
+				else if(parName== "minNumberofReadsTobePrinted")
+					minNumberofReadsTobePrinted=stoi(parVal);
 				else if(parName== "minOverlapDifference4ClipBranches")
 					minOvlDiffToClip=stoi(parVal);
 				else if(parName== "minFoldToBeShortBranch")

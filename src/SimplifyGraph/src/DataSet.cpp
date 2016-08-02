@@ -164,6 +164,10 @@ void DataSet::LoadUsedReads(string usedReadFileName)
 		{
 			UINT64 readID = stoi(text);
 			at(readID)->setUsedRead(true);
+			//Mark mate used as well
+			//UINT64 mateReadID =  getMatePair(readID);
+			//if(mateReadID>0)
+			//	at(mateReadID)->setUsedRead(true);
 			usedReadCtr++;
 		}
 		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;

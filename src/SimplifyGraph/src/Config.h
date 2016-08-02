@@ -93,6 +93,9 @@ extern unsigned int minNonUniqSupport;
 // minimum contig length to be reported (default: 1000)
 extern unsigned int minContigLengthTobeReported;
 
+// minimum reads in a contig to be reported (default: 5)
+extern unsigned int minNumberofReadsTobePrinted;
+
 // print contigs or not
 extern bool printContigs;
 
