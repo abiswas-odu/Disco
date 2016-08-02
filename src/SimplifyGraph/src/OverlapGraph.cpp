@@ -1095,8 +1095,8 @@ void OverlapGraph::graphPathFindInitial()
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
-	//calculateMeanAndSdOfInnerDistance();
-	//findSupportByMatepairsAndMerge();
+	calculateMeanAndSdOfInnerDistance();
+	findSupportByMatepairsAndMerge();
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
