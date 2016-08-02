@@ -429,62 +429,65 @@ UINT64 OverlapGraph::removeDeadEndNodes(void)
 {
 	CLOCKSTART;
 	vector<UINT64> nodes_to_remove;
-	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
-	for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
+
+	#pragma omp parallel num_threads(p_ThreadPoolSize)
 	{
-		auto it = m_graph->find(i);
-		if(it != m_graph->end() && !it->second->empty())	// If the read has some edges.
+		vector<UINT64> nodes_to_remove_local;
+		#pragma omp for schedule(dynamic)
+		for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
 		{
-			bool isDeadEnd = true;	// flag for dead end edge
-			UINT64 inEdge = 0; 	// number of incoming edges to this node
-			UINT64 outEdge = 0; 	// number of outgoing edges from this node
-
-			// Find number of in- ane out- edges
-			for(UINT64 j=0; j < it->second->size(); j++)
+			auto it = m_graph->find(i);
+			if(it != m_graph->end() && !it->second->empty())	// If the read has some edges.
 			{
-				Edge * edge = it->second->at(j);
-				/* Break case:
-				 * 0. edge already marked as not dead end
-				 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (default: 10)
-				 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
-				 * 3. the edge is loop for the current node
-				 * Then flag=1 and exit the loop
-				 */
-				if (edge->isNotDeadEnd()){
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->isLoop())
+				bool isDeadEnd = true;	// flag for dead end edge
+				UINT64 inEdge = 0; 	// number of incoming edges to this node
+				UINT64 outEdge = 0; 	// number of outgoing edges from this node
+
+				// Find number of in- ane out- edges
+				for(UINT64 j=0; j < it->second->size(); j++)
 				{
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
+					Edge * edge = it->second->at(j);
+					/* Break case:
+					 * 0. edge already marked as not dead end
+					 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (default: 10)
+					 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
+					 * 3. the edge is loop for the current node
+					 * Then flag=1 and exit the loop
+					 */
+					if (edge->isNotDeadEnd()){
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->isLoop())
+					{
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if((edge->getOrientation() >> 1) & 1)
+						++outEdge;
+					else
+						++inEdge;
 				}
-
-
-
-				if((edge->getOrientation() >> 1) & 1)
-					++outEdge;
-				else
-					++inEdge;
-			}
-			// no good edges incident to the node and only in-edges or out-edges
-			if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
-				#pragma omp critical
-				{
-					nodes_to_remove.push_back(it->first);
+				// no good edges incident to the node and only in-edges or out-edges
+				if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
+						nodes_to_remove_local.push_back(it->first);
 				}
 			}
+		}
+		#pragma omp critical
+		{
+			nodes_to_remove.insert(nodes_to_remove.end(),nodes_to_remove_local.begin(),nodes_to_remove_local.end());
 		}
 	}
 	FILE_LOG(logDEBUG) << "number of dead end nodes found: " << nodes_to_remove.size() << "\n";
@@ -2165,6 +2168,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 	#pragma omp parallel num_threads(p_ThreadPoolSize)
 	{
 		vector <pairedEdges> listOfPairedEdges_local;
+
 		#pragma omp for schedule(guided)
 		for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 		{
@@ -2250,6 +2254,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 				}
 			}
 		}
+		FILE_LOG(logINFO) << "Thread "<< omp_get_thread_num() << ": Edge Pairs = " << listOfPairedEdges_local.size()<<endl;
 		#pragma omp critical
 		{
 			for(UINT64 k = 0; k < listOfPairedEdges_local.size(); k++)
