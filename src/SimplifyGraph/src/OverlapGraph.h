@@ -19,7 +19,7 @@
 #define allowedUsedReads 3
 #define EXPLORE_DEPTH 100
 #define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
-#define MAX_INNER_DIST_TRESH 1000
+#define MAX_INNER_DIST_TRESH 100
 
 
 extern char **environ;
@@ -217,8 +217,8 @@ class OverlapGraph
 		bool findPathBetweenMatepairs(const Read * read1, const Read * read2,
 				UINT8 orient, UINT8 datasetNumber, vector <Edge *> &copyOfPath, vector <UINT64> &copyOfFlags);
 
-		void exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
-				UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
+		void exploreGraph(Edge* firstEdge, Edge * lastEdge, int distanceOnFirstEdge,
+				int distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
 				UINT64 &pathFound, vector <Edge *> &listOfEdges, vector <UINT64> &pathLengths);
 
 		UINT64 findSupportByMatepairsAndMerge(void);

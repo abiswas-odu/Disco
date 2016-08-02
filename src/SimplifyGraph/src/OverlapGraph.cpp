@@ -1095,8 +1095,8 @@ void OverlapGraph::graphPathFindInitial()
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
-	calculateMeanAndSdOfInnerDistance();
-	findSupportByMatepairsAndMerge();
+	//calculateMeanAndSdOfInnerDistance();
+	//findSupportByMatepairsAndMerge();
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
@@ -2418,9 +2418,9 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 
 
 				// distance from the end of the read1 to the end of the last read of the edge,
-				UINT64 distanceOnFirstEdge = firstEdge->getOverlapOffset() + firstEdge->getDestinationRead()->getReadLength() - r1Offset - read1->getReadLength();
+				int distanceOnFirstEdge = firstEdge->getOverlapOffset() - r1Offset - read1->getReadLength();
 				// distance from the beginning of the first read of the edge to the beginning of the read2
-				UINT64 distanceOnLastEdge = r2Offset;
+				int distanceOnLastEdge = r2Offset;
 				// the two reads can't be too far apart within their own edges
 				if((distanceOnFirstEdge + distanceOnLastEdge) <
 						(m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance + insertSizeRangeSD * m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistanceSD))
@@ -2479,8 +2479,8 @@ bool OverlapGraph::findPathBetweenMatepairs(const Read * read1, const Read * rea
 // BH: when we find the first path we save it and flag is used to indicate that all the edges in the first path are supported.
 //     When we find another path, we unmark the flag for the pair of edges in the first path that are not present in the second path and so on.
 // CP: return the number of paths found
-void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
-		UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
+void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, int distanceOnFirstEdge,
+		int distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
 		UINT64 &pathFound, vector <Edge *> &listOfEdges, vector <UINT64> &pathLengths)
 {
 	// length of the path from the beginning of the source read of the first edge to the current edge's source read's beginning
@@ -2500,7 +2500,7 @@ void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanc
 		listOfEdges.resize(level);
 		pathLengths.resize(level);
 	}
-	// BH: we do not go deeper than 100 levels. We can put this in the config file.
+	// BH: we do not go deeper than EXPLORE_DEPTH levels. We can put this in the config file.
 	// CP: when reaching the maximum depth, return 0 path found and exit the recursive call loop
 	if(level > EXPLORE_DEPTH) return; // Do not go very deep.
 
@@ -2575,7 +2575,7 @@ void OverlapGraph::exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanc
 			Edge * nextEdge =  it->second->at(i);
 			// CP: if the two edges are compatible and the current path is not already too long, then call self again
 			if(matchEdgeType(firstEdge, nextEdge) && (INT64)pathLengths.at(level) < meanDist + insertSizeRangeSD * meanSD)
-				exploreGraph(nextEdge, lastEdge, nextEdge->getOverlapOffset() + nextEdge->getDestinationRead()->getReadLength(),
+				exploreGraph(nextEdge, lastEdge, nextEdge->getOverlapOffset(),
 						distanceOnLastEdge, datasetNumber, level+1, firstPath, flags,pathFound,listOfEdges,pathLengths);
 		}
 	}
