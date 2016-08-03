@@ -245,7 +245,7 @@ bool DataSet::testRead(const string & read)
 void DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
-	cout << "Store contained read information..."<< endl;
+	FILE_LOG(logINFO)<< "Store contained read information..."<< endl;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
 		ifstream myFile;

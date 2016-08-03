@@ -1656,8 +1656,10 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 			lastOffset=contigEdge->getInnerOverlapOffset(contigEdge->getListofReadsSize()-1);
 		}
 		edgeFilePointer<< "contig_" << setfill('0') << setw(10) << edgeNameID<< "\t";
-		edgeFilePointer<<source<<"\t";	// store the edge information first
-		edgeFilePointer<<destination<<"\t";
+		edgeFilePointer<<source<<"\t";		// store the source read information
+		edgeFilePointer<<destination<<"\t";	// store the destination read information
+		fileUsedReadPointer<<source<<endl;		//Write the source read as used up
+		fileUsedReadPointer<<destination<<endl;		//Write the destination read as used up
 		edgeFilePointer<<orientation<<",";
 		edgeFilePointer<<contigEdge->getOverlapOffset()-offsetSum<<",";  //first overlap offset
 		edgeFilePointer<<offsetSum+(contigEdge->getDestinationRead()->getReadLength()-lastOffset)<<","; //overlap length
@@ -1670,7 +1672,7 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 				orientation=contigEdge->getInnerOrientation(j);
 				edgeFilePointer<<"("<<contigEdge->getInnerReadID(j)<<","<<orientation<<","
 						<<contigEdge->getInnerOverlapOffset(j)<<")";
-				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<endl;
+				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<endl;		//Write the read as used up
 			}
 		}
 		edgeFilePointer<<endl;
@@ -1906,11 +1908,12 @@ void OverlapGraph::readParEdges(string edge_file)
 		UINT64 *listReadsForward = nullptr;
 		UINT64 lFSize=0;
 		UINT64 usedReadCtr=0;
+		UINT64 unUsedMate=0;
 		if(tok.size()>3)			//If composite edge load the inner reads
-			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, m_dataset);		//Returns the count of inner reads that have been used before
+			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, unUsedMate, m_dataset);		//Returns the count of inner reads that have been used before
 
 		//Do not load edge into graph if the edge was used in previous assemblies...
-		if(isUsedEdge(lFSize,usedReadCtr,source,destination))
+		if(isUsedEdge(lFSize,usedReadCtr,unUsedMate,source,destination))
 		{
 			delete[] listReadsForward;
 			listReadsForward = nullptr;
@@ -1944,41 +1947,17 @@ void OverlapGraph::readParEdges(string edge_file)
 /*
  * Check if an edge can be considered as used.
  */
-bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination)
+bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMate, Read *source, Read *destination)
 {
 	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
-	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr == lFSize)	//Composite edge
+	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr == lFSize && unUsedMate < 10)	//Composite edge
 	{
-		//Removed used edges; If both source and destination and corresponding
-		//mates have been used in previous assembly; do not load this edge
-		UINT64 sourceMate = m_dataset->getMatePair(source->getReadID());
-		UINT64 destinationMate = m_dataset->getMatePair(destination->getReadID());
-		if(sourceMate==0 || destinationMate==0)
-		{
-			if(source->isUsedRead() && destination->isUsedRead())
-				return true;
-		}
-		else if(sourceMate > 0 && destinationMate > 0)
-		{
-			if(source->isUsedRead() && destination->isUsedRead() &&
-					m_dataset->at(sourceMate)->isUsedRead() && m_dataset->at(destinationMate)->isUsedRead())
-				return true;
-		}
-		else if(sourceMate > 0)
-		{
-			if(source->isUsedRead() && destination->isUsedRead() &&
-					m_dataset->at(sourceMate)->isUsedRead())
-				return true;
-		}
-		else
-		{
-			if(source->isUsedRead() && destination->isUsedRead() &&
-					m_dataset->at(destinationMate)->isUsedRead())
-				return true;
-		}
+		return true;
 	}
 	else if(lFSize == 0)		//Single edge
 	{
+		//Removed used edges; If both source and destination and corresponding
+		//mates have been used in previous assembly; do not load this edge
 		UINT64 sourceMate = m_dataset->getMatePair(source->getReadID());
 		UINT64 destinationMate = m_dataset->getMatePair(destination->getReadID());
 		if(sourceMate==0 || destinationMate==0)

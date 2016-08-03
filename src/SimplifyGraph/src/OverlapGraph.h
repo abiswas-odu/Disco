@@ -158,7 +158,7 @@ class OverlapGraph
 
 		UINT64 getNumberOfNodes(void) const {return m_numberOfNodes;}
 
-		bool isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr, Read *source, Read *destination);
+		bool isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMate, Read *source, Read *destination);
 
 		/* ====================  MUTATORS      ======================================= */
 		void setMinOvl(const UINT64 & minOvl = 50){m_minOvl = minOvl;}
