@@ -428,11 +428,11 @@ bool OverlapGraph::existsEdge(Edge *checkEdge)
 UINT64 OverlapGraph::removeDeadEndNodes(void)
 {
 	CLOCKSTART;
-	vector<UINT64> nodes_to_remove;
+	vector< vector<UINT64>* > nodes_to_remove;
 
 	#pragma omp parallel num_threads(p_ThreadPoolSize)
 	{
-		vector<UINT64> nodes_to_remove_local;
+		vector<UINT64> *nodes_to_remove_local = new vector<UINT64>;
 		#pragma omp for schedule(dynamic)
 		for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
 		{
@@ -481,28 +481,35 @@ UINT64 OverlapGraph::removeDeadEndNodes(void)
 				}
 				// no good edges incident to the node and only in-edges or out-edges
 				if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
-						nodes_to_remove_local.push_back(it->first);
+						nodes_to_remove_local->push_back(it->first);
 				}
 			}
 		}
 		#pragma omp critical
 		{
-			nodes_to_remove.insert(nodes_to_remove.end(),nodes_to_remove_local.begin(),nodes_to_remove_local.end());
+			nodes_to_remove.push_back(nodes_to_remove_local);
 		}
 	}
-	FILE_LOG(logDEBUG) << "number of dead end nodes found: " << nodes_to_remove.size() << "\n";
-
-	UINT64 deleted_edges(0);
+	UINT64 deleted_edges(0), dead_nodes(0);
 	// Now delete the edges incident to these nodes
-	for(auto it = nodes_to_remove.cbegin(); it != nodes_to_remove.cend(); ++it){
-		UINT64 nodeID = *it;
-		t_edge_vec* eList = m_graph->at(nodeID);
-		while(!(eList->empty()))
-		{
-			removeEdge(eList->front());
-			++deleted_edges;
+	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
+		for(auto it = (*itOuter)->cbegin(); it != (*itOuter)->cend(); ++it){
+			UINT64 nodeID = *it;
+			t_edge_vec* eList = m_graph->at(nodeID);
+			dead_nodes++;
+			while(!(eList->empty()))
+			{
+				removeEdge(eList->front());
+				++deleted_edges;
+			}
 		}
 	}
+	FILE_LOG(logDEBUG) << "number of dead end nodes found: " << dead_nodes << "\n";
+	//Delete heal allocated vector for each thread
+	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
+		delete (*itOuter);
+	}
+
 	//Delete nodes in the graph that have no edges anymore
 	map<UINT64, t_edge_vec* >::iterator it=m_graph->begin();
 	while(it!=m_graph->end())
@@ -1095,8 +1102,8 @@ void OverlapGraph::graphPathFindInitial()
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
-	calculateMeanAndSdOfInnerDistance();
-	findSupportByMatepairsAndMerge();
+	//calculateMeanAndSdOfInnerDistance();
+	//findSupportByMatepairsAndMerge();
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
