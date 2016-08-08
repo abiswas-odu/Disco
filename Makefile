@@ -19,7 +19,7 @@ all:
 		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR)
 		cp $(BUILD_GRAPH_CODE_DIR)/buildG .
 		cp $(BUILD_GRAPH_MPI_CODE_DIR)/buildG-MPI .
-		cp $(BUILD_GRAPH_MPI_CODE_DIR)/buildG-MPIRMA .
+		cp $(BUILD_GRAPH_MPIRMA_CODE_DIR)/buildG-MPIRMA .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
 		mkdir Omega3
