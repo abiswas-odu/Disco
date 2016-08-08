@@ -5,7 +5,6 @@
 -include ../makefile.init
 
 RM := rm -rf
-CC := mpic++
 
 # All of the sources participating in the build are defined here
 -include sources.mk

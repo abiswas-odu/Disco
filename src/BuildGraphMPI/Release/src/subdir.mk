@@ -1,7 +1,7 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
 ################################################################################
-
+CC := mpic++
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS_BUILDG_MPI += \
 ../../src/Dataset.cpp \
