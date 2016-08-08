@@ -32,6 +32,7 @@
 #include <cmath>
 #include <ctime>
 #include <functional>
+#include <mpi.h>
 #include <memory>
 
 using namespace std;
@@ -164,6 +165,20 @@ inline std::string rtrimmed(std::string s) {
 inline std::string trimmed(std::string s) {
     trim(s);
     return s;
+}
+
+inline std::string reverseComplement(const std::string & seq)
+{
+	uint64_t sLength = seq.length();
+	std::string reverse(sLength,'0');
+	for(uint64_t i = 0;i < sLength; i++)
+	{
+		if( seq[i] & 0X02 ) // C or G
+			reverse.at(sLength -  i - 1 ) = seq[i] ^ 0X04;
+		else // A <==> T
+			reverse.at(sLength -  i - 1 ) = seq[i] ^ 0X15;
+	}
+	return reverse; // return the reverse complement as a string
 }
 
 #endif /* COMMON_H_ */
