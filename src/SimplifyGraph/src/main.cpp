@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
 	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 	{
 		dataSet->at(i)->ClearEdgeInfo();
+		dataSet->at(i)->setUsedRead(false);
 	}
 
 	//Read parameter file and set assembly parameters
@@ -86,6 +87,7 @@ int main(int argc, char **argv) {
 	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 	{
 		dataSet->at(i)->ClearEdgeInfo();
+		dataSet->at(i)->setUsedRead(false);
 	}
 
 	//Read parameter file and set assembly parameters
@@ -108,14 +110,24 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	if(interationCount==2)
 	{
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
-		dataSet->LoadUsedReads(usedReadFileName);
+		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
+		if(usedReads>(0.9*dataSet->size()))
+		{
+			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Over 90% reads used already. Assembly simplification complete."<<endl;
+			return;
+		}
 	}
 	else if(interationCount==3)
 	{
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-2)+".txt";
-		dataSet->LoadUsedReads(usedReadFileName);
+		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
 		usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
-		dataSet->LoadUsedReads(usedReadFileName);
+		usedReads += dataSet->LoadUsedReads(usedReadFileName);
+		if(usedReads>(0.9*dataSet->size()))
+		{
+			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Over 90% reads used already. Assembly simplification complete."<<endl;
+			return;
+		}
 	}
 
 	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,

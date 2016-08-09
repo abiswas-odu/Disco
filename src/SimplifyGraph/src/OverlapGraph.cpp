@@ -2151,114 +2151,110 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 	vector <pairedEdges> listOfPairedEdges;
 
 	vector <vector <pairedEdges>* > listOfPairedEdges_localList;
-	for(UINT64 i = 0; i < p_ThreadPoolSize; i++)	// for each read in the dataset
+	for(UINT64 i = 0; i < p_ThreadPoolSize; i++)	// for each thread create a vector of pair edges to populate
 	{
 		vector <pairedEdges> *listOfPairedEdges_local = new vector <pairedEdges>;
 		listOfPairedEdges_localList.push_back(listOfPairedEdges_local);
 	}
 
-	#pragma omp parallel num_threads(p_ThreadPoolSize)
+	#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
+	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 	{
 		UINT64 threadID = omp_get_thread_num();
 		vector <pairedEdges> *listOfPairedEdges_local = listOfPairedEdges_localList[threadID];
-
-		#pragma omp for schedule(guided)
-		for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
+		Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
+		vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
+		for(UINT64 j = 0; j < r1MPList.size(); j++)		// For each mate-pair read1
 		{
-			Read * read1 = m_dataset->at(i);		// Get a read read1 in the graph.
-			vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
-			for(UINT64 j = 0; j < r1MPList.size(); j++)		// For each mate-pair read1
+			Read * read2 = m_dataset->at(r1MPList[j]);
+			// CP: read1 and read2 are paired-ends
+			if(read1->getReadID() > read2->getReadID()) 		// To avoid finding path twice
+				continue;
+			// CP: ignore this pair if their dataset has an average insert size of 0
+			//if(meanOfInsertSizes.at(read1->getMatePairList()->at(j).datasetNumber) == 0)
+			//	continue;
+			//Orientation is F/R so its always 2
+			// a path is defined by a vector of edges,
+			vector <Edge *> copyOfPath;
+			// This list of flags is used to mark the edges that are common in all paths found.
+			vector <UINT64> copyOfFlags;
+			bool findPaths=false;
+			findPaths = findPathBetweenMatepairs(read1, read2, 2,
+				m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags);
+			if(findPaths == true)
 			{
-				Read * read2 = m_dataset->at(r1MPList[j]);
-				// CP: read1 and read2 are paired-ends
-				if(read1->getReadID() > read2->getReadID()) 		// To avoid finding path twice
-					continue;
-				// CP: ignore this pair if their dataset has an average insert size of 0
-				//if(meanOfInsertSizes.at(read1->getMatePairList()->at(j).datasetNumber) == 0)
-				//	continue;
-				//Orientation is F/R so its always 2
-				// a path is defined by a vector of edges,
-				vector <Edge *> copyOfPath;
-				// This list of flags is used to mark the edges that are common in all paths found.
-				vector <UINT64> copyOfFlags;
-				bool findPaths=false;
-				findPaths = findPathBetweenMatepairs(read1, read2, 2,
-					m_dataset->getDataSetNumber(r1MPList[j]), copyOfPath, copyOfFlags);
-				if(findPaths == true)
-				{
-					// Matepair on different edge
-					if(copyOfPath.size() == 0)
-					{
-						#pragma omp atomic
-							noPathsFound++;
-					}
-					else
-					{
-						#pragma omp atomic
-							pathsFound++;
-					}
-				}
-				else // Mate pair on the same edge
+				// Matepair on different edge
+				if(copyOfPath.size() == 0)
 				{
 					#pragma omp atomic
-						mpOnSameEdge++;
+						noPathsFound++;
 				}
-				if(copyOfPath.size() > 1)	// Path found
+				else
 				{
-					for(UINT64 k = 0; k < copyOfFlags.size(); k++)
+					#pragma omp atomic
+						pathsFound++;
+				}
+			}
+			else // Mate pair on the same edge
+			{
+				#pragma omp atomic
+					mpOnSameEdge++;
+			}
+			if(copyOfPath.size() > 1)	// Path found
+			{
+				for(UINT64 k = 0; k < copyOfFlags.size(); k++)
+				{
+					// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
+					if(copyOfFlags.at(k) == 1)
 					{
-						// edge at k and k+1 is supported. We need to add it in the list if not present. If already the pair of edges present then increase the support
-						if(copyOfFlags.at(k) == 1)
+						UINT64 l;
+						for(l = 0; l < listOfPairedEdges_local->size(); l++)
 						{
-							UINT64 l;
-							for(l = 0; l < listOfPairedEdges_local->size(); l++)
+							// already present in the list
+							if(listOfPairedEdges_local->at(l).edge1 == copyOfPath.at(k) &&
+									listOfPairedEdges_local->at(l).edge2 == copyOfPath.at(k+1))
 							{
-								// already present in the list
-								if(listOfPairedEdges_local->at(l).edge1 == copyOfPath.at(k) &&
-										listOfPairedEdges_local->at(l).edge2 == copyOfPath.at(k+1))
-								{
-									listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
-									break;
-								}
-								// already present in the list
-								else if(listOfPairedEdges_local->at(l).edge2->getReverseEdge() == copyOfPath.at(k)
-										&& listOfPairedEdges_local->at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
-								{
-									listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
-									break;
-								}
+								listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
+								break;
 							}
-							if(l == listOfPairedEdges_local->size()) // not present in the list
+							// already present in the list
+							else if(listOfPairedEdges_local->at(l).edge2->getReverseEdge() == copyOfPath.at(k)
+									&& listOfPairedEdges_local->at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
 							{
-									// add in the list with support 1
-								if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
-										|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
-									// do not want to add support between edge (a,a) and (a,a)
-								{
-									pairedEdges newPair;
-									newPair.edge1 = copyOfPath.at(k);
-									newPair.edge2 = copyOfPath.at(k+1);
-									newPair.uniqSupport = 1;
-									newPair.isFreed = false;
-									listOfPairedEdges_local->push_back(newPair);
-								}
+								listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
+								break;
+							}
+						}
+						if(l == listOfPairedEdges_local->size()) // not present in the list
+						{
+								// add in the list with support 1
+							if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
+									|| copyOfPath.at(k+1)->getSourceRead()->getReadID() != copyOfPath.at(k+1)->getDestinationRead()->getReadID())
+								// do not want to add support between edge (a,a) and (a,a)
+							{
+								pairedEdges newPair;
+								newPair.edge1 = copyOfPath.at(k);
+								newPair.edge2 = copyOfPath.at(k+1);
+								newPair.uniqSupport = 1;
+								newPair.isFreed = false;
+								listOfPairedEdges_local->push_back(newPair);
 							}
 						}
 					}
 				}
 			}
 		}
+	}//End of For loop
 
-		FILE_LOG(logINFO) << "Thread "<< threadID << ": Edge Pairs = " << listOfPairedEdges_local->size()<<endl;
-		//Wait for all threads to complete loading their local lists
-		#pragma omp barrier
-
+	#pragma omp parallel num_threads(p_ThreadPoolSize)
+	{
+		UINT64 threadID = omp_get_thread_num();
+		FILE_LOG(logINFO) << "Thread "<< threadID << ": Edge Pairs = " << listOfPairedEdges_localList[threadID]->size()<<endl;
 		UINT64 numReadsPerThread = (m_dataset->size()/p_ThreadPoolSize);
 		UINT64 startIndex = (numReadsPerThread*threadID) +1;
 		UINT64 endIndex = m_dataset->size();
 		if((threadID+1)<p_ThreadPoolSize)
 			endIndex = (numReadsPerThread*(threadID+1));
-
 		vector <pairedEdges> listOfPairedEdges_lFinal;
 		for(UINT64 i = 0; i < listOfPairedEdges_localList.size(); i++)	//Check each partial edge pair list
 		{

@@ -88,7 +88,7 @@ class DataSet
 		void storeContainedReadInformation(vector<string> containedReadFile);
 
 		//Set previous used reads
-		void LoadUsedReads(string usedReadFileName);
+		UINT64 LoadUsedReads(string usedReadFileName);
 
 		/* ====================  ACCESSORS     ======================================= */ 
 		UINT64 size() const{ return m_vec_reads->size();}

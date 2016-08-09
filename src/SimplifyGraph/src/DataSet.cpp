@@ -148,7 +148,7 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 /*
  * Load used read from previous rounds of assembly.
  */
-void DataSet::LoadUsedReads(string usedReadFileName)
+UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 {
 	// Open file and read used reads is available...
 	ifstream usedReadFilePointer;
@@ -163,12 +163,11 @@ void DataSet::LoadUsedReads(string usedReadFileName)
 		while(getline(usedReadFilePointer,text))
 		{
 			UINT64 readID = stoi(text);
-			at(readID)->setUsedRead(true);
-			//Mark mate used as well
-			//UINT64 mateReadID =  getMatePair(readID);
-			//if(mateReadID>0)
-			//	at(mateReadID)->setUsedRead(true);
-			usedReadCtr++;
+			if(!at(readID)->isUsedRead())
+			{
+				at(readID)->setUsedRead(true);
+				usedReadCtr++;
+			}
 		}
 		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
 	}
