@@ -8,16 +8,16 @@
 
 #ifndef OVERLAPGRAPH_H_
 #define OVERLAPGRAPH_H_
-#include "Common.h"
-#include "Dataset.h"
-#include "HashTable.h"
-#include "Edge.h"
+#include "../../BuildGraphMPIRMA/src/Common.h"
+#include "../../BuildGraphMPIRMA/src/Dataset.h"
+#include "../../BuildGraphMPIRMA/src/Edge.h"
+#include "../../BuildGraphMPIRMA/src/HashTable.h"
 
 /**********************************************************************************************************************
 	Class to store the overlap graph.
 **********************************************************************************************************************/
 
-#define MIN_MARKED 2048				//No. of reads to be marked before a send communication is initiated...
+#define MIN_MARKED 128				//No. of reads to be marked before a send communication is initiated...
 
 enum nodeType {
 	UNEXPLORED = 0, // Current node u is not explored yet. Meaning that there is no edge (u,v) in the graph.
@@ -38,6 +38,7 @@ class OverlapGraph
 	private:
 		Dataset * dataSet; 											// Pointer to the dataset containing all the reads.
 		HashTable * hashTable;										// Pointer to the hash table.
+		int *myMarked;												//List of reads already marked locally by this process or lazy globally
 		int myProcID;													// Id of the MPI process
 		UINT64 numberOfNodes;										// Number of nodes in the overlap graph.
 		UINT64 numberOfEdges;										// Number of edges in the overlap graph.
@@ -48,16 +49,16 @@ class OverlapGraph
 		OverlapGraph(HashTable *ht,UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix,int myid, int numprocs);								// Another constructor.
 		~OverlapGraph();											// Destructor.
 		bool markTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph); // Mark transitive edges of a read.
-		bool buildOverlapGraphFromHashTable(string fnamePrefix, int numprocs);			// Build the overlap graph using hashtable.
+		bool buildOverlapGraphFromHashTable(HashTable *ht, string fnamePrefix, int numprocs);			// Build the overlap graph using hashtable.
 		bool insertEdge(Edge * edge, map<UINT64, vector<Edge*> * > *parGraph); 								// Insert an edge in the partial overlap graph.
-		bool insertEdge(Read *read1, Read *read2, UINT8 orient, UINT16 overlapOffset, map<UINT64, vector<Edge*> * > *parGraph); // Insert an edge in the overlap graph.
+		bool insertEdge(Read *read1, Read *read2, UINT64 r1Len, UINT64 r2Len,  UINT8 orient, UINT16 overlapOffset, map<UINT64, vector<Edge*> * > *parGraph); // Insert an edge in the overlap graph.
 
-		bool checkOverlapForContainedRead(string read1, Read *read2, UINT64 orient, UINT64 start);
-		bool checkOverlap(string read1, Read *read2, UINT64 orient, UINT64 start);
+		bool checkOverlapForContainedRead(string read1, string read2, UINT64 orient, UINT64 start);
+		bool checkOverlap(string read1, string read2, UINT64 orient, UINT64 start);
 
 		bool insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);	// Insert into the overlap graph all edges of a read.
 		bool removeTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph);				// Remove all transitive edges from the overlap graph incident to a given read.
 		bool saveParGraphToFile(string fileName, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);   //Save partial graph to file and reduce memory footprint
-		void markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, int numprocs);									// Find superReads for each read and mark them as contained read.
+		void markContainedReads(string fnamePrefix, int numprocs);									// Find superReads for each read and mark them as contained read.
 };
 #endif /* OVERLAPGRAPH_H_ */

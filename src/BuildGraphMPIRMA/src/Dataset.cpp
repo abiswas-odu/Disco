@@ -5,8 +5,9 @@
  * Author: Md. Bahlul Haider
  */
 
-#include "Common.h"
-#include "Dataset.h"
+#include "../../BuildGraphMPIRMA/src/Dataset.h"
+
+#include "../../BuildGraphMPIRMA/src/Common.h"
 
 
 /**********************************************************************************************************************

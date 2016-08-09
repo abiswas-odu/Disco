@@ -2,12 +2,13 @@
  * HashTable.cpp
  *
  *  Created on: Apr 22, 2013
- *      Author: b72, Abhishek Biswas
+ *      Author: b72
  */
 
 
-#include "Common.h"
-#include "HashTable.h"
+#include "../../BuildGraphMPIRMA/src/HashTable.h"
+
+#include "../../BuildGraphMPIRMA/src/Common.h"
 
 
 
@@ -34,11 +35,22 @@ UINT64 getPrimeLargerThanNumber(UINT64 number)
 /**********************************************************************************************************************
 	Default Constructor
 **********************************************************************************************************************/
-HashTable::HashTable(void)
+HashTable::HashTable(UINT64 parallelProcessPoolSize)
 {
 	// Initialize the variables.
 	hashStringLength = 0;
 	numberOfHashCollision = 0;
+	memoryDataPartitions = NULL;
+	memoryReadCount=NULL;
+	dataSet=NULL;
+	hashTable = NULL;
+	hashData = NULL;
+	win = MPI_WIN_NULL;
+	cachedHashTable=NULL;
+	hashQ=NULL;
+	cachedReadTable=NULL;
+	readQ=NULL;
+	rmaCtr=0;
 }
 
 
@@ -47,7 +59,7 @@ HashTable::HashTable(void)
 /**********************************************************************************************************************
 	Add Database in hashTable
 **********************************************************************************************************************/
-bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parallelThreadPoolSize)
+void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parallelProcessPoolSize, int myid)
 {
 	CLOCKSTART;
 	dataSet=d;
@@ -55,6 +67,13 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 	numberOfHashCollision = 0;
 	UINT64 size = getPrimeLargerThanNumber(d->getNumberOfUniqueReads() * 8 + 1);  // Size should be at least twice the number of entries in the hash table to reduce hash collision.
 	setHashTableSize(size);
+
+	//Init the caches
+	cachedHashTable = new map<UINT64, std::shared_ptr<UINT64> >();
+	hashQ = new queue<UINT64>;
+
+	cachedReadTable = new map<UINT64, string>();
+	readQ = new queue<UINT64>;
 
 	populateReadLengths(); 				//Each hash entry is populated with the length of it's record
 
@@ -67,11 +86,41 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 		nextOffset=hashTable[i];
 		hashTable[i]=tempOffset;
 	}
-	size_t totalDataSize = nextOffset + hashTable[hashTableSize-1];   //Calculate the size of the hash data table
-	setHashTableDataSize(totalDataSize);
-	populateReadData();												//Populate the hash data table wit reads
+
+	size_t hashDataTableSize = nextOffset + hashTable[hashTableSize-1];   //Calculate the size of the hash data table
+	cout << "Hash Data Table size set to: " << hashDataTableSize << endl;
+	// Defines the minimum number of hash records in each partition
+	UINT64 minWindowSize =  hashDataTableSize/parallelProcessPoolSize;
+	UINT64 currWinSize=0;
+	// Populate partitioning vectors based on hash record and data boundaries.
+	size_t rankIndx=0;
+	memoryDataPartitions = new vector<UINT64>(parallelProcessPoolSize+1,0);
+	memoryReadCount = new vector<UINT64>(parallelProcessPoolSize,0);
+	memoryDataPartitions->at(rankIndx)=0;
+	rankIndx++;
+	for(size_t i=1; i<hashTableSize; i++)
+	{
+		currWinSize+=hashTable[i]-hashTable[i-1];
+		if(currWinSize>=minWindowSize)
+		{
+			memoryDataPartitions->at(rankIndx)=hashTable[i];			//The data index upto which the MPI rank stores value (MPI rank == vector index)
+			currWinSize=0;
+			rankIndx++;
+		}
+	}
+	//Update empty ranks with max index...
+	for(;rankIndx<memoryDataPartitions->size();rankIndx++)
+	{
+		memoryDataPartitions->at(rankIndx)=hashDataTableSize;
+	}
+	cout<<"Hash table partition information:"<<endl;
+	for(size_t i=0;i<memoryReadCount->size();i++)
+	{
+		cout<<"Data Part Offset:"<<memoryDataPartitions->at(i)<<" Read Count:"<<memoryReadCount->at(i)<<endl;
+	}
+	setHashTableDataSize(myid);
+	populateReadData(myid);												//Populate the hash data table with reads
 	CLOCKSTOP;
-	return true;
 }
 
 /**********************************************************************************************************************
@@ -84,7 +133,6 @@ void HashTable::populateReadLengths()
 	{
 		readReadLengthsFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1);
 	}
-
 	for(UINT64 i = 0; i < dataSet->singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
 	{
 		readReadLengthsFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1);
@@ -96,7 +144,7 @@ void HashTable::populateReadLengths()
 /**********************************************************************************************************************
 	Insert a read sequence in hashData
 **********************************************************************************************************************/
-void HashTable::populateReadData()
+void HashTable::populateReadData(int myid)
 {
 	CLOCKSTART;
 	UINT64 *hashDataLengths = new UINT64[hashTableSize];
@@ -104,14 +152,15 @@ void HashTable::populateReadData()
 	UINT64 readID=0;
 	for(UINT64 i = 0; i < dataSet->pairedEndDatasetFileNames.size(); i++)						// Read the paired-end datasets.
 	{
-		readReadSequenceFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID);
+		readReadSequenceFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID ,myid);
 	}
 
 	for(UINT64 i = 0; i < dataSet->singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
 	{
-		readReadSequenceFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID);
+		readReadSequenceFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID, myid);
 	}
 	delete[] hashDataLengths;
+	MPI_Win_fence(0, win);
 	CLOCKSTOP;
 }
 
@@ -123,7 +172,7 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 	CLOCKSTART;
 	cout << "Reading read lengths from file: " << fileName << endl;
 	ifstream myFile;
-	myFile.open(fileName.c_str());
+	myFile.open (fileName.c_str());
 	if(!myFile)
 		MYEXIT("Unable to open file: "+fileName)
 	UINT64 goodReads = 0, badReads = 0;
@@ -192,7 +241,7 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 /**********************************************************************************************************************
 	Read sequence data into hashData
 **********************************************************************************************************************/
-void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID)
+void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID, int myid)
 {
 	CLOCKSTART;
 	cout << "Reading read data from file: " << fileName << endl;
@@ -209,7 +258,7 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 	{
 		string line1="",line0="";
 		if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-			cout<< setw(10) << goodReads + badReads << " read sequences added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			cout<< setw(10) << goodReads + badReads << " read sequence added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
 		if(fileType == UNDEFINED)
 		{
 			if(text[0] == '>')
@@ -249,7 +298,8 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 		if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
 		{
 			readID++;
-			insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths); 								// Calculate the offset lengths of each hash table key in the hash table.
+			cout<<"Proc:"<<myid<<"Processing read:"<<readID<<endl;
+			insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths, myid); 								// Calculate the offset lengths of each hash table key in the hash table.
 			goodReads++;
 		}
 		else
@@ -294,15 +344,21 @@ void HashTable::setHashTableSize(UINT64 size)
 	std::memset(hashTable, 0, hashTableSize*sizeof(UINT64));
 }
 
+
 /**********************************************************************************************************************
 	Set the Hash Data Size
 **********************************************************************************************************************/
-void HashTable::setHashTableDataSize(UINT64 size)
+void HashTable::setHashTableDataSize(int myid)
 {
-	cout << "Hash Data size set to: " << size << endl;
-	hashDataTableSize=size;
-	hashData = new UINT64[hashDataTableSize];
-	std::memset(hashData, 0, hashDataTableSize*sizeof(UINT64));
+	int numElements=memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid);
+	//hashData = new UINT64[numElements];
+	cout<<"MPI UINT64:"<<sizeof(MPI_LONG_LONG_INT)<<endl;
+	hashData = NULL;
+	MPI_Alloc_mem(numElements*sizeof(MPI_UINT64_T), MPI_INFO_NULL, (void **)&hashData);
+	MPI_Win_create(hashData, numElements*sizeof(MPI_UINT64_T), sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
+ 	//MPI_Win_allocate(numElements * sizeof(MPI_UINT64_T), sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, hashData, &win);
+	std::memset(hashData, 0, numElements*sizeof(MPI_UINT64_T));
+	MPI_Win_fence(0, win);
 }
 
 /**********************************************************************************************************************
@@ -343,26 +399,23 @@ UINT64 HashTable::hashFunction(const string & subString) const
 	return ((sum1 % hashTableSize) * (sum2  % hashTableSize)) % hashTableSize; 	// Modulus operation to get the index in the hash table.
 }
 
-
-
 /**********************************************************************************************************************
 	Insert a subString in a hashTable
 **********************************************************************************************************************/
-bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths)
+bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths, int myid)
 {
 	string prefixForward = forwardRead.substr(0,hashStringLength); 											// Prefix of the forward string.
 	string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);	// Suffix of the forward string.
 
 	/* number of 64 bit words necessary to store dna_str as a bitset */
 	UINT64 dna_word = (forwardRead.length() / 32) + (forwardRead.length() % 32 != 0);
-	UINT64 orient=0;
 
 	UINT64 prefixForwardID =  read->getReadNumber() | (forwardRead.length() << 48); 	// Most significant bit is used to store the orientation of the string in the read.
 																							// 0 = 0 means prefix of the forward string.
 																							// 1 = 1 means suffix of the forward string.
 																							//Read string length is stored is next 15 most significant bits.
 																							//Read ID is stored in the 48 least significant bits.
-	orient=1;
+	UINT64 orient=1;
 	UINT64 suffixForwardID =  read->getReadNumber() | (forwardRead.length() << 48) | (orient << 63);
 																	// Most significant bit is used to store the orientation of the string in the read.
 																	// 0 = 0 means prefix of the forward string.
@@ -371,146 +424,360 @@ bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashData
 																	//Read ID is stored in the 48 least significant bits.
 
 	/*store prefix forward data*/
-	UINT64 index = getHashIndex(prefixForward);						// Get the index using the hash function.
-	UINT64 baseOffset = hashTable[index];							// Get the start offset of the hash value in the hashData table
-	UINT64 currentOffset = hashDataLengths[index];					// Get the current offset of the hash value in the hashData table
-	hashData[baseOffset+currentOffset] = prefixForwardID;
-	/* for each base of the DNA sequence */
-	for (size_t i = 0; i < forwardRead.length(); i++)
-	{
-		UINT64 shift = (32*2-2) - 2*(i % 32);
 
-		switch (forwardRead[i])
+	UINT64 index = getHashIndex(prefixForward);						// Get the index using the hash function.
+	UINT64 baseOffset = hashTable[index];
+	memoryReadCount->at(getOffsetRank(baseOffset))++;
+	// Get the start offset of the hash value in the hashData table
+	if(isGlobalOffsetInRange(baseOffset, myid))
+	{
+		UINT64 localBaseOffset = getLocalOffset(baseOffset,myid);
+		UINT64 currentOffset = hashDataLengths[index];					// Get the current offset of the hash value in the hashData table
+		hashData[localBaseOffset+currentOffset] = prefixForwardID;
+		/* for each base of the DNA sequence */
+		for (size_t i = 0; i < forwardRead.length(); i++)
 		{
-		case 'A':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_A << shift;
-			break;
-		case 'C':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_C << shift;
-			break;
-		case 'G':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_G << shift;
-			break;
-		case 'T':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_T << shift;
-			break;
-		default:
-			throw std::invalid_argument("invalid DNA base");
+			UINT64 shift = (32*2-2) - 2*(i % 32);
+
+			switch (forwardRead[i])
+			{
+			case 'A':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_A << shift;
+				break;
+			case 'C':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_C << shift;
+				break;
+			case 'G':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_G << shift;
+				break;
+			case 'T':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_T << shift;
+				break;
+			default:
+				throw std::invalid_argument("invalid DNA base");
+			}
 		}
 	}
-	hashDataLengths[index] +=  dna_word + 1;
-
 	//store the offset of the read data in the read. This will be used to obtain the sequence instead of storing the read sequence in the read object.
-
-	UINT64	readHashOffset = baseOffset+currentOffset;
+	UINT64	readHashOffset = baseOffset+hashDataLengths[index];
 	read->setReadHashOffset(readHashOffset);
+
+	//Update data lengths to maintain global consistency of offset values
+	hashDataLengths[index] +=  (dna_word + 1);
 
 	/*store prefix reverse data*/
 	index = getHashIndex(suffixForward);						// Get the index using the hash function.
 	baseOffset = hashTable[index];							// Get the start offset of the hash value in the hashData table
-	currentOffset = hashDataLengths[index];					// Get the current offset of the hash value in the hashData table
-	hashData[baseOffset+currentOffset] = suffixForwardID;
-	/* for each base of the DNA sequence */
-	for (size_t i = 0; i < forwardRead.length(); i++)
+	memoryReadCount->at(getOffsetRank(baseOffset))++;
+	if(isGlobalOffsetInRange(baseOffset, myid))
 	{
-		uint32_t shift = (32*2-2) - 2*(i % 32);
-		switch (forwardRead[i])
+		UINT64 localBaseOffset = getLocalOffset(baseOffset,myid);
+		UINT64 currentOffset = hashDataLengths[index];					// Get the current offset of the hash value in the hashData table
+		hashData[localBaseOffset+currentOffset] = suffixForwardID;
+		/* for each base of the DNA sequence */
+		for (size_t i = 0; i < forwardRead.length(); i++)
 		{
-		case 'A':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_A << shift;
-			break;
-		case 'C':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_C << shift;
-			break;
-		case 'G':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_G << shift;
-			break;
-		case 'T':
-			hashData[baseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_T << shift;
-			break;
-		default:
-			throw std::invalid_argument("invalid DNA base");
+			UINT64 shift = (32*2-2) - 2*(i % 32);
+			switch (forwardRead[i])
+			{
+			case 'A':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_A << shift;
+				break;
+			case 'C':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_C << shift;
+				break;
+			case 'G':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_G << shift;
+				break;
+			case 'T':
+				hashData[localBaseOffset+currentOffset + 1 + i/32] |= (UINT64)BASE_T << shift;
+				break;
+			default:
+				throw std::invalid_argument("invalid DNA base");
+			}
 		}
 	}
-	hashDataLengths[index] += dna_word + 1;
+	//Update data lengths to maintain global consistency of offset values
+	hashDataLengths[index] += (dna_word + 1);
 	return true;
 }
+/**********************************************************************************************************************
+	Returns true id the global offset of the process id
+**********************************************************************************************************************/
+bool HashTable::isGlobalOffsetInRange(UINT64 globalOffset, int myid) const
+{
+	if(globalOffset>=memoryDataPartitions->at(myid) && globalOffset<memoryDataPartitions->at(myid+1))
+		return true;
+	return false;
 
-
+}
+/**********************************************************************************************************************
+	Returns the local offset of the read in the data table.
+**********************************************************************************************************************/
+UINT64 HashTable::getLocalOffset(UINT64 globalOffset, int myid) const
+{
+	UINT64 thisProcBaseHash = memoryDataPartitions->at(myid);
+	return globalOffset-thisProcBaseHash;
+}
 
 /**********************************************************************************************************************
-	Returns a list of read containing the subString as prefix or suffix.
+	Returns rank for a given offset value
 **********************************************************************************************************************/
-vector<UINT64> * HashTable::getListOfReads(const string & subString) const
+int HashTable::getOffsetRank(UINT64 globalOffset) const
 {
-	vector<UINT64> * readHits = new vector<UINT64>;
-	UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
-	UINT64 startOffset=hashTable[index];
-	UINT64 endOffset= (index==hashTableSize-1)?hashDataTableSize:hashTable[index+1];
-	while(startOffset<endOffset)
+	int rank=-1;
+	for(size_t i=0;i<memoryDataPartitions->size()-1;i++)
 	{
-		UINT64 readID = hashData[startOffset] & 0X0000FFFFFFFFFFFF;
-		UINT64 orient = hashData[startOffset] >> 63;
-		UINT64 stringLen = (hashData[startOffset] >> 48) & 0X0000000000007FFF;
-		UINT64 dataLen = (stringLen / 32) + (stringLen % 32 != 0);
-		if(orient==0){
-			string forwardRead = toString(startOffset+1,stringLen);
-			string prefixForward = forwardRead.substr(0,hashStringLength);
-			string suffixReverse = reverseComplement(prefixForward);
-			if(subString==prefixForward)
+		if(isGlobalOffsetInRange(globalOffset,i))
+			rank = i;
+	}
+	return rank;
+}
+/**********************************************************************************************************************
+	Populate a list of reads from the hash table containing the subString as prefix or suffix. Do not cache result...
+**********************************************************************************************************************/
+vector<UINT64*> * HashTable::setLocalHitList_nocache(const string readString, int myid)
+{
+	vector<UINT64*> *localReadHits;				//AB: store data locally
+	#pragma omp critical(getRemoteData)
+	{
+		try{
+			UINT64 hashQueryCount = readString.length() - getHashStringLength();
+			localReadHits = new vector<UINT64*>(hashQueryCount);
+			for(UINT64 j = 0; j < readString.length() - getHashStringLength(); j++) // for each substring of read1 of length getHashStringLength
 			{
-				UINT64 orientation=0;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+				string subString = readString.substr(j,getHashStringLength()); // Get the substring from read string
+				UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
+				//Compute various indices
+				UINT64 globalStartOffset=hashTable[index];
+				UINT64 globalEndOffset= (index==hashTableSize-1)?hashDataTableSize:hashTable[index+1];
+				UINT64 hash_block_len = globalEndOffset-globalStartOffset;
+				localReadHits->at(j)=NULL;
+				if(hash_block_len)
+				{
+					int t_rank = getOffsetRank(globalStartOffset);
+					MPI_Aint localOffset = getLocalOffset(globalStartOffset,t_rank);
+					//cout<<"oRank:"<<myid<<", tRank:"<<t_rank<<", len:"<<hash_block_len<<", Offset:"<<localOffset<<endl;
+					//Allocate memory
+					localReadHits->at(j) = new UINT64[hash_block_len];
+					std::memset(localReadHits->at(j), 0, hash_block_len*sizeof(MPI_UINT64_T));
+					// Get data from RMA
+					void *buf = localReadHits->at(j);
+					if((localOffset+hash_block_len)>getMemoryMaxLocalOffset(t_rank))
+					{
+						cout<<"Req. Start: oProcess:"<<myid<<" tRank:"<<t_rank<<" GlobalOffset:"<<globalStartOffset<<" LocalOffset"<<localOffset<<" blockLen:"<<hash_block_len<<endl;
+					}
+					MPI_Get(buf, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
+					//MPI_Win_flush(t_rank, win);
+					rmaCtr++;
+				}
 			}
-			else if(subString==suffixReverse){
-				UINT64 orientation=3;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+			MPI_Win_flush_all(win);
+		}
+		catch (const std::bad_alloc&) {
+			cout<<"Proc"<<myid<<" Exception Caught getting read data!!!";
+			exit(0);
+		}
+	}
+	return localReadHits;
+}
+/**********************************************************************************************************************
+	Populate a list of reads from the hash table containing the subString as prefix or suffix.
+**********************************************************************************************************************/
+vector<shared_ptr<UINT64> > HashTable::setLocalHitList(const string readString, int myid)
+{
+	UINT64 hashQueryCount = readString.length() - getHashStringLength();
+	vector<shared_ptr<UINT64> > localReadHits(hashQueryCount);
+	#pragma omp critical(getRemoteData)
+	{
+		for(UINT64 j = 0; j < hashQueryCount; j++) // for each substring of read1 of length getHashStringLength
+		{
+			string subString = readString.substr(j,getHashStringLength()); // Get the substring from read string
+			UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
+			//Compute various indices
+			UINT64 globalStartOffset=hashTable[index];
+			UINT64 globalEndOffset= (index==hashTableSize-1)?hashDataTableSize:hashTable[index+1];
+			UINT64 hash_block_len = globalEndOffset-globalStartOffset;
+			if(hash_block_len)
+			{
+				//check local cache and entry NOT found
+				if(!getCachedHashTable(index, hash_block_len, localReadHits[j]))
+				{
+					int t_rank = getOffsetRank(globalStartOffset);
+					MPI_Aint localOffset = getLocalOffset(globalStartOffset,t_rank);
+					//Allocate memory
+					void *dataBlock = new UINT64[hash_block_len];
+					std::memset(dataBlock, 0, hash_block_len*sizeof(MPI_UINT64_T));
+					// Get data from RMA
+					MPI_Get(dataBlock, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
+					std::shared_ptr<UINT64> sp( static_cast<UINT64 *>(dataBlock), std::default_delete<UINT64[]>());
+					localReadHits[j] = sp;
+					insertCachedHashTable(index, sp);
+					sp.reset();
+					rmaCtr++;
+				}
 			}
 		}
-		else {
-			string forwardRead = toString(startOffset+1,stringLen);
-			string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);
-			string prefixReverse = reverseComplement(suffixForward);
-			if(subString==suffixForward)
-			{
-				UINT64 orientation=1;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+		MPI_Win_flush_all(win);
+	}
+	return localReadHits;
+}
+/**********************************************************************************************************************
+	Get  a list of read containing the subString as prefix or suffix. Release cache on completion.
+**********************************************************************************************************************/
+map<UINT64,string> HashTable::getLocalHitList(vector<shared_ptr<UINT64> > localReadHits, string subString, UINT64 subStringIndx)
+{
+	map<UINT64,string> listOfReads;
+	UINT64 *dataBlock=(localReadHits[subStringIndx]).get();
+	if(dataBlock)
+	{
+		UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
+		//Compute various indices
+		UINT64 globalStartOffset=hashTable[index];
+		UINT64 globalEndOffset= (index==hashTableSize-1)?hashDataTableSize:hashTable[index+1];
+		UINT64 hash_block_len = globalEndOffset-globalStartOffset;
+		UINT64 startOffset=0;
+		while(startOffset<hash_block_len)
+		{
+			UINT64 readID = dataBlock[startOffset] & 0X0000FFFFFFFFFFFF;
+			UINT64 orient = dataBlock[startOffset] >> 63;
+			UINT64 stringLen = (dataBlock[startOffset] >> 48) & 0X0000000000007FFF;
+			UINT64 dataLen = (stringLen / 32) + (stringLen % 32 != 0);
+			string forwardRead = toStringMPI(dataBlock, stringLen, startOffset+1);
+			//cout<<"rid:"<<readID<<", ori:"<<orient<<", len:"<<stringLen<<", Read:"<<forwardRead<<endl;
+			if(orient==0){
+				string prefixForward = forwardRead.substr(0,hashStringLength);
+				string suffixReverse = reverseComplement(prefixForward);
+				if(subString==prefixForward)
+				{
+					UINT64 orientation=0;
+					UINT64 data = readID | (orientation << 62);
+					listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+				}
+				else if(subString==suffixReverse){
+					UINT64 orientation=3;
+					UINT64 data = readID | (orientation << 62);
+					listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+				}
 			}
-			else if(subString==prefixReverse){
-				UINT64 orientation=2;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+			else {
+				string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);
+				string prefixReverse = reverseComplement(suffixForward);
+				if(subString==suffixForward)
+				{
+					UINT64 orientation=1;
+					UINT64 data = readID | (orientation << 62);
+					listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+				}
+				else if(subString==prefixReverse){
+					UINT64 orientation=2;
+					UINT64 data = readID | (orientation << 62);
+					listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+				}
+			}
+			startOffset+=dataLen+1;
+		}
+	}
+	return listOfReads;
+}
+
+/**********************************************************************************************************************
+	Get  a list of read containing the subString as prefix or suffix. Release cache on completion.
+**********************************************************************************************************************/
+map<UINT64,string> HashTable::getLocalHitList_nocache(vector<UINT64*> *localReadHits, string subString, UINT64 subStringIndx)
+{
+	map<UINT64,string> listOfReads;
+	UINT64 *dataBlock=localReadHits->at(subStringIndx);
+	if(dataBlock)
+	{
+		UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
+		//Compute various indices
+		UINT64 globalStartOffset=hashTable[index];
+		UINT64 globalEndOffset= (index==hashTableSize-1)?hashDataTableSize:hashTable[index+1];
+		UINT64 hash_block_len = globalEndOffset-globalStartOffset;
+		UINT64 startOffset=0;
+		while(startOffset<hash_block_len)
+		{
+			UINT64 readID = dataBlock[startOffset] & 0X0000FFFFFFFFFFFF;
+			UINT64 orient = dataBlock[startOffset] >> 63;
+			UINT64 stringLen = (dataBlock[startOffset] >> 48) & 0X0000000000007FFF;
+			UINT64 dataLen = (stringLen / 32) + (stringLen % 32 != 0);
+			if((startOffset+dataLen)<hash_block_len)
+			{
+				string forwardRead = toStringMPI(dataBlock, stringLen, startOffset+1);
+				//cout<<"rid:"<<readID<<", ori:"<<orient<<", len:"<<stringLen<<", Read:"<<forwardRead<<endl;
+				if(orient==0){
+					string prefixForward = forwardRead.substr(0,hashStringLength);
+					string suffixReverse = reverseComplement(prefixForward);
+					if(subString==prefixForward)
+					{
+						UINT64 orientation=0;
+						UINT64 data = readID | (orientation << 62);
+						listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+					}
+					else if(subString==suffixReverse){
+						UINT64 orientation=3;
+						UINT64 data = readID | (orientation << 62);
+						listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+					}
+				}
+				else {
+					string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);
+					string prefixReverse = reverseComplement(suffixForward);
+					if(subString==suffixForward)
+					{
+						UINT64 orientation=1;
+						UINT64 data = readID | (orientation << 62);
+						listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+					}
+					else if(subString==prefixReverse){
+						UINT64 orientation=2;
+						UINT64 data = readID | (orientation << 62);
+						listOfReads.insert(pair<UINT64,string>(data,forwardRead));
+					}
+				}
+				startOffset+=dataLen+1;
+			}
+			else
+			{
+				cout<<"Data corruption!!! RID:"<<readID<<" String Len"<<stringLen<<endl;
+				cout<<"Hash Index:"<<index<<" Block Offset:"<<globalStartOffset<<" Block End Offset"<<globalEndOffset<<endl;
+				exit(0);
 			}
 		}
-		startOffset+=dataLen+1;
 	}
-	return readHits;	// return the index.
+	return listOfReads;
 }
-
-/*
- * ===  FUNCTION  ======================================================================
- *         Name:  reverseComplement
- *  Description:  Returns the reverse complement of a sequence.
- * =====================================================================================
- */
-string HashTable::reverseComplement(const std::string & seq) const
+/**********************************************************************************************************************
+	Get the read counts for a given process...
+**********************************************************************************************************************/
+UINT64 HashTable::getMemoryReadCount(int myid)
 {
-	uint64_t sLength = seq.length();
-	std::string reverse(sLength,'0');
-	for(uint64_t i = 0;i < sLength; i++)
-	{
-		if( seq[i] & 0X02 ) // C or G
-			reverse.at(sLength -  i - 1 ) = seq[i] ^ 0X04;
-		else // A <==> T
-			reverse.at(sLength -  i - 1 ) = seq[i] ^ 0X15;
-	}
-	return reverse; // return the reverse complement as a string
+	return memoryReadCount->at(myid);
 }
 
+/**********************************************************************************************************************
+	Get the maximum read counts...
+**********************************************************************************************************************/
+UINT64 HashTable::getMaxMemoryReadCount()
+{
+	return *max_element(memoryReadCount->begin(),memoryReadCount->end());
 
+}
+/**********************************************************************************************************************
+	Get the max offset for this rank
+**********************************************************************************************************************/
+UINT64 HashTable::getMemoryMaxLocalOffset(int rank)
+{
+	return (memoryDataPartitions->at(rank+1)-memoryDataPartitions->at(rank));
+}
+/**********************************************************************************************************************
+	Fence and end a epoch...
+**********************************************************************************************************************/
+void HashTable::endEpoch()
+{
+	MPI_Win_fence(0, win);
+}
 /**********************************************************************************************************************
 	Destructor
 **********************************************************************************************************************/
@@ -518,7 +785,17 @@ HashTable::~HashTable(void)
 {
 	// Free the memory used by the hash table.
 	delete[] hashTable;
-	delete[] hashData;
+	delete memoryDataPartitions;
+	delete memoryReadCount;
+	MPI_Win_free(&win);
+	MPI_Free_mem(hashData);
+
+	//delete cache table
+	clearHashTableCache();
+	delete cachedHashTable;
+	delete hashQ;
+	delete cachedReadTable;
+	delete readQ;
 }
 
 /*
@@ -539,22 +816,251 @@ string HashTable::toString(UINT64 hashDataIndex,UINT64 stringLen) const
 	}
 	return dna_str;
 }
-UINT64 HashTable::getReadLength(UINT64 offset) const
+
+UINT64 HashTable::getLocalReadID(UINT64 localOffset, int myid) const
 {
-	return ((hashData[offset] >> 48) & 0X0000000000007FFF); //2nd MSB to 16th MSB are read length
+	UINT64 readID;
+	if(localOffset<(memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid)))
+		readID = hashData[localOffset] & 0X0000FFFFFFFFFFFF;
+	else
+		MYEXIT("Read ID out of range: ID"+SSTR(localOffset)+", Rank:"+SSTR(myid));
+	return readID;
+}
+UINT64 HashTable::getLocalReadOrient(UINT64 localOffset, int myid) const
+{
+	UINT64 orient;
+	if(localOffset<(memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid)))
+		orient = hashData[localOffset] >> 63;
+	else
+		MYEXIT("Read ID out of range: ID"+SSTR(localOffset)+", Rank:"+SSTR(myid));
+	return orient;
+}
+UINT64 HashTable::getLocalReadLength(UINT64 localOffset, int myid) const
+{
+	UINT64 readLen;
+	if(localOffset<(memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid)))
+		readLen = ((hashData[localOffset] >> 48) & 0X0000000000007FFF);
+	else
+		MYEXIT("Read ID out of range: ID"+SSTR(localOffset)+", Rank:"+SSTR(myid));
+	return readLen;
+}
+string HashTable::getLocalStringForward(UINT64 localOffset, int myid) const
+{
+	string readStr;
+	if(localOffset<(memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid)))
+	{
+		UINT64 stringLen=getLocalReadLength(localOffset,myid);
+		readStr = toString(localOffset+1,stringLen);
+	}
+	else
+		MYEXIT("Read ID out of range: ID"+SSTR(localOffset)+", Rank:"+SSTR(myid));
+	return readStr;
+}
+UINT64 HashTable::getLocalNextOffset(UINT64 localOffset, int myid) const
+{
+	UINT64 nextOffset=0;
+	if(localOffset<(memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid)))
+	{
+		UINT64 stringLen=getLocalReadLength(localOffset,myid);
+		UINT64 dnaWordLen = (stringLen / 32) + (stringLen % 32 != 0);
+		nextOffset = localOffset+dnaWordLen+1;
+	}
+	else
+		MYEXIT("Read ID out of range: ID"+SSTR(localOffset)+", Rank:"+SSTR(myid));
+	return nextOffset;
 }
 
-string HashTable::getStringForward(UINT64 offset) const
+/*
+ * Convert a set of data bytes from a data block to string
+ *
+ */
+string HashTable::toStringMPI(UINT64 *hashDataBlock,UINT64 stringLen, UINT64 startOffset) const
 {
-	UINT64 stringLen=getReadLength(offset);
-	return toString(offset+1,stringLen);
+	string dna_str="";
+	string strArr[] = {"A","C","G","T"};
+	/* for each base of the DNA sequence */
+	for (size_t i = 0; i < stringLen; i++)
+	{
+		uint8_t shift = (32*2-2) - 2*(i % 32);
+		/* get the i-th DNA base */
+		UINT64 base = (hashDataBlock[startOffset + i/32] & ((UINT64)BASE_MASK << shift)) >> shift;
+		dna_str += strArr[base];
+	}
+	return dna_str;
+}
+UINT64 HashTable::getReadLength(UINT64 globalOffset, UINT64 readID , int myid) const
+{
+	UINT64 dataRec;
+	dataRec=0;
+	int t_rank = getOffsetRank(globalOffset);
+	MPI_Aint localOffset = getLocalOffset(globalOffset,t_rank);
+	MPI_Get(&dataRec, 1, MPI_UINT64_T, t_rank, localOffset, 1, MPI_UINT64_T, win);
+	MPI_Win_flush(t_rank,win);
+	rmaCtr++;
+	UINT64 rmaReadID = dataRec & 0X0000FFFFFFFFFFFF;
+	if(readID!=rmaReadID)
+	{
+		cout<<"Proc:"<<myid<<" Error!!! Read ID do not match:"<<readID<<" "<<rmaReadID<<" Goff:"<<globalOffset<<" lOff:"<<localOffset<<" Len:"<<((dataRec >> 48) & 0X0000000000007FFF)<<endl;
+		exit(0);
+	}
+	return ((dataRec >> 48) & 0X0000000000007FFF); 	//2nd MSB to 16th MSB are read length
+	return 0;
 }
 
-string HashTable::getStringReverse(UINT64 offset) const
+string HashTable::getStringForward(Read *r, int myid)
 {
-	UINT64 stringLen=getReadLength(offset);
-	return reverseComplement(toString(offset+1,stringLen));
+	UINT64 globalOffset = r->getReadHashOffset();
+	UINT64 rid = r->getReadNumber();
+	UINT64 fid = r->getFileIndex();
+	UINT64 *dataBlock = NULL;
+	string seq="";
+	#pragma omp critical(getRemoteData)
+	{
+		//check local cache
+		if(!getCachedRead(rid,seq))
+		{
+
+			UINT64 stringLen=getReadLength(globalOffset, rid, myid);
+			int t_rank = getOffsetRank(globalOffset);
+			MPI_Aint localOffset = getLocalOffset(globalOffset,t_rank)+1;
+			UINT64 dna_word_len = (stringLen / 32) + (stringLen % 32 != 0);
+			dataBlock = new UINT64[dna_word_len];
+			std::memset(dataBlock, 0, dna_word_len*sizeof(MPI_UINT64_T));
+			try
+			{
+				//cout<<"Proc"<<myid<<" ReadID:"<<fid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
+				MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
+				MPI_Win_flush(t_rank,win);
+				rmaCtr++;
+				seq = toStringMPI(dataBlock,stringLen,0);
+				insertCachedRead(rid, seq);
+			}
+			catch (const std::bad_alloc&) {
+				cout<<"Proc"<<myid<<" Exception Caught getting read data!!!";
+				//cout<<"ReadID:"<<rid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
+				exit(0);
+			}
+		}
+	}
+	if(dataBlock)
+		delete[] dataBlock;
+	return seq;
 }
 
+string HashTable::getStringReverse(Read *r, int myid)
+{
+	return reverseComplement(getStringForward(r,myid));
+}
+/*
+ * Check if the given read belongs to this MPI node and and returns true if contained read has to be processed by this
+ * MPI node
+  */
+bool HashTable::needsProcessing(UINT64 read1ID, string readString, int myid)
+{
+	string prefixForward = readString.substr(0,hashStringLength); 											// Prefix of the forward string.
+	string suffixForward = readString.substr(readString.length() - hashStringLength,hashStringLength);	// Suffix of the forward string.
+
+	UINT64 index1 = getHashIndex(prefixForward);						// Get the index using the hash function.
+	UINT64 baseOffset1 = hashTable[index1];							// Get the start offset of the hash value in the hashData table
+	int rank1 = getOffsetRank(baseOffset1);
+
+	UINT64 index2 = getHashIndex(suffixForward);						// Get the index using the hash function.
+	UINT64 baseOffset2 = hashTable[index2];							// Get the start offset of the hash value in the hashData table
+	int rank2 = getOffsetRank(baseOffset2);
+	int computeRank=0;
+
+	if(read1ID%2==0)
+		computeRank = rank1<rank2?rank1:rank2;
+	else
+	{
+		computeRank = rank1<rank2?rank2:rank1;
+	}
+	return (myid==computeRank?true:false);
+}
+
+bool HashTable::getCachedHashTable(UINT64 index, UINT64 hash_block_len, shared_ptr<UINT64> &cacheBlock)
+{
+	map<UINT64, shared_ptr<UINT64> >::iterator it;
+	it = cachedHashTable->find(index);
+	if (it != cachedHashTable->end())
+	{
+		cacheBlock = it->second;
+		return true;
+	}
+	else
+		return false;
+}
+void HashTable::insertCachedHashTable(UINT64 index, shared_ptr<UINT64> &cacheBlock)
+{
+	if(cachedHashTable->size()<HASH_CACHE_SIZE)
+	{
+		std::shared_ptr<UINT64> loc(cacheBlock);
+		cachedHashTable->insert(pair<UINT64, shared_ptr<UINT64>>(index,loc));
+		hashQ->push(index);
+	}
+	else if(cachedHashTable->size()>0)
+	{
+		UINT64 oindex = hashQ->front();
+		hashQ->pop();
+		map<UINT64, shared_ptr<UINT64> >::iterator it = cachedHashTable->find(oindex);
+		it->second.reset();
+		cachedHashTable->erase(it);
+		hashQ->push(index);
+		std::shared_ptr<UINT64> loc(cacheBlock);
+		cachedHashTable->insert(pair<UINT64, shared_ptr<UINT64>>(index,loc));
+	}
+}
+
+void HashTable::clearHashTableCache()
+{
+	//delete cache entries
+	for(map<UINT64,shared_ptr<UINT64> >::iterator it=cachedHashTable->begin() ; it!=cachedHashTable->end(); ++it) // For each read in the list.
+	{
+		hashQ->pop();
+		it->second.reset();
+	}
+	cachedHashTable->clear();
+}
+
+bool HashTable::getCachedRead(UINT64 rid, string &readString)
+{
+	map<UINT64, string>::iterator it;
+	it = cachedReadTable->find(rid);
+	if (it != cachedReadTable->end())
+	{
+		readString=it->second;
+		return true;
+	}
+	else
+		return false;
+}
+void HashTable::insertCachedRead(UINT64 rid, string readString)
+{
+	if(cachedReadTable->size()<READ_CACHE_SIZE)
+	{
+		readQ->push(rid);
+		cachedReadTable->insert(pair<UINT64, string>(rid,readString));
+	}
+	else if(cachedReadTable->size()>0)
+	{
+		UINT64 oRid = readQ->front();
+		readQ->pop();
+		map<UINT64, string>::iterator it = cachedReadTable->find(oRid);
+		cachedReadTable->erase(it);
+		readQ->push(rid);
+		cachedReadTable->insert(pair<UINT64, string>(rid,readString));
+	}
+}
+
+void HashTable::deleteLocalHitList(vector<UINT64*> *localReadHits)
+{
+	for(size_t i=0;i<localReadHits->size();i++)
+	{
+		if(localReadHits->at(i))
+			delete[] localReadHits->at(i);
+	}
+	delete localReadHits;
+	localReadHits=NULL;
+}
 
 

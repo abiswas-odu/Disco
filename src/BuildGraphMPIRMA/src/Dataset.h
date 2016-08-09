@@ -8,8 +8,8 @@
 
 #ifndef DATASET_H_
 #define DATASET_H_
-#include "Common.h"
-#include "Read.h"
+#include "../../BuildGraphMPIRMA/src/Common.h"
+#include "../../BuildGraphMPIRMA/src/Read.h"
 
 
 /**********************************************************************************************************************

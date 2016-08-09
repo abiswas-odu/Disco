@@ -1105,8 +1105,8 @@ void OverlapGraph::graphPathFindInitial()
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
-	calculateMeanAndSdOfInnerDistance();
-	findSupportByMatepairsAndMerge();
+	//calculateMeanAndSdOfInnerDistance();
+	//findSupportByMatepairsAndMerge();
 	FILE_LOG(logINFO) << "Initial simplification done.\n";
 }
 
@@ -2240,6 +2240,8 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			}
 		}
 		FILE_LOG(logINFO) << "Thread "<< omp_get_thread_num() << ": Edge Pairs = " << listOfPairedEdges_local.size()<<endl;
+
+
 		#pragma omp critical
 		{
 			for(UINT64 k = 0; k < listOfPairedEdges_local.size(); k++)

@@ -7,8 +7,8 @@
 
 #ifndef EDGE_H_
 #define EDGE_H_
-#include "../src/Common.h"
-#include "../src/Read.h"
+#include "Common.h"
+#include "Read.h"
 
 /**********************************************************************************************************************
 	Class to store an edge.

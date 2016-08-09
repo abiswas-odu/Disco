@@ -5,9 +5,9 @@
  * Author: Md. Bahlul Haider
  */
 
-#include "../src/Read.h"
+#include "Read.h"
 
-#include "../src/Common.h"
+#include "Common.h"
 
 
 

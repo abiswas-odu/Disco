@@ -5,9 +5,9 @@
  * Author: Md. Bahlul Haider
  */
 
-#include "../src/Edge.h"
+#include "Edge.h"
 
-#include "../src/Common.h"
+#include "Common.h"
 
 
 /**********************************************************************************************************************

@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 			minOvl, threadPoolSize, 1);
 
-	/*//Clear edge information stored in the reads before the second iteration
+	//Clear edge information stored in the reads before the second iteration
 	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 	{
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(3);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-				minOvl, threadPoolSize, 3);*/
+				minOvl, threadPoolSize, 3);
 
 	delete dataSet;
 	CLOCKSTOP;

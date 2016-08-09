@@ -2,7 +2,7 @@
  * Common.h
  *
  * Created on: April 22, 2013
- * Author: Md. Bahlul Haider, Abhishek Biswas
+ * Author: Md. Bahlul Haider
  */
 
 
@@ -33,8 +33,11 @@
 #include <ctime>
 #include <functional>
 #include <mpi.h>
+#include <stdexcept>
+#include <stdint.h>
 #include <memory>
-
+#include <thread>
+#include <chrono>
 using namespace std;
 
 typedef unsigned char UINT8;
@@ -45,17 +48,29 @@ typedef long INT32;
 typedef unsigned long long UINT64;
 typedef long long INT64;
 
+
+#define aStatisticsThreshold 3
+#define minDelta 1000
+#define deadEndLength 10
+#define minimumSupport 3
+#define loopLimit 15
+#define	coverageDepthLB 40
+#define coverageDepthUB 200
+#define insertSizeRangeSD 3	// 3 means mean +/- 3 SD
+
 //Multi-thread parallel options
-#define MEGA_PAR_GRAPH_SIZE 80000
-#define MAX_PAR_GRAPH_SIZE 40000
-#define MID_PAR_GRAPH_SIZE 20000
+#define DEF_THREAD_COUNT 4
+
+//Multi-thread parallel options
+#define MEGA_PAR_GRAPH_SIZE 20000
+#define MAX_PAR_GRAPH_SIZE 15000
+#define MID_PAR_GRAPH_SIZE 10000
 #define MIN_PAR_GRAPH_SIZE 1000
 
 #define MEGA_THD_MEMORY_SIZE 20000
 #define MAX_THD_MEMORY_SIZE 10000
 #define MID_THD_MEMORY_SIZE 5000
 #define MIN_THD_MEMORY_SIZE 1000
-
 
 //	Exit code that displays the place of exit and message.
 #define MYEXIT(a) { cout << endl << "Exit from File: " << __FILE__ << " Line: " << __LINE__ << " Function: " << __FUNCTION__ << "()" << endl << "Message: " << a << endl; exit(0);}
@@ -91,6 +106,7 @@ inline unsigned int checkMemoryUsage()
     return (count/1024);
 };
 
+
 // Get the maximum memory of the machine.
 inline unsigned int getMaxMemory()
 {
@@ -118,53 +134,6 @@ inline unsigned int getMaxMemory()
 inline void str_reverse( char *str ) {
     char *str_end = strchr( str, 0 );
     std::reverse( str, str_end );
-}
-
-inline void split(const std::string &s, char delim, std::vector<std::string> &elems) {
-	std::stringstream ss(s);
-	std::string item;
-    while(std::getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
-}
-inline std::vector<std::string> splitTok(const std::string &s, char delim) {
-	std::vector<std::string> elems;
-	split(s, delim, elems);
-    return elems;
-}
-
-// trim from start (in place)
-inline void ltrim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
-}
-
-// trim from end (in place)
-inline void rtrim(std::string &s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
-}
-
-// trim from both ends (in place)
-inline void trim(std::string &s) {
-    ltrim(s);
-    rtrim(s);
-}
-
-// trim from start (copying)
-inline std::string ltrimmed(std::string s) {
-    ltrim(s);
-    return s;
-}
-
-// trim from end (copying)
-inline std::string rtrimmed(std::string s) {
-    rtrim(s);
-    return s;
-}
-
-// trim from both ends (copying)
-inline std::string trimmed(std::string s) {
-    trim(s);
-    return s;
 }
 
 inline std::string reverseComplement(const std::string & seq)

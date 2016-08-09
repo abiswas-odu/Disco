@@ -9,7 +9,7 @@
 #ifndef READ_H_
 #define READ_H_
 
-#include "Common.h"
+#include "../../BuildGraphMPIRMA/src/Common.h"
 
 /**********************************************************************************************************************
 	Class to store a read.
@@ -23,6 +23,7 @@ class Read
 		UINT64 readHashOffset; 					// The offset number of the read in the hash data...
 	public:
 		UINT64 superReadID;						// 0 = not a contained read
+		bool containmentChecked;				//read checked for containing reads
 												// otherwise superReadID contains the ID of the uniqe super read.
 		Read(void);								// Default constructor.
 		Read(UINT64 fIndx);					// Another constructor.
