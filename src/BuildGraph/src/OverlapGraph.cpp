@@ -350,7 +350,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			filePointerList.push_back(filePointer);
 		}
 
-		#pragma omp parallel for schedule(dynamic) num_threads(parallelThreadPoolSize)
+		#pragma omp parallel for schedule(dynamic,10) num_threads(parallelThreadPoolSize)
 		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 		{
 			int threadID = omp_get_thread_num();

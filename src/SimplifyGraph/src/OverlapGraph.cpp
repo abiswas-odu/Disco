@@ -1105,8 +1105,8 @@ void OverlapGraph::graphPathFindInitial()
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
-	//calculateMeanAndSdOfInnerDistance();
-	//findSupportByMatepairsAndMerge();
+	calculateMeanAndSdOfInnerDistance();
+	findSupportByMatepairsAndMerge();
 	FILE_LOG(logINFO) << "Initial simplification done.\n";
 }
 
@@ -2150,9 +2150,17 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 
 	vector <pairedEdges> listOfPairedEdges;
 
+	vector <vector <pairedEdges>* > listOfPairedEdges_localList;
+	for(UINT64 i = 0; i < p_ThreadPoolSize; i++)	// for each read in the dataset
+	{
+		vector <pairedEdges> *listOfPairedEdges_local = new vector <pairedEdges>;
+		listOfPairedEdges_localList.push_back(listOfPairedEdges_local);
+	}
+
 	#pragma omp parallel num_threads(p_ThreadPoolSize)
 	{
-		vector <pairedEdges> listOfPairedEdges_local;
+		UINT64 threadID = omp_get_thread_num();
+		vector <pairedEdges> *listOfPairedEdges_local = listOfPairedEdges_localList[threadID];
 
 		#pragma omp for schedule(guided)
 		for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
@@ -2203,23 +2211,24 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 						if(copyOfFlags.at(k) == 1)
 						{
 							UINT64 l;
-							for(l = 0; l < listOfPairedEdges_local.size(); l++)
+							for(l = 0; l < listOfPairedEdges_local->size(); l++)
 							{
 								// already present in the list
-								if(listOfPairedEdges_local.at(l).edge1 == copyOfPath.at(k) && listOfPairedEdges_local.at(l).edge2 == copyOfPath.at(k+1))
+								if(listOfPairedEdges_local->at(l).edge1 == copyOfPath.at(k) &&
+										listOfPairedEdges_local->at(l).edge2 == copyOfPath.at(k+1))
 								{
-									listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+									listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
 									break;
 								}
 								// already present in the list
-								else if(listOfPairedEdges_local.at(l).edge2->getReverseEdge() == copyOfPath.at(k)
-										&& listOfPairedEdges_local.at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
+								else if(listOfPairedEdges_local->at(l).edge2->getReverseEdge() == copyOfPath.at(k)
+										&& listOfPairedEdges_local->at(l).edge1->getReverseEdge() == copyOfPath.at(k+1))
 								{
-									listOfPairedEdges_local.at(l).uniqSupport++;	// only increase the support
+									listOfPairedEdges_local->at(l).uniqSupport++;	// only increase the support
 									break;
 								}
 							}
-							if(l == listOfPairedEdges_local.size()) // not present in the list
+							if(l == listOfPairedEdges_local->size()) // not present in the list
 							{
 									// add in the list with support 1
 								if(copyOfPath.at(k)->getSourceRead()->getReadID() != copyOfPath.at(k)->getDestinationRead()->getReadID()
@@ -2231,7 +2240,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 									newPair.edge2 = copyOfPath.at(k+1);
 									newPair.uniqSupport = 1;
 									newPair.isFreed = false;
-									listOfPairedEdges_local.push_back(newPair);
+									listOfPairedEdges_local->push_back(newPair);
 								}
 							}
 						}
@@ -2239,34 +2248,58 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 				}
 			}
 		}
-		FILE_LOG(logINFO) << "Thread "<< omp_get_thread_num() << ": Edge Pairs = " << listOfPairedEdges_local.size()<<endl;
 
+		FILE_LOG(logINFO) << "Thread "<< threadID << ": Edge Pairs = " << listOfPairedEdges_local->size()<<endl;
+		//Wait for all threads to complete loading their local lists
+		#pragma omp barrier
 
-		#pragma omp critical
+		UINT64 numReadsPerThread = (m_dataset->size()/p_ThreadPoolSize);
+		UINT64 startIndex = (numReadsPerThread*threadID) +1;
+		UINT64 endIndex = m_dataset->size();
+		if((threadID+1)<p_ThreadPoolSize)
+			endIndex = (numReadsPerThread*(threadID+1));
+
+		vector <pairedEdges> listOfPairedEdges_lFinal;
+		for(UINT64 i = 0; i < listOfPairedEdges_localList.size(); i++)	//Check each partial edge pair list
 		{
-			for(UINT64 k = 0; k < listOfPairedEdges_local.size(); k++)
+			for(UINT64 k = 0; k < listOfPairedEdges_localList[i]->size(); k++) // for each edge pair
 			{
-				UINT64 l;
-				for(l = 0; l < listOfPairedEdges.size(); l++)
+				//get common read of pair
+				UINT64 comReadID = listOfPairedEdges_localList[i]->at(k).edge1->getDestinationRead()->getReadID();
+				if(comReadID>=startIndex && comReadID<endIndex) //If true add to local list
 				{
-					// already present in the list
-					if(listOfPairedEdges.at(l).edge1 == listOfPairedEdges_local.at(k).edge1 && listOfPairedEdges.at(l).edge2 == listOfPairedEdges_local.at(k).edge2)
+					UINT64 l;
+					for(l = 0; l < listOfPairedEdges_lFinal.size(); l++)
 					{
-						listOfPairedEdges.at(l).uniqSupport+=listOfPairedEdges_local.at(k).uniqSupport;	// only increase the support
-						break;
+						// already present in the list
+						if(listOfPairedEdges_lFinal.at(l).edge1 == listOfPairedEdges_localList[i]->at(k).edge1 &&
+								listOfPairedEdges_lFinal.at(l).edge2 == listOfPairedEdges_localList[i]->at(k).edge2)
+						{
+							listOfPairedEdges_lFinal.at(l).uniqSupport+=listOfPairedEdges_localList[i]->at(k).uniqSupport;	// only increase the support
+							break;
+						}
+						// already present in the list as reverse
+						else if(listOfPairedEdges_lFinal.at(l).edge2->getReverseEdge() == listOfPairedEdges_localList[i]->at(k).edge1
+								&& listOfPairedEdges_lFinal.at(l).edge1->getReverseEdge() == listOfPairedEdges_localList[i]->at(k).edge2)
+						{
+							listOfPairedEdges_lFinal.at(l).uniqSupport+=listOfPairedEdges_localList[i]->at(k).uniqSupport;	// only increase the support
+							break;
+						}
 					}
-					// already present in the list as reverse
-					else if(listOfPairedEdges.at(l).edge2->getReverseEdge() == listOfPairedEdges_local.at(k).edge1
-							&& listOfPairedEdges.at(l).edge1->getReverseEdge() == listOfPairedEdges_local.at(k).edge2)
-					{
-						listOfPairedEdges.at(l).uniqSupport+=listOfPairedEdges_local.at(k).uniqSupport;	// only increase the support
-						break;
-					}
+					if(l == listOfPairedEdges_lFinal.size()) // not present in the list; add to global list
+						listOfPairedEdges_lFinal.push_back(listOfPairedEdges_localList[i]->at(k));
 				}
-				if(l == listOfPairedEdges.size()) // not present in the list; add to global list
-					listOfPairedEdges.push_back(listOfPairedEdges_local.at(k));
 			}
 		}
+		#pragma omp critical
+		{
+			listOfPairedEdges.reserve(listOfPairedEdges.size() + listOfPairedEdges_lFinal.size() );
+			listOfPairedEdges.insert(listOfPairedEdges.end(), listOfPairedEdges_lFinal.begin(),listOfPairedEdges_lFinal.end());
+		}
+	}
+	for(UINT64 i = 0; i < p_ThreadPoolSize; i++)	// for each read in the thread delete the local lists
+	{
+		delete listOfPairedEdges_localList[i];
 	}
 
 	FILE_LOG(logINFO) << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
