@@ -848,7 +848,7 @@ UINT64 OverlapGraph::reduceLoops(void)
 				}
 			}
 			/* two in the loop and two incoming
-			 * reduce in the case: *--->b>---<b<---* */
+			 * qstat  in the case: *--->b>---<b<---* */
 			else if (loopCount==2 && incomingEdgeCount == 2 && outgoingEdgeCount == 0 && bb->getOrientation() == 2){ // 
 				counter++;
 				Edge *new_edge = Add(ab, bb);
@@ -2156,8 +2156,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 		vector <pairedEdges> *listOfPairedEdges_local = new vector <pairedEdges>;
 		listOfPairedEdges_localList.push_back(listOfPairedEdges_local);
 	}
-
-	#pragma omp parallel for schedule(guided) num_threads(p_ThreadPoolSize)
+	#pragma omp parallel for schedule(guided) reduction(+:noPathsFound), reduction(+:pathsFound), reduction(+:mpOnSameEdge) num_threads(p_ThreadPoolSize)
 	for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
 	{
 		UINT64 threadID = omp_get_thread_num();
@@ -2185,21 +2184,13 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 			{
 				// Matepair on different edge
 				if(copyOfPath.size() == 0)
-				{
-					#pragma omp atomic
-						noPathsFound++;
-				}
+					noPathsFound++;
 				else
-				{
-					#pragma omp atomic
-						pathsFound++;
-				}
+					pathsFound++;
 			}
 			else // Mate pair on the same edge
-			{
-				#pragma omp atomic
-					mpOnSameEdge++;
-			}
+				mpOnSameEdge++;
+
 			if(copyOfPath.size() > 1)	// Path found
 			{
 				for(UINT64 k = 0; k < copyOfFlags.size(); k++)

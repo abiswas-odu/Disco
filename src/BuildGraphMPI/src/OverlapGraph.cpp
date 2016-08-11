@@ -10,19 +10,6 @@
 
 #include "Common.h"
 
-std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
-	std::stringstream ss(s);
-	std::string item;
-    while(std::getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-std::vector<std::string> splitTok(const std::string &s, char delim) {
-	std::vector<std::string> elems;
-    return split(s, delim, elems);
-}
-
 /**********************************************************************************************************************
 	Check if two edges match.
 	e1(u,v) and e2(v,w). At node v, one of the edges should be an incoming edge and the other should be an outgoing
@@ -487,7 +474,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		vector< shared_ptr<ofstream> > filePointerList;
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread
 		{
-			string containedReadFile = fnamePrefix+ "_" + SSTR(i) +"_containedReads.txt";
+			string containedReadFile = fnamePrefix+ "_" + SSTR(myProcID) + "_" + SSTR(i) +"_containedReads.txt";
 			shared_ptr<ofstream> filePointer = make_shared<ofstream>(containedReadFile);
 			//filePointer.open(containedReadFile.c_str());
 			if(!*(filePointer))
@@ -666,6 +653,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		//Delete buffer of contained reads
 		delete[] buf;
 	}
+	#pragma omp parallel for schedule(guided) reduction(+:nonContainedReads) num_threads(parallelThreadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 	{
 		Read *read1 = dataSet->getReadFromID(i); // Get the read
