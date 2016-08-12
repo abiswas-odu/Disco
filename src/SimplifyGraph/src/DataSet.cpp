@@ -152,6 +152,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 {
 	// Open file and read used reads is available...
 	ifstream usedReadFilePointer;
+	UINT64 usedReadCtr=0;
 	usedReadFilePointer.open(usedReadFileName.c_str());
 	if(!usedReadFilePointer.is_open()){
 		FILE_LOG(logWARNING) << "No used read file present: " << usedReadFileName << "\n";
@@ -159,7 +160,6 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 	else
 	{
 		string text;
-		UINT64 usedReadCtr=0;
 		while(getline(usedReadFilePointer,text))
 		{
 			UINT64 readID = stoi(text);
@@ -171,6 +171,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 		}
 		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
 	}
+	return usedReadCtr;
 }
 DataSet::~DataSet()
 {
