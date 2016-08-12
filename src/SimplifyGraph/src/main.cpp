@@ -132,18 +132,21 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 
 	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 				minOvl, threadPoolSize);
-	//Initial Simplification
-	overlapGraph->graphPathFindInitial();
-	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
-	ofstream g_out(graph_file.c_str());
-	g_out << *overlapGraph;
-	g_out.close();*/
-	//ClipBranches and remove similar edges
-	overlapGraph->simplifyGraph();
-	// Flow analysis
-	overlapGraph->calculateFlowStream();
-	overlapGraph->removeAllEdgesWithoutFlow();
-	overlapGraph->simplifyGraph();
+	if(interationCount<3)
+	{
+		//Initial Simplification
+		overlapGraph->graphPathFindInitial();
+		/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
+		ofstream g_out(graph_file.c_str());
+		g_out << *overlapGraph;
+		g_out.close();*/
+		//ClipBranches and remove similar edges
+		overlapGraph->simplifyGraph();
+		// Flow analysis
+		overlapGraph->calculateFlowStream();
+		overlapGraph->removeAllEdgesWithoutFlow();
+		overlapGraph->simplifyGraph();
+	}
 	//Print contig files before scaffolding
 	if(printContigs)
 	{
@@ -153,44 +156,44 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig");
 	}
-
-	overlapGraph->calculateMeanAndSdOfInnerDistance();
-
-	UINT64 iteration=0, counter = 0;
-	do
+	if(interationCount<3)
 	{
-		// Mate pair paths are used to simplify the graph in this step
-		FILE_LOG(logINFO) << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		FILE_LOG(logINFO) << "FIRST LOOP ITERATION " << ++iteration << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		counter = overlapGraph->findSupportByMatepairsAndMerge();
-		overlapGraph->simplifyScaffoldGraph();
-	} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
+		overlapGraph->calculateMeanAndSdOfInnerDistance();
+		UINT64 iteration=0, counter = 0;
+		do
+		{
+			// Mate pair paths are used to simplify the graph in this step
+			FILE_LOG(logINFO) << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			FILE_LOG(logINFO) << "FIRST LOOP ITERATION " << ++iteration << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			counter = overlapGraph->findSupportByMatepairsAndMerge();
+			overlapGraph->simplifyScaffoldGraph();
+		} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
 
-	iteration = 0;
-	do
-	{
-		// Scaffolder
-		FILE_LOG(logINFO) << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		overlapGraph->simplifyScaffoldGraph();
-		counter = overlapGraph->scaffolder();
+		iteration = 0;
+		do
+		{
+			// Scaffolder
+			FILE_LOG(logINFO) << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			overlapGraph->simplifyScaffoldGraph();
+			counter = overlapGraph->scaffolder();
 
-	} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
+		} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
 
-	if(printScaffolds)
-	{
-		string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
-		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
-		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
-		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
+		if(printScaffolds)
+		{
+			string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
+			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
+			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
+			overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
+		}
+		//Write out used reads
 	}
-	//Write out used reads
-
 	delete overlapGraph;
 	CLOCKSTOP;
 }
