@@ -315,7 +315,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				//If this process is finished and all remote processes are finished end while loop
 				if(allRemoteFinish && myFinFlag)
 					allCompleteFlag=true;
-				//std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}//end of while
 			cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
 			delete allMarkedMaster;

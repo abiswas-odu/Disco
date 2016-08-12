@@ -17,7 +17,7 @@
 	Class to store the overlap graph.
 **********************************************************************************************************************/
 
-#define MIN_MARKED 2048				//No. of reads to be marked before a send communication is initiated...
+#define MIN_MARKED 5000				//No. of reads to be marked before a send communication is initiated...
 
 enum nodeType {
 	UNEXPLORED = 0, // Current node u is not explored yet. Meaning that there is no edge (u,v) in the graph.
