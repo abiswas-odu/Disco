@@ -1105,8 +1105,8 @@ void OverlapGraph::graphPathFindInitial()
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
 	clipBranches();
-	calculateMeanAndSdOfInnerDistance();
-	findSupportByMatepairsAndMerge();
+	//calculateMeanAndSdOfInnerDistance();
+	//findSupportByMatepairsAndMerge();
 	FILE_LOG(logINFO) << "Initial simplification done.\n";
 }
 
