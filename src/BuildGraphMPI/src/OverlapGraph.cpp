@@ -120,7 +120,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	allMarked[0]=0;
 	// Initialization; Marked contained reads are considered processed...
 	#pragma omp parallel for schedule(dynamic) num_threads(parallelThreadPoolSize)
-	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++)
+	for(UINT64 i = 1; i < numNodes; i++)
 	{
 		if(dataSet->getReadFromID(i)->superReadID==0)
 			allMarked[i]=0;
@@ -207,9 +207,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	MPI_Barrier(MPI_COMM_WORLD);
 	//Restart operations complete. Delete file index to read ID map
 	delete fIndxReadIDMap;
-
 	//Starting graph construction
-
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		int threadID = omp_get_thread_num();
@@ -217,37 +215,10 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 		{
 			bool allCompleteFlag=false;
 			bool allRemoteFinish=false;
-			vector<bool> * allMarkedMaster = new vector<bool>;
-			allMarkedMaster->reserve(numNodes);
-			allMarkedMaster->push_back(0);				//First is false as no readID is 0
-			for(UINT64 i = 1; i < numNodes; i++) // Initialization with marked contained read
-			{
-				if(allMarked[i]==0)
-					allMarkedMaster->push_back(0);
-				else
-					allMarkedMaster->push_back(1);
-			}
-
-			//Allocating buffer to send messages
-			UINT64 *newMarkedList=new UINT64[MIN_MARKED];
 			// Allocate a buffer to hold the incoming numbers
-			UINT64 *readIDBuf = new UINT64[MIN_MARKED];
+			int *readIDBuf = new int[numNodes];
 			while(!allCompleteFlag)
 			{
-				std::memset(newMarkedList, 0, MIN_MARKED*sizeof(MPI_UINT64_T));
-				//Check if MIN_MARKED reads have been marked by this node
-				size_t newMarkedCount=0;
-				for(size_t i=1;i<numNodes;i++)
-				{
-					if(allMarked[i]>0 && allMarkedMaster->at(i)==0)
-					{
-						allMarkedMaster->at(i)=1;
-						newMarkedList[newMarkedCount++] = i;
-						if(newMarkedCount==MIN_MARKED)
-							break;
-					}
-				}
-				//MIN_MARKED Reads have been marked inform other processes
 				MPI_Request sendRequest[numprocs-1];
 				size_t reqCtr=0;
 				//Send all my data
@@ -255,7 +226,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				{
 					if(myProcID!=j)
 					{
-						MPI_Isend(newMarkedList, MIN_MARKED, MPI_UINT64_T, j, 0, MPI_COMM_WORLD, &sendRequest[reqCtr++]);
+						MPI_Isend(allMarked, numNodes, MPI_INT, j, 0, MPI_COMM_WORLD, &sendRequest[reqCtr++]);
 					}
 				}
 				//Receive all my data
@@ -263,32 +234,29 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				{
 					if(myProcID!=i)
 					{
-						MPI_Recv(readIDBuf, MIN_MARKED, MPI_UINT64_T, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						for(int i=0;i<MIN_MARKED;i++)
+						std::memset(readIDBuf, 0, numNodes*sizeof(int));
+						MPI_Recv(readIDBuf, numNodes, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						for(UINT64 i = 1; i < numNodes; i++) // For each readid
 						{
-							if(readIDBuf[i]>0 && readIDBuf[i]<numNodes)
-							{
-								allMarkedMaster->at(readIDBuf[i])=1;
-								allMarked[readIDBuf[i]]=1;
-							}
-							else
-								break;
+							if(readIDBuf[i]>0)
+								allMarked[i]=1;
 						}
-						std::memset(readIDBuf, 0, MIN_MARKED*sizeof(MPI_UINT64_T));
 					}
 				}
 				//Wait till all the sending is done...
 				MPI_Waitall(numprocs-1, sendRequest,MPI_STATUS_IGNORE);
 				//Test completion
 				int myFinFlag=1;
-				for(size_t i=1;i<numNodes;i++)
+				size_t loopCtr=1;
+				for(loopCtr=1;loopCtr<numNodes;loopCtr++)
 				{
-					if(allMarkedMaster->at(i)==false)
+					if(allMarked[loopCtr]==0)
 					{
 						myFinFlag=0;
 						break;
 					}
 				}
+				cout<<"Proc:"<<myProcID<<" Main communication fin flag: "<<myFinFlag << " stuck at: "<<loopCtr<<endl;
 				//Inform others of status
 				reqCtr=0;
 				allRemoteFinish=true;
@@ -317,15 +285,14 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 					allCompleteFlag=true;
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}//end of while
-			cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
-			delete allMarkedMaster;
-			delete[] newMarkedList;
 			delete[] readIDBuf;
+			cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
+
 		}
 		else
 		{
 			UINT64 startReadID=0,prevReadID=0;
-			prevReadID=startReadID=(myProcID*parallelThreadPoolSize)+threadID;
+			prevReadID=startReadID=(myProcID*(parallelThreadPoolSize-1)*1000)+threadID;
 			while(startReadID!=0 && startReadID<numNodes) // Loop till all nodes marked
 			{
 				map<UINT64,nodeType> *exploredReads = new map<UINT64,nodeType>;							//Record of nodes processed
