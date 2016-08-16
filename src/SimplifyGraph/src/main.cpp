@@ -134,7 +134,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 
 	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 				minOvl, threadPoolSize);
-	if(interationCount<FINAL_ITER)
+	if(interationCount < FINAL_ITER)
 	{
 		//Initial Simplification
 		overlapGraph->graphPathFindInitial();
@@ -152,11 +152,11 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	//Print contig files before scaffolding
 	if(printContigs)
 	{
-		string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
-		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
-		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+		string edge_file = outputFilenamePrefix+"_contigEdgesFinal_"+SSTR(interationCount)+".txt";
+		string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig");
 	}
 	if(interationCount<FINAL_ITER)
 	{
@@ -188,13 +188,12 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 
 		if(printScaffolds)
 		{
-			string edge_file = outputFilenamePrefix+"_contigEdgesFinal_"+SSTR(interationCount)+".txt";
-			string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
-			string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
+			string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
+			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
+			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-			overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig");
+			overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
 		}
-		//Write out used reads
 	}
 	delete overlapGraph;
 	CLOCKSTOP;

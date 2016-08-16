@@ -287,12 +287,11 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 			}//end of while
 			delete[] readIDBuf;
 			cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
-
 		}
 		else
 		{
 			UINT64 startReadID=0,prevReadID=0;
-			prevReadID=startReadID=(myProcID*(parallelThreadPoolSize-1)*1000)+threadID;
+			prevReadID=startReadID=(myProcID*(parallelThreadPoolSize-1)*1000000)+threadID;
 			while(startReadID!=0 && startReadID<numNodes) // Loop till all nodes marked
 			{
 				map<UINT64,nodeType> *exploredReads = new map<UINT64,nodeType>;							//Record of nodes processed
