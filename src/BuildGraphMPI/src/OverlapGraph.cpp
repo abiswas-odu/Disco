@@ -208,6 +208,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	//Restart operations complete. Delete file index to read ID map
 	delete fIndxReadIDMap;
 	//Starting graph construction
+
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		int threadID = omp_get_thread_num();
@@ -217,6 +218,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 			bool allRemoteFinish=false;
 			// Allocate a buffer to hold the incoming numbers
 			int *readIDBuf = new int[numNodes];
+			size_t usedCounter=1;
 			while(!allCompleteFlag)
 			{
 				MPI_Request sendRequest[numprocs-1];
@@ -236,7 +238,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 					{
 						std::memset(readIDBuf, 0, numNodes*sizeof(int));
 						MPI_Recv(readIDBuf, numNodes, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						for(UINT64 i = 1; i < numNodes; i++) // For each readid
+						for(UINT64 i = usedCounter; i < numNodes; i++) // For each readid
 						{
 							if(readIDBuf[i]>0)
 								allMarked[i]=1;
@@ -247,16 +249,15 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				MPI_Waitall(numprocs-1, sendRequest,MPI_STATUS_IGNORE);
 				//Test completion
 				int myFinFlag=1;
-				size_t loopCtr=1;
-				for(loopCtr=1;loopCtr<numNodes;loopCtr++)
+				for(;usedCounter<numNodes;usedCounter++)
 				{
-					if(allMarked[loopCtr]==0)
+					if(allMarked[usedCounter]==0)
 					{
 						myFinFlag=0;
 						break;
 					}
 				}
-				cout<<"Proc:"<<myProcID<<" Main communication fin flag: "<<myFinFlag << " stuck at: "<<loopCtr<<endl;
+				//cout<<"Proc:"<<myProcID<<" Main communication fin flag: "<<myFinFlag << " stuck at: "<<loopCtr<<endl;
 				//Inform others of status
 				reqCtr=0;
 				allRemoteFinish=true;
@@ -283,7 +284,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				//If this process is finished and all remote processes are finished end while loop
 				if(allRemoteFinish && myFinFlag)
 					allCompleteFlag=true;
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}//end of while
 			delete[] readIDBuf;
 			cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
@@ -291,7 +291,8 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 		else
 		{
 			UINT64 startReadID=0,prevReadID=0;
-			prevReadID=startReadID=(myProcID*(parallelThreadPoolSize-1)*1000000)+threadID;
+			UINT64 workBlock = numNodes/(numprocs*(parallelThreadPoolSize-1));
+			prevReadID=startReadID=(myProcID*(parallelThreadPoolSize-1)*workBlock)+threadID;
 			while(startReadID!=0 && startReadID<numNodes) // Loop till all nodes marked
 			{
 				map<UINT64,nodeType> *exploredReads = new map<UINT64,nodeType>;							//Record of nodes processed
@@ -364,7 +365,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 					}
 				}
 				INT64 mem_used = checkMemoryUsage();
-				if(writtenMakedNodes>0)
+				if(writtenMakedNodes>5)
 					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
 				saveParGraphToFile(fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 				for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
