@@ -183,8 +183,8 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
 			FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
 			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-			overlapGraph->simplifyScaffoldGraph();
 			counter = overlapGraph->scaffolder();
+			overlapGraph->simplifyScaffoldGraph();
 
 		} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
 
