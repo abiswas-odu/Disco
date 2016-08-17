@@ -20,7 +20,7 @@ string outputFilenamePrefix = "omega3";
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
-		UINT64 minOvl, UINT64 parallelThreadPoolSize, int interationCount);
+		UINT64 minOvl, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
 
 void SetParameters(int interationCount);
 
@@ -61,7 +61,9 @@ int main(int argc, char **argv) {
 	CLOCKSTART;
 	//Load reads before simplification...
 	DataSet *dataSet = new DataSet(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList); // construct dataset from reads file(s)
-	dataSet->storeContainedReadInformation(containedReadsFileName);
+
+	//Load and get count of contained reads
+	UINT64 containedCtr = dataSet->storeContainedReadInformation(containedReadsFileName);
 
 	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
 		<< dataSet->size() << "\n";
@@ -69,7 +71,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(1);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-			minOvl, threadPoolSize, 1);
+			minOvl, threadPoolSize,containedCtr, 1);
 
 	//Clear edge information stored in the reads before the second iteration
 	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
@@ -82,7 +84,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(2);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-				minOvl, threadPoolSize, 2);
+				minOvl, threadPoolSize,containedCtr, 2);
 
 	//Clear edge information stored in the reads before the second iteration
 	#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
@@ -95,7 +97,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(3);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-				minOvl, threadPoolSize, 3);
+				minOvl, threadPoolSize,containedCtr, 3);
 
 	delete dataSet;
 	CLOCKSTOP;
@@ -103,7 +105,7 @@ int main(int argc, char **argv) {
 }
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
-		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 threadPoolSize, int interationCount)
+		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO) <<"Graph Simplification Iteration: "<<interationCount<<endl;

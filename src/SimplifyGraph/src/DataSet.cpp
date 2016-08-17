@@ -242,10 +242,11 @@ bool DataSet::testRead(const string & read)
 /**********************************************************************************************************************
 	This function reads the contained read file generated during graph construction and store matepair information.
 **********************************************************************************************************************/
-void DataSet::storeContainedReadInformation(vector<string> containedReadFile)
+UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO)<< "Store contained read information..."<< endl;
+	UINT64 containedReadCtr=0;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
 		ifstream myFile;
@@ -264,13 +265,20 @@ void DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 			UINT64 containedReadOri = atoi(info[0].c_str());
 			UINT64 containedReadOverlapStart = atoi(info[8].c_str());
 
-			at(containedReadID)->setIsContained(true);
+			if(!at(containedReadID)->isContainedRead())
+			{
+				at(containedReadID)->setIsContained(true);
+				containedReadCtr++;
+			}
 
 			at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
 		}
 		myFile.close();
 	}
+	FILE_LOG(logINFO) << "Total number of contained reads loaded from read file(s): "
+			<< containedReadCtr << "\n";
 	CLOCKSTOP;
+	return containedReadCtr;
 }
 
 /*

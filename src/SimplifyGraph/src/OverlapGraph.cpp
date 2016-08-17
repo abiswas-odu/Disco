@@ -2625,7 +2625,7 @@ UINT64 OverlapGraph::scaffolder(void)
 		{
 			Edge *edge2 =listOfFeasibleEdges->at(j);
 			INT64 gapDistance;
-			UINT64 support = checkForScaffold(edge1,edge2,gapDistance); // check the support and distance
+			INT64 support = checkForScaffold(edge1,edge2,gapDistance); // check the support and distance
 			if(support>0)	// If there are support then add the current pair in the list.
 			{
 				pairedEdges newPair;
@@ -2874,9 +2874,10 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 	return true;
 }
 
-UINT64 OverlapGraph::checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance)
+INT64 OverlapGraph::checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance)
 {
-	UINT64 support = 0,dist = 0;
+	UINT64 dist = 0;
+	INT64 support = 0, oppose=0;
 	averageGapDistance = 0;
 	Edge *rEdge1 = edge1->getReverseEdge();
 	vector<t_edge_loc_pair> listRead1, listRead2;		//  This is the lists of edges that contain read1 and read2
@@ -2915,7 +2916,7 @@ UINT64 OverlapGraph::checkForScaffold(const Edge *edge1, const Edge *edge2, INT6
 			if(listRead1.size() != 1 || listRead2.size() != 1)
 				continue;
 			/*
-			 * AB: the listOfRead1 has index of the read in the edge not offset location so, we need to do a little dance to get the ossfet values
+			 * AB: the listOfRead1 has index of the read in the edge not offset location so, we need to do a little dance to get the offset values
 			 * AB: First get the indexes. fairly easy
 			 * AB: Next get the summation of the offset till index+1 as the read and offset list does not include the source and destination
 			 * and the first read in the list is the second read in the alignment.
@@ -2937,7 +2938,7 @@ UINT64 OverlapGraph::checkForScaffold(const Edge *edge1, const Edge *edge2, INT6
 			// Only consider if the distance is less than mean+3*SD
 			if(listRead1[0].first == edge1->getReverseEdge()
 					&& listRead2[0].first == edge2
-					&& r1Offset + r2Offset < (m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance + insertSizeRangeSD * m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistanceSD) )
+					&& (r1Offset + r2Offset) < (m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance + insertSizeRangeSD * m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistanceSD) )
 				// Both the reads are present on only on edge and the distance is less that mean+3*sd
 			{
 				dist = r1Offset + r2Offset;
@@ -2947,11 +2948,15 @@ UINT64 OverlapGraph::checkForScaffold(const Edge *edge1, const Edge *edge2, INT6
 				averageGapDistance += static_cast<int>(m_dataset->getDataSetInfo()->at(datasetNumber).avgInnerDistance - dist);
 				support++;
 			}
+			else
+			{
+				oppose++;
+			}
 		}
 	}
 	if(support)
 		averageGapDistance = (INT64)(averageGapDistance/(INT64)(support));
-	return support;
+	return (support - oppose);
 }
 
 /**********************************************************************************************************************

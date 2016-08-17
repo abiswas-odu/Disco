@@ -225,7 +225,7 @@ class OverlapGraph
 		UINT64 scaffolder(void);
 		vector<Edge *> * getListOfFeasibleEdges(const Edge *edge);
 		bool calculateMeanAndSdOfInnerDistance(void);
-		UINT64 checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance);
+		INT64 checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance);
 		UINT64 findOverlap(const string & string1, const string & string2);
 		UINT8 mergedEdgeOrientationDisconnected(const Edge *edge1, const Edge *edge2);
 		UINT8 twinEdgeOrientation(UINT8 orientation);

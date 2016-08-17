@@ -85,7 +85,7 @@ class DataSet
 		void setSequenceLoaded(bool isLoaded) {isSequenceLoaded=isLoaded;}
 
 		// Load contained read information from file
-		void storeContainedReadInformation(vector<string> containedReadFile);
+		UINT64 storeContainedReadInformation(vector<string> containedReadFile);
 
 		//Set previous used reads
 		UINT64 LoadUsedReads(string usedReadFileName);
