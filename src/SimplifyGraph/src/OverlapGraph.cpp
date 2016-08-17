@@ -1487,7 +1487,8 @@ UINT64 OverlapGraph::removeAllEdgesWithoutFlow()
 
 				//Also remove loops without flow. This means, by default, 
 				//the edges formed by loops that do not contain many reads will not be used.
-				if(edge->m_flow == 0 && !edge->isLoop()) {
+				if(edge->m_flow == 0 && !edge->isLoop() && edge->getListofReadsSize() <= minReadsCountToHave0Flow &&
+						edge->getEdgeLength() < minEdgeLengthToHave0Flow) {
 					removeEdge(edge);
 					++num_edge_rm;
 				}
