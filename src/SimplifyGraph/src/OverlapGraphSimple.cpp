@@ -440,7 +440,7 @@ OverlapGraphSimple::OverlapGraphSimple(string edge_file, string composite_out_ed
 	UINT64 counter(0);
 	do {
 		counter = contractParCompositeEdges_Serial(parGraph, markedNodes);
-	//	counter += removeParDeadEndNodes(parGraph, markedNodes, nodeList);
+		counter += removeParDeadEndNodes(parGraph, markedNodes, nodeList);
 	} while (counter > 0);
 
 	//Write partial simplified graph to file

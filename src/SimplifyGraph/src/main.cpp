@@ -115,7 +115,8 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	{
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
 		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
-		if(usedReads>(0.9*dataSet->size()))
+		UINT64 nonContainedReads = dataSet->size()-containedCtr;
+		if(usedReads>(0.9*nonContainedReads))
 		{
 			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Over 90% reads used already. Assembly simplification complete."<<endl;
 			return;
@@ -127,7 +128,8 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
 		usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount-1)+".txt";
 		usedReads += dataSet->LoadUsedReads(usedReadFileName);
-		if(usedReads>(0.9*dataSet->size()))
+		UINT64 nonContainedReads = dataSet->size()-containedCtr;
+		if(usedReads>(0.9*nonContainedReads))
 		{
 			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Over 90% reads used already. Assembly simplification complete."<<endl;
 			return;

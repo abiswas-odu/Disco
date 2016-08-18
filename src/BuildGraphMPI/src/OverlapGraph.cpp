@@ -174,7 +174,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 			}
 		}
 	}
-	MPI_Barrier(MPI_COMM_WORLD);
 	if(numprocs>1 && prevResultExists)			//Previous result exists and not only one process as it will deadlock
 	{
 		MPI_Request request[numprocs];
@@ -194,7 +193,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				//Set contained read values
 				for(UINT64 i = 1; i < numNodes; i++) // For each readid
 				{
-					if(readIDBuf[i]>0)
+					if(readIDBuf[i]>0 && allMarked[i]==0)
 						allMarked[i]=1;
 				}
 				delete[] readIDBuf;
@@ -240,8 +239,11 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 						MPI_Recv(readIDBuf, numNodes, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						for(UINT64 i = usedCounter; i < numNodes; i++) // For each readid
 						{
-							if(readIDBuf[i]>0)
-								allMarked[i]=1;
+							if(readIDBuf[i]>0 && allMarked[i]==0)
+							{
+								#pragma omp atomic write
+									allMarked[i]=1;
+							}
 						}
 					}
 				}
@@ -251,7 +253,10 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				int myFinFlag=1;
 				for(;usedCounter<numNodes;usedCounter++)
 				{
-					if(allMarked[usedCounter]==0)
+					int usedFlag=0;
+					#pragma omp atomic read
+						usedFlag=allMarked[usedCounter];
+					if(usedFlag==0)
 					{
 						myFinFlag=0;
 						break;
@@ -307,13 +312,13 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				{
 					UINT64 read1 = nodeQ->front();										//Pop from queue...
 					nodeQ->pop();
-					bool isPrevMarked=false;
-					if(allMarked[read1]==0)
-						allMarked[read1]=1;
-					else
-						isPrevMarked=true;
-					if(!isPrevMarked)
+					int usedFlag=0;
+					#pragma omp atomic read
+						usedFlag=allMarked[read1];
+					if(usedFlag==0)
 					{
+						#pragma omp atomic write
+							allMarked[read1]=1;
 						if(exploredReads->find(read1) ==  exploredReads->end()) //if node is UNEXPLORED
 						{
 							insertAllEdgesOfRead(read1, exploredReads, parGraph);					// Explore current node.
@@ -383,7 +388,10 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				startReadID=0;
 				for(UINT64 i=prevReadID;i<numNodes;i++)
 				{
-					if(allMarked[i]==0){
+					int usedFlag=0;
+					#pragma omp atomic read
+						usedFlag=allMarked[i];
+					if(usedFlag==0){
 						startReadID=prevReadID=i;
 						break;
 					}
@@ -627,7 +635,6 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		if(read1->superReadID==0)		//If read is already marked as contained, there is no need to look for contained reads within it
 			nonContainedReads++;
 	}
-	MPI_Barrier(MPI_COMM_WORLD); /* IMPORTANT */
 	cout<< endl << setw(10) << nonContainedReads << " Non-contained reads. (Keep as is)" << endl;
 	cout<< setw(10) << dataSet->getNumberOfUniqueReads()-nonContainedReads << " contained reads. (Need to change their mate-pair information)" << endl;
 	CLOCKSTOP;
