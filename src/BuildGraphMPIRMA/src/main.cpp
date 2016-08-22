@@ -21,17 +21,27 @@ UINT64 readOverlapParameter(string parameterFile);
 
 int main(int argc, char **argv)
 {
-	int numprocs, myid, len;
+	int numprocs=1, myid=0, len, provided=0;
 	double start, end;
 	char name[MPI_MAX_PROCESSOR_NAME];
 
-	MPI_Init(&argc, &argv);
+	MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
+	if (provided < MPI_THREAD_SERIALIZED)
+	{
+	   printf("Error: the MPI library doesn't provide the required thread level\n");
+	   MPI_Abort(MPI_COMM_WORLD, 0);
+	}
 	MPI_Comm_size(MPI_COMM_WORLD,&numprocs);
 	MPI_Comm_rank(MPI_COMM_WORLD,&myid);
 	MPI_Barrier(MPI_COMM_WORLD); /* IMPORTANT */
 	MPI_Get_processor_name(name, &len);
 	start = MPI_Wtime();
-	printf("Rank %d running on %s\n", myid, name);
+
+	cout<<"Software: Omega Assembler"<<endl;
+	cout<<"Version : 3.0.1"<<endl;
+
+
+	printf("Rank %d running on %s with %d threads.\n", myid, name, omp_get_max_threads());
 	vector<string> pairedEndFileNames, singleEndFileNames;
 	string allFileName;
 	string parameterFile;

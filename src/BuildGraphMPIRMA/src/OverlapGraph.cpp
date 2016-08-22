@@ -453,9 +453,9 @@ void OverlapGraph::markContainedReads(string fnamePrefix, int numprocs)
 			hashTable->deleteLocalHitList(localReadHits);
 		}//end of while
 	}
-	cout<<"Completed contained read computation."<<endl;
-	hashTable->unLockAll();
+	cout<<"Proc:"<<myProcID<<" Completed contained read computation."<<endl;
 	filePointer.close();
+	hashTable->unLockAll();
 	hashTable->endEpoch();
 	hashTable->clearHashTableCache();
 	int ctdReads=0;

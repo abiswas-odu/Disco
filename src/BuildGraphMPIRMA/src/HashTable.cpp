@@ -354,10 +354,12 @@ void HashTable::setHashTableDataSize(int myid)
 	//hashData = new UINT64[numElements];
 	cout<<"MPI UINT64:"<<sizeof(MPI_LONG_LONG_INT)<<endl;
 	hashData = NULL;
-	MPI_Alloc_mem(numElements*sizeof(MPI_UINT64_T), MPI_INFO_NULL, (void **)&hashData);
-	MPI_Win_create(hashData, numElements*sizeof(MPI_UINT64_T), sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
+	int tsize = 0;
+	MPI_Type_size(MPI_UINT64_T, &tsize);
+	MPI_Alloc_mem(numElements*tsize, MPI_INFO_NULL, (void **)&hashData);
+	MPI_Win_create(hashData, numElements*tsize, sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
  	//MPI_Win_allocate(numElements * sizeof(MPI_UINT64_T), sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, hashData, &win);
-	std::memset(hashData, 0, numElements*sizeof(MPI_UINT64_T));
+	std::memset(hashData, 0, numElements*tsize);
 	MPI_Win_fence(0, win);
 }
 
