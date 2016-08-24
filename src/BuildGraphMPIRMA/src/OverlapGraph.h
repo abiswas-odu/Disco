@@ -59,6 +59,6 @@ class OverlapGraph
 		bool insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);	// Insert into the overlap graph all edges of a read.
 		bool removeTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph);				// Remove all transitive edges from the overlap graph incident to a given read.
 		bool saveParGraphToFile(string fileName, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);   //Save partial graph to file and reduce memory footprint
-		void markContainedReads(string fnamePrefix, int numprocs);									// Find superReads for each read and mark them as contained read.
+		void markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, int numprocs);									// Find superReads for each read and mark them as contained read.
 };
 #endif /* OVERLAPGRAPH_H_ */

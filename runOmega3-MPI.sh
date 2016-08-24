@@ -19,6 +19,7 @@ asmParaFileP2="${exePath}/omega3_2.cfg"
 asmParaFileP3="${exePath}/omega3_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
+useMPIRMA=""
 phymem=`grep MemTotal /proc/meminfo | awk '{print $2}'`
 maxMem=$((phymem/1048576))
 while [[ $# > 0 ]]
@@ -96,6 +97,9 @@ case $key in
     -obg|--OnlyBuildGraph)                        # Maximum memory limit
     simplifyGraph=""
     ;;
+    -rma|--MPIRMA)                        # Maximum memory limit
+    useMPIRMA="Y"
+    ;;
     -osg|--OnlySimplifyGraph)                        # Maximum memory limit
     constructGraph=""
     ;;
@@ -113,7 +117,12 @@ if [ -z "$dataOutPath" ] && [ -z "$outPrefix" ] && [ -z "$readFile1" ] && [ -z "
 fi
 
 #Check required exe files are in the same directory as the script
-BUILDGEXE="${exePath}/buildG"
+if [ "$useMPIRMA" = "Y" ] ; then
+   BUILDGEXE="${exePath}/buildG-MPIRMA"
+else
+   BUILDGEXE="${exePath}/buildG-MPI"
+fi
+
 if [ -f $BUILDGEXE ] ; then
    echo "Graph construction module $BUILDGEXE exists."
 else
@@ -188,7 +197,7 @@ if [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] && [ -z "$r
    exit 1
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then 
    if [ "$constructGraph" = "Y" ] ; then
-      mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${exePath}/buildG-MPI -pe 1 ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
+      mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe 1 ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -199,7 +208,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${exePath}/buildG-MPI -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -210,7 +219,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${exePath}/buildG-MPI -pe 2 ${readFile1} ${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe 2 ${readFile1} ${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -221,7 +230,7 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${exePath}/buildG -pe 1 ${readFileP} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe 1 ${readFileP} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -232,7 +241,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    fi
 elif [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${exePath}/buildG-MPI -pe 2 ${readFile1} ${readFile2} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe 2 ${readFile1} ${readFile2} -se 1 ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1

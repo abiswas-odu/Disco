@@ -298,7 +298,6 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 		if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
 		{
 			readID++;
-			cout<<"Proc:"<<myid<<"Processing read:"<<readID<<endl;
 			insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths, myid); 								// Calculate the offset lengths of each hash table key in the hash table.
 			goodReads++;
 		}

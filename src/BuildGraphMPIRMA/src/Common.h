@@ -34,6 +34,8 @@
 #include <functional>
 #include <mpi.h>
 #include <memory>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 

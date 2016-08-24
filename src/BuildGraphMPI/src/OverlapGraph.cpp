@@ -114,7 +114,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	//Contained reads are considered already marked to remove them form further consideration...
 	markContainedReads(fnamePrefix, fIndxReadIDMap,numprocs);
 
-
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 	int *allMarked = new int[numNodes];
 	allMarked[0]=0;
@@ -573,10 +572,11 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 	{
 		int ctdReads=0;
 		//Get contained read count
+		#pragma omp parallel for schedule(guided) reduction(+:ctdReads) num_threads(parallelThreadPoolSize)
 		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 		{
 			Read *read1 = dataSet->getReadFromID(i); // Get the read
-			if(read1->superReadID!=0)		//If read is already marked as contained, there is no need to look for contained reads within it
+			if(read1->superReadID!=0)		//Check if read is marked as contained
 				ctdReads++;
 		}
 
@@ -586,7 +586,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 		{
 			Read *read1 = dataSet->getReadFromID(i); // Get the read
-			if(read1->superReadID!=0)		//If read is already marked as contained, there is no need to look for contained reads within it
+			if(read1->superReadID!=0)		//Check if read is marked as contained
 			{
 				buf[j]=i;
 				j++;

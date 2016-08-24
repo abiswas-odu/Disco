@@ -7,12 +7,12 @@
  */
 
 
-#include "../../BuildGraphMPIRMA/src/Common.h"
-#include "../../BuildGraphMPIRMA/src/Dataset.h"
-#include "../../BuildGraphMPIRMA/src/Edge.h"
-#include "../../BuildGraphMPIRMA/src/HashTable.h"
-#include "../../BuildGraphMPIRMA/src/OverlapGraph.h"
-#include "../../BuildGraphMPIRMA/src/Read.h"
+#include "Common.h"
+#include "Dataset.h"
+#include "Edge.h"
+#include "HashTable.h"
+#include "OverlapGraph.h"
+#include "Read.h"
 
 void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, vector<string> & singleEndFileNames,
 		string & allFileName,UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile);
