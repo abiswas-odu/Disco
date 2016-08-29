@@ -466,6 +466,11 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			endIndex = (numReadsPerProc*(myProcID+1));
 		cout<<"Proc:"<<myProcID<<" Searching contained reads for range: ("<<startIndex<<","<<endIndex<<")"<<endl;
 
+		//setup variables for synchronization of threads
+		UINT64 blockSize = endIndex-startIndex+1;
+		bool *completedIndex = new bool[blockSize];
+		for(UINT64 i=0;i<blockSize;i++)
+			completedIndex[i]=false;
 		#pragma omp parallel num_threads(parallelThreadPoolSize)
 		{
 			int threadID = omp_get_thread_num();
@@ -566,14 +571,12 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			}
 			else
 			{
-				UINT64 blockSize = endIndex-startIndex+1;
-				bool *completedIndex = new bool[blockSize];
-				for(UINT64 i=0;i<blockSize;i++)
-					completedIndex[i]=false;
-
 				UINT64 currIndex = startIndex+(threadID-1);
 				if(currIndex<=endIndex)
-					completedIndex[currIndex-startIndex]=true;
+				{
+					#pragma omp atomic write
+						completedIndex[currIndex-startIndex]=true;
+				}
 				else
 					currIndex=0;			//Highly unusual; there are more threads than reads...
 				while(currIndex!=0)
