@@ -2,13 +2,13 @@
  * HashTable.cpp
  *
  *  Created on: Apr 22, 2013
- *      Author: b72
+ *      Author: Abhishek Biswas
  */
 
 
-#include "../../BuildGraphMPIRMA/src/HashTable.h"
+#include "HashTable.h"
 
-#include "../../BuildGraphMPIRMA/src/Common.h"
+#include "Common.h"
 
 
 
@@ -350,14 +350,14 @@ void HashTable::setHashTableSize(UINT64 size)
 void HashTable::setHashTableDataSize(int myid)
 {
 	int numElements=memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid);
-	//hashData = new UINT64[numElements];
-	cout<<"MPI UINT64:"<<sizeof(MPI_LONG_LONG_INT)<<endl;
-	hashData = NULL;
 	int tsize = 0;
 	MPI_Type_size(MPI_UINT64_T, &tsize);
-	MPI_Alloc_mem(numElements*tsize, MPI_INFO_NULL, (void **)&hashData);
-	MPI_Win_create(hashData, numElements*tsize, sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
- 	//MPI_Win_allocate(numElements * sizeof(MPI_UINT64_T), sizeof(MPI_UINT64_T), MPI_INFO_NULL, MPI_COMM_WORLD, hashData, &win);
+	cout<<"MPI UINT64:"<<tsize<<endl;
+	hashData = NULL;
+	MPI_Aint winSize = numElements*tsize;
+	MPI_Alloc_mem(winSize, MPI_INFO_NULL, (void **)&hashData);
+	MPI_Win_create(hashData, winSize, tsize, MPI_INFO_NULL, MPI_COMM_WORLD, &win);
+ 	//MPI_Win_allocate(winSize, tsize, MPI_INFO_NULL, MPI_COMM_WORLD, hashData, &win);
 	std::memset(hashData, 0, numElements*tsize);
 	MPI_Win_fence(0, win);
 }
@@ -561,13 +561,15 @@ vector<UINT64*> * HashTable::setLocalHitList_nocache(const string readString, in
 					//cout<<"oRank:"<<myid<<", tRank:"<<t_rank<<", len:"<<hash_block_len<<", Offset:"<<localOffset<<endl;
 					//Allocate memory
 					localReadHits->at(j) = new UINT64[hash_block_len];
-					std::memset(localReadHits->at(j), 0, hash_block_len*sizeof(MPI_UINT64_T));
-					// Get data from RMA
+					int tsize = 0;
+					MPI_Type_size(MPI_UINT64_T, &tsize);
+					std::memset(localReadHits->at(j), 0, hash_block_len*tsize);
 					void *buf = localReadHits->at(j);
-					if((localOffset+hash_block_len)>getMemoryMaxLocalOffset(t_rank))
+					/*if((localOffset+hash_block_len)>getMemoryMaxLocalOffset(t_rank))
 					{
 						cout<<"Req. Start: oProcess:"<<myid<<" tRank:"<<t_rank<<" GlobalOffset:"<<globalStartOffset<<" LocalOffset"<<localOffset<<" blockLen:"<<hash_block_len<<endl;
-					}
+					}*/
+					// Get data from RMA
 					MPI_Get(buf, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
 					//MPI_Win_flush(t_rank, win);
 					rmaCtr++;
@@ -589,6 +591,7 @@ vector<shared_ptr<UINT64> > HashTable::setLocalHitList(const string readString, 
 {
 	UINT64 hashQueryCount = readString.length() - getHashStringLength();
 	vector<shared_ptr<UINT64> > localReadHits(hashQueryCount);
+
 	#pragma omp critical(getRemoteData)
 	{
 		for(UINT64 j = 0; j < hashQueryCount; j++) // for each substring of read1 of length getHashStringLength
@@ -608,9 +611,14 @@ vector<shared_ptr<UINT64> > HashTable::setLocalHitList(const string readString, 
 					MPI_Aint localOffset = getLocalOffset(globalStartOffset,t_rank);
 					//Allocate memory
 					void *dataBlock = new UINT64[hash_block_len];
-					std::memset(dataBlock, 0, hash_block_len*sizeof(MPI_UINT64_T));
+					int tsize = 0;
+					MPI_Type_size(MPI_UINT64_T, &tsize);
+					std::memset(dataBlock, 0, hash_block_len*tsize);
 					// Get data from RMA
-					MPI_Get(dataBlock, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
+
+						MPI_Get(dataBlock, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
+						//MPI_Win_flush(t_rank, win);
+
 					std::shared_ptr<UINT64> sp( static_cast<UINT64 *>(dataBlock), std::default_delete<UINT64[]>());
 					localReadHits[j] = sp;
 					insertCachedHashTable(index, sp);
@@ -912,26 +920,28 @@ string HashTable::getStringForward(Read *r, int myid)
 {
 	UINT64 globalOffset = r->getReadHashOffset();
 	UINT64 rid = r->getReadNumber();
-	UINT64 fid = r->getFileIndex();
 	UINT64 *dataBlock = NULL;
 	string seq="";
-	#pragma omp critical(getRemoteData)
+	//check local cache
+	if(!getCachedRead(rid,seq))
 	{
-		//check local cache
-		if(!getCachedRead(rid,seq))
+		#pragma omp critical(getRemoteData)
 		{
-
 			UINT64 stringLen=getReadLength(globalOffset, rid, myid);
 			int t_rank = getOffsetRank(globalOffset);
 			MPI_Aint localOffset = getLocalOffset(globalOffset,t_rank)+1;
 			UINT64 dna_word_len = (stringLen / 32) + (stringLen % 32 != 0);
 			dataBlock = new UINT64[dna_word_len];
-			std::memset(dataBlock, 0, dna_word_len*sizeof(MPI_UINT64_T));
+			int tsize = 0;
+			MPI_Type_size(MPI_UINT64_T, &tsize);
+			std::memset(dataBlock, 0, dna_word_len*tsize);
 			try
 			{
 				//cout<<"Proc"<<myid<<" ReadID:"<<fid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
-				MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
-				MPI_Win_flush(t_rank,win);
+
+					MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
+					MPI_Win_flush(t_rank,win);
+
 				rmaCtr++;
 				seq = toStringMPI(dataBlock,stringLen,0);
 				insertCachedRead(rid, seq);
