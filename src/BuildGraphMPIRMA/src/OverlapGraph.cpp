@@ -782,15 +782,15 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 	UINT64 read1Len = readString.length();
 
 	/*Start global communication epoch*/
-	//vector<UINT64*> *localReadHits;
-	//localReadHits = hashTable->setLocalHitList_nocache(readString,myProcID); // Search the substring in the hash table
-	vector<shared_ptr<UINT64> > localReadHits = hashTable->setLocalHitList(readString,myProcID); // Search the substring in the hash table
+	vector<UINT64*> *localReadHits;
+	localReadHits = hashTable->setLocalHitList_nocache(readString,myProcID); // Search the substring in the hash table
+	//vector<shared_ptr<UINT64> > localReadHits = hashTable->setLocalHitList(readString,myProcID); // Search the substring in the hash table
 	/*End global communication epoch*/
 	for(UINT64 j = 1; j < read1Len-hashTable->getHashStringLength(); j++) // For each proper substring of length getHashStringLength of read1
 	{
 		subString = readString.substr(j,hashTable->getHashStringLength());  // Get the proper substring s of read1.
-		map<UINT64,string> listOfReads = hashTable->getLocalHitList(localReadHits, subString, j); // Search the string in the hash table.
-		//map<UINT64,string> listOfReads = hashTable->getLocalHitList_nocache(localReadHits, subString, j);
+		//map<UINT64,string> listOfReads = hashTable->getLocalHitList(localReadHits, subString, j); // Search the string in the hash table.
+		map<UINT64,string> listOfReads = hashTable->getLocalHitList_nocache(localReadHits, subString, j);
 		if(!listOfReads.empty()) // If other reads contain the substring as prefix or suffix
 		{
 			for(map<UINT64,string>::iterator it=listOfReads.begin() ; it!=listOfReads.end(); ++it) // For each read in the list.
@@ -822,9 +822,9 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 			}
 		}
 	}
-	//hashTable->deleteLocalHitList(localReadHits);
-	for(UINT64 j = 0; j < localReadHits.size(); j++)
-		localReadHits[j].reset();
+	hashTable->deleteLocalHitList(localReadHits);
+	//for(UINT64 j = 0; j < localReadHits.size(); j++)
+	//	localReadHits[j].reset();
 
 	if(parGraph->at(readNumber)->size() != 0)
 		sort(parGraph->at(readNumber)->begin(),parGraph->at(readNumber)->end(), compareEdges); // Sort the list of edges of the current node according to the overlap offset (ascending).
