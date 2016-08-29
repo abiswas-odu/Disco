@@ -444,6 +444,69 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			}
 			filePointer.close();
 		}
+
+		if(numprocs>1)			//Only one process will deadlock
+		{
+			int ctdReads=0;
+			//Get contained read count
+			#pragma omp parallel for schedule(guided) reduction(+:ctdReads) num_threads(parallelThreadPoolSize)
+			for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
+			{
+				Read *read1 = dataSet->getReadFromID(i); // Get the read
+				if(read1->superReadID!=0)		//Check if read is marked as contained
+					ctdReads++;
+			}
+
+			UINT64 *buf = new UINT64[ctdReads];
+			size_t j=0;
+			//Populate buffer of contained reads
+			for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
+			{
+				Read *read1 = dataSet->getReadFromID(i); // Get the read
+				if(read1->superReadID!=0)		//Check if read is marked as contained
+				{
+					buf[j]=i;
+					j++;
+				}
+			}
+
+			MPI_Request request[numprocs];
+			for(int i=0;i<numprocs;i++)
+			{
+				if(i==myProcID)
+				{
+					for(int j=0;j<numprocs;j++)
+						if(i!=j)
+							MPI_Isend(buf, ctdReads, MPI_UINT64_T, j, 0, MPI_COMM_WORLD, &request[j]);
+				}
+				else
+				{
+					int number_amount;
+					MPI_Status status;
+					// Probe for an incoming message from process i
+					MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
+					// When probe returns, the status object has the size and other
+					// attributes of the incoming message. Get the message size
+					MPI_Get_count(&status, MPI_UINT64_T, &number_amount);
+					// Allocate a buffer to hold the incoming numbers
+					UINT64* readIDBuf = new UINT64[number_amount];
+					// Now receive the message with the allocated buffer
+					MPI_Recv(readIDBuf, number_amount, MPI_UINT64_T, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					//Set contained read values
+					for(int i = 0; i < number_amount; i++) // For each readid
+					{
+						Read *read1 = dataSet->getReadFromID(readIDBuf[i]); // Get the read
+						read1->superReadID=1;
+					}
+					delete[] readIDBuf;
+				}
+			}
+			for(int i=0;i<numprocs;i++)
+				if(i!=myProcID)
+					MPI_Wait(&request[i],MPI_STATUS_IGNORE);
+			//Delete buffer of contained reads
+			delete[] buf;
+		}
 	}
 	else
 	{
@@ -482,13 +545,11 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				// Allocate a buffer to hold the incoming numbers
 				UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 				int *sendIDBuf = new int[numNodes];
+				std::memset(sendIDBuf, 0, numNodes*sizeof(int));
 				int *recvIDBuf = new int[numNodes];
 				while(!allCompleteFlag)
 				{
-					//Put main thread to sleep before next round of MPI...
-					std::this_thread::sleep_for(std::chrono::seconds(1));
 					//Get all contained reads
-
 					for(UINT64 i = 1; i < numNodes; i++) // For each read
 					{
 						Read *read1 = dataSet->getReadFromID(i); // Get the read
@@ -514,7 +575,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 							MPI_Recv(recvIDBuf, numNodes, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 							for(UINT64 i = 1; i < numNodes; i++) // For each readid
 							{
-								if(recvIDBuf[i]>0)
+								if(recvIDBuf[i]>0 && sendIDBuf[i]==0)
 								{
 									Read *read1 = dataSet->getReadFromID(i); // Get the read
 									#pragma omp atomic write
@@ -621,11 +682,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 												case 2: orientation = 2; overlapLen = read1Len - j; break; 				// 2 = r1>-------<r2
 												case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 											}
-
-											if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
-													read2->superReadID = currIndex;
-											else if(read1String.length() > hashTable->getReadLength(dataSet->getReadFromID(read2->superReadID)->getReadHashOffset())) // This super read is longer than the previous super read. Update the super read ID.
-													read2->superReadID = currIndex;
+											#pragma omp atomic write
+												read2->superReadID = currIndex;
 											//Write contained read information regardless as it is a super read has been identified
 											*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
@@ -651,11 +709,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 												case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 											}
 
-											if(read2->superReadID==0)
+											#pragma omp atomic write
 												read2->superReadID = currIndex;
-											if(read1->getReadNumber() < read2->superReadID)
-												read2->superReadID = currIndex;
-
 											//Write duplicate read information regardless as it is a super read has been identified
 											*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
@@ -692,8 +747,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				}
 				#pragma omp atomic write
 					threadFinished[threadID]=true;
-				cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Completed contained read computation."<<endl;
-			}// End if thread if-else
+			}// End of thread if-else
 		}//end of #pragma omp
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread close file pointer
 		{
@@ -703,69 +757,6 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		delete[] completedIndex;
 		cout<<"Proc:"<<myProcID<<" Completed contained read computation."<<endl;
 	}
-	//If multiple MPI processes
-	/*if(numprocs>1)			//Only one process will deadlock
-	{
-		int ctdReads=0;
-		//Get contained read count
-		#pragma omp parallel for schedule(guided) reduction(+:ctdReads) num_threads(parallelThreadPoolSize)
-		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
-		{
-			Read *read1 = dataSet->getReadFromID(i); // Get the read
-			if(read1->superReadID!=0)		//Check if read is marked as contained
-				ctdReads++;
-		}
-
-		UINT64 *buf = new UINT64[ctdReads];
-		size_t j=0;
-		//Populate buffer of contained reads
-		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
-		{
-			Read *read1 = dataSet->getReadFromID(i); // Get the read
-			if(read1->superReadID!=0)		//Check if read is marked as contained
-			{
-				buf[j]=i;
-				j++;
-			}
-		}
-
-		MPI_Request request[numprocs];
-		for(int i=0;i<numprocs;i++)
-		{
-			if(i==myProcID)
-			{
-				for(int j=0;j<numprocs;j++)
-					if(i!=j)
-						MPI_Isend(buf, ctdReads, MPI_UINT64_T, j, 0, MPI_COMM_WORLD, &request[j]);
-			}
-			else
-			{
-				int number_amount;
-				MPI_Status status;
-				// Probe for an incoming message from process i
-				MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
-				// When probe returns, the status object has the size and other
-				// attributes of the incoming message. Get the message size
-				MPI_Get_count(&status, MPI_UINT64_T, &number_amount);
-				// Allocate a buffer to hold the incoming numbers
-				UINT64* readIDBuf = new UINT64[number_amount];
-				// Now receive the message with the allocated buffer
-				MPI_Recv(readIDBuf, number_amount, MPI_UINT64_T, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				//Set contained read values
-				for(int i = 0; i < number_amount; i++) // For each readid
-				{
-					Read *read1 = dataSet->getReadFromID(readIDBuf[i]); // Get the read
-					read1->superReadID=1;
-				}
-				delete[] readIDBuf;
-			}
-		}
-		for(int i=0;i<numprocs;i++)
-			if(i!=myProcID)
-				MPI_Wait(&request[i],MPI_STATUS_IGNORE);
-		//Delete buffer of contained reads
-		delete[] buf;
-	}*/
 	#pragma omp parallel for schedule(guided) reduction(+:nonContainedReads) num_threads(parallelThreadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 	{
