@@ -469,6 +469,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		//setup variables for synchronization of threads
 		UINT64 blockSize = endIndex-startIndex+1;
 		bool *completedIndex = new bool[blockSize];
+		#pragma omp parallel for num_threads(parallelThreadPoolSize)
 		for(UINT64 i=0;i<blockSize;i++)
 			completedIndex[i]=false;
 		#pragma omp parallel num_threads(parallelThreadPoolSize)
@@ -574,8 +575,9 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				UINT64 currIndex = startIndex+(threadID-1);
 				if(currIndex<=endIndex)
 				{
+					UINT64 arrIndx=currIndex-startIndex;
 					#pragma omp atomic write
-						completedIndex[currIndex-startIndex]=true;
+						completedIndex[arrIndx]=true;
 				}
 				else
 					currIndex=0;			//Highly unusual; there are more threads than reads...
@@ -678,11 +680,12 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 					currIndex=0;
 					for(; nextIndex <= endIndex; nextIndex++) // For each read
 					{
-						if(completedIndex[nextIndex-startIndex]==false)
+						UINT64 arrIndx=nextIndex-startIndex;
+						if(completedIndex[arrIndx]==false)
 						{
 							currIndex=nextIndex;
 							#pragma omp atomic write
-								completedIndex[nextIndex-startIndex]=true;
+								completedIndex[arrIndx]=true;
 							break;
 						}
 					}
@@ -690,13 +693,14 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				#pragma omp atomic write
 					threadFinished[threadID]=true;
 				cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Completed contained read computation."<<endl;
-			}
-		}
+			}// End if thread if-else
+		}//end of #pragma omp
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread close file pointer
 		{
 			filePointerList[i]->close();
 		}
 		delete[] threadFinished;
+		delete[] completedIndex;
 		cout<<"Proc:"<<myProcID<<" Completed contained read computation."<<endl;
 	}
 	//If multiple MPI processes
