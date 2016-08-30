@@ -113,13 +113,16 @@ void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 	{
 		memoryDataPartitions->at(rankIndx)=hashDataTableSize;
 	}
+
+	setHashTableDataSize(myid);
+	populateReadData(myid);												//Populate the hash data table with reads
+
 	cout<<"Hash table partition information:"<<endl;
 	for(size_t i=0;i<memoryReadCount->size();i++)
 	{
 		cout<<"Data Part Offset:"<<memoryDataPartitions->at(i)<<" Read Count:"<<memoryReadCount->at(i)<<endl;
 	}
-	setHashTableDataSize(myid);
-	populateReadData(myid);												//Populate the hash data table with reads
+
 	CLOCKSTOP;
 }
 
