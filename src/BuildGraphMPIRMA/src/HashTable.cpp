@@ -59,7 +59,7 @@ HashTable::HashTable(UINT64 parallelProcessPoolSize)
 /**********************************************************************************************************************
 	Add Database in hashTable
 **********************************************************************************************************************/
-void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parallelProcessPoolSize, int myid)
+void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 numProcs, int myid)
 {
 	CLOCKSTART;
 	dataSet=d;
@@ -90,12 +90,12 @@ void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 	size_t hashDataTableSize = nextOffset + hashTable[hashTableSize-1];   //Calculate the size of the hash data table
 	cout << "Hash Data Table size set to: " << hashDataTableSize << endl;
 	// Defines the minimum number of hash records in each partition
-	UINT64 minWindowSize =  hashDataTableSize/parallelProcessPoolSize;
+	UINT64 minWindowSize =  hashDataTableSize/numProcs;
 	UINT64 currWinSize=0;
 	// Populate partitioning vectors based on hash record and data boundaries.
 	size_t rankIndx=0;
-	memoryDataPartitions = new vector<UINT64>(parallelProcessPoolSize+1,0);
-	memoryReadCount = new vector<UINT64>(parallelProcessPoolSize,0);
+	memoryDataPartitions = new vector<UINT64>(numProcs+1,0);
+	memoryReadCount = new vector<UINT64>(numProcs,0);
 	memoryDataPartitions->at(rankIndx)=0;
 	rankIndx++;
 	for(size_t i=1; i<hashTableSize; i++)
@@ -925,10 +925,10 @@ string HashTable::getStringForward(Read *r, int myid)
 	UINT64 rid = r->getReadNumber();
 	UINT64 *dataBlock = NULL;
 	string seq="";
-	//check local cache
-	if(!getCachedRead(rid,seq))
+	//check local cache+
+	#pragma omp critical(getRemoteData)
 	{
-		#pragma omp critical(getRemoteData)
+		if(!getCachedRead(rid,seq))
 		{
 			UINT64 stringLen=getReadLength(globalOffset, rid, myid);
 			int t_rank = getOffsetRank(globalOffset);

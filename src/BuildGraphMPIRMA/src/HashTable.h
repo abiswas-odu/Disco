@@ -22,8 +22,8 @@ enum
 };
 #define BASE_MASK 0x0000000000000003	/* binary: 11 */
 
-#define HASH_CACHE_SIZE 100000
-#define READ_CACHE_SIZE 20000
+#define HASH_CACHE_SIZE 10000
+#define READ_CACHE_SIZE 2000
 
 /**********************************************************************************************************************
 	Class to store hashtable.
