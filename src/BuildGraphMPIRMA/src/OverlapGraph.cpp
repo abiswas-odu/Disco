@@ -179,7 +179,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 			while(!allCompleteFlag)
 			{
 				//Put main thread to sleep before next round of MPI...
-				std::this_thread::sleep_for(std::chrono::seconds(60));
+				//std::this_thread::sleep_for(std::chrono::seconds(60));
 				MPI_Request sendRequest[numprocs-1];
 				size_t reqCtr=0;
 				//Send all my data
