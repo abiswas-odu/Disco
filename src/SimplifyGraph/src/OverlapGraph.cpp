@@ -2052,6 +2052,9 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 		}
 	}
 	edgeFilePointer.close();
+	fileCoveragePointer.close();
+	contigFilePointer.close();
+	fileUsedReadPointer.close();
 	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
 	CLOCKSTOP;
 }

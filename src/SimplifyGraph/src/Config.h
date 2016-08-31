@@ -101,6 +101,9 @@ extern bool printContigs;
 
 // print scaffolds or not
 extern bool printScaffolds;
+
+ // print unused reads or not
+extern bool printUnused;
 //============================================================================
 
 

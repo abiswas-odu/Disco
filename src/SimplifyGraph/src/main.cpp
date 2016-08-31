@@ -89,10 +89,21 @@ int main(int argc, char **argv) {
 		SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 					minOvl, threadPoolSize,containedCtr, i);
 	}
-
 	//Print unused reads
-
-
+	if(printUnused)
+	{
+		string unusedReads = outputFilenamePrefix+"_UnusedReads.fasta";
+		ofstream unUsedReadsFilePointer;
+		unUsedReadsFilePointer.open(unusedReads.c_str());
+		if(!unUsedReadsFilePointer)
+			MYEXIT("Unable to open file: "+unusedReads);
+		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
+		{
+			if(!dataSet->at(i)->isUsedRead())
+				unUsedReadsFilePointer<<">"<<i<<endl<<dataSet->at(i)->getStringForward();
+		}
+		unUsedReadsFilePointer.close();
+	}
 	delete dataSet;
 	CLOCKSTOP;
 	return 0;

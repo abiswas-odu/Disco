@@ -63,6 +63,8 @@ unsigned int minNumberofReadsTobePrinted = 5;
 bool printContigs=false;
 
 bool printScaffolds=true;
+
+bool printUnused=true;
 //=============================================================================
 // print help usage
 //=============================================================================
@@ -138,6 +140,9 @@ void Config::setParameters(string pFile)
 					continue;
 				else if(parName == "PrintContigs") {
 					if(parVal=="true") printContigs = true;
+				}
+				else if(parName == "PrintUnused") {
+					if(parVal=="true") printUnused = true;
 				}
 				else if(parName== "PrintScaffolds") {
 					if(parVal=="false") printScaffolds = false;
