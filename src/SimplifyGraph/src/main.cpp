@@ -90,6 +90,9 @@ int main(int argc, char **argv) {
 					minOvl, threadPoolSize,containedCtr, i);
 	}
 
+	//Print unused reads
+
+
 	delete dataSet;
 	CLOCKSTOP;
 	return 0;
@@ -174,6 +177,16 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
 	}
+
+	//Print the total used read count
+	UINT64 usedReads = 0;
+	#pragma omp parallel for schedule(guided) reduction(+:usedReads) num_threads(threadPoolSize)
+	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
+	{
+		if(dataSet->at(i)->isUsedRead())
+			usedReads++;
+	}
+	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<"Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
 
 	delete overlapGraph;
 	CLOCKSTOP;

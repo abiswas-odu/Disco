@@ -1673,6 +1673,7 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 				edgeFilePointer<<"("<<contigEdge->getInnerReadID(j)<<","<<orientation<<","
 						<<contigEdge->getInnerOverlapOffset(j)<<")";
 				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<endl;		//Write the read as used up
+				m_dataset->at(contigEdge->getInnerReadID(j))->setUsedRead(true);
 			}
 		}
 		edgeFilePointer<<endl;
