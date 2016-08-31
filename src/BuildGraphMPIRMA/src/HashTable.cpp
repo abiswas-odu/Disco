@@ -941,10 +941,8 @@ string HashTable::getStringForward(Read *r, int myid)
 			try
 			{
 				//cout<<"Proc"<<myid<<" ReadID:"<<fid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
-
-					MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
-					MPI_Win_flush(t_rank,win);
-
+				MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
+				MPI_Win_flush(t_rank,win);
 				rmaCtr++;
 				seq = toStringMPI(dataBlock,stringLen,0);
 				insertCachedRead(rid, seq);
