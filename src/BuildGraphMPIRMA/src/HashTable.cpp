@@ -543,6 +543,8 @@ int HashTable::getOffsetRank(UINT64 globalOffset) const
 vector<UINT64*> * HashTable::setLocalHitList_nocache(const string readString, int myid)
 {
 	vector<UINT64*> *localReadHits;				//AB: store data locally
+	#pragma omp critical(getRemoteData)
+	{
 		try{
 			UINT64 hashQueryCount = readString.length() - getHashStringLength();
 			localReadHits = new vector<UINT64*>(hashQueryCount);
@@ -571,21 +573,18 @@ vector<UINT64*> * HashTable::setLocalHitList_nocache(const string readString, in
 						cout<<"Req. Start: oProcess:"<<myid<<" tRank:"<<t_rank<<" GlobalOffset:"<<globalStartOffset<<" LocalOffset"<<localOffset<<" blockLen:"<<hash_block_len<<endl;
 					}*/
 					// Get data from RMA
-					#pragma omp critical(getRemoteData)
-					{
 						MPI_Get(buf, hash_block_len, MPI_UINT64_T, t_rank, localOffset, hash_block_len, MPI_UINT64_T, win);
-						MPI_Win_flush(t_rank, win);
-					}
+						//MPI_Win_flush(t_rank, win);
 					rmaCtr++;
 				}
 			}
-			//MPI_Win_flush_all(win);
+			MPI_Win_flush_all(win);
 		}
 		catch (const std::bad_alloc&) {
 			cout<<"Proc"<<myid<<" Exception Caught getting read data!!!";
 			exit(0);
 		}
-
+	}
 	return localReadHits;
 }
 /**********************************************************************************************************************
