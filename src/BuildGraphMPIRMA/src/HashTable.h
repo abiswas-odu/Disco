@@ -111,6 +111,7 @@ class HashTable{
 		bool releaseCachedEntry(UINT64 index);
 		map<UINT64,string> getLocalHitList_nocache(vector<UINT64*> *localReadHits, string subString, UINT64 subStringIndx);
 		vector<UINT64*> * setLocalHitList_nocache(const string readString, int myid);
+		string getStringForward_nocache(Read *r, int myid);
 
 
 };
