@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
 		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 		{
 			if(!dataSet->at(i)->isUsedRead())
-				unUsedReadsFilePointer<<">"<<i<<endl<<dataSet->at(i)->getStringForward();
+				unUsedReadsFilePointer<<">"<<i<<endl<<dataSet->at(i)->getStringForward()<<endl;
 		}
 		unUsedReadsFilePointer.close();
 	}
@@ -118,7 +118,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	//Load already used reads
 	for(int i=1;i < interationCount; i++)
 	{
-		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i-1)+".txt";
+		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i)+".txt";
 		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
 		UINT64 nonContainedReads = dataSet->size()-containedCtr;
 		if(usedReads>(MAX_USED*nonContainedReads))
@@ -197,7 +197,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		if(dataSet->at(i)->isUsedRead())
 			usedReads++;
 	}
-	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<"Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
+	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<" Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
 
 	delete overlapGraph;
 	CLOCKSTOP;
