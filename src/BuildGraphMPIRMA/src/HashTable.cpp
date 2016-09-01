@@ -900,6 +900,7 @@ string HashTable::toStringMPI(UINT64 *hashDataBlock,UINT64 stringLen, UINT64 sta
 	}
 	return dna_str;
 }
+//Get read length... not thread safe
 UINT64 HashTable::getReadLength(UINT64 globalOffset, UINT64 readID , int myid) const
 {
 	UINT64 dataRec;
@@ -965,31 +966,33 @@ string HashTable::getStringForward_nocache(Read *r, int myid)
 	UINT64 rid = r->getReadNumber();
 	UINT64 *dataBlock = NULL;
 	string seq="";
-	//check local cache+
+	UINT64 stringLen=0;
 	#pragma omp critical(getRemoteData)
 	{
-		UINT64 stringLen=getReadLength(globalOffset, rid, myid);
-		int t_rank = getOffsetRank(globalOffset);
-		MPI_Aint localOffset = getLocalOffset(globalOffset,t_rank)+1;
-		UINT64 dna_word_len = (stringLen / 32) + (stringLen % 32 != 0);
-		dataBlock = new UINT64[dna_word_len];
-		int tsize = 0;
-		MPI_Type_size(MPI_UINT64_T, &tsize);
-		std::memset(dataBlock, 0, dna_word_len*tsize);
-		try
+		stringLen=getReadLength(globalOffset, rid, myid);
+	}
+	int t_rank = getOffsetRank(globalOffset);
+	MPI_Aint localOffset = getLocalOffset(globalOffset,t_rank)+1;
+	UINT64 dna_word_len = (stringLen / 32) + (stringLen % 32 != 0);
+	dataBlock = new UINT64[dna_word_len];
+	int tsize = 0;
+	MPI_Type_size(MPI_UINT64_T, &tsize);
+	std::memset(dataBlock, 0, dna_word_len*tsize);
+	try
+	{
+		//cout<<"Proc"<<myid<<" ReadID:"<<fid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
+		#pragma omp critical(getRemoteData)
 		{
-			//cout<<"Proc"<<myid<<" ReadID:"<<fid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
 			MPI_Get(dataBlock, dna_word_len, MPI_UINT64_T, t_rank, localOffset, dna_word_len, MPI_UINT64_T, win);
 			MPI_Win_flush(t_rank,win);
 			rmaCtr++;
-			seq = toStringMPI(dataBlock,stringLen,0);
-			insertCachedRead(rid, seq);
 		}
-		catch (const std::bad_alloc&) {
-			cout<<"Proc"<<myid<<" Exception Caught getting read data!!!";
-			//cout<<"ReadID:"<<rid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
-			exit(0);
-		}
+		seq = toStringMPI(dataBlock,stringLen,0);
+	}
+	catch (const std::bad_alloc&) {
+		cout<<"Proc"<<myid<<" Exception Caught getting read data!!!";
+		//cout<<"ReadID:"<<rid<<", trank:"<<t_rank<<", Goffset:"<<globalOffset<<", LOffset:"<<localOffset<<", Len:"<<stringLen<<endl;
+		exit(0);
 	}
 	if(dataBlock)
 		delete[] dataBlock;
