@@ -774,7 +774,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 	Read *read1 = dataSet->getReadFromID(readNumber); 	// Get the current read read1.
 	string readString="";
 	/*Start global communication epoch*/
-	readString = hashTable->getStringForward_nocache(read1,myProcID); 		// Get the forward string of read1.
+	readString = hashTable->getStringForward(read1,myProcID); 		// Get the forward string of read1.
 	/*End global communication epoch*/
 	string subString;
 	vector<UINT64> insertedEdgeList;

@@ -548,7 +548,7 @@ vector<UINT64*> * HashTable::setLocalHitList_nocache(const string readString, in
 		try{
 			UINT64 hashQueryCount = readString.length() - getHashStringLength();
 			localReadHits = new vector<UINT64*>(hashQueryCount);
-			for(UINT64 j = 0; j < readString.length() - getHashStringLength(); j++) // for each substring of read1 of length getHashStringLength
+			for(UINT64 j = 0; j < hashQueryCount; j++) // for each substring of read1 of length getHashStringLength
 			{
 				string subString = readString.substr(j,getHashStringLength()); // Get the substring from read string
 				UINT64 index = getHashIndex(subString);	// Get the index using the hash function.
