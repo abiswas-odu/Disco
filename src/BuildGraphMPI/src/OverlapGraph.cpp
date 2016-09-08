@@ -550,6 +550,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				while(!allCompleteFlag)
 				{
 					//Get all contained reads
+					std::this_thread::sleep_for(std::chrono::seconds(10));
 					for(UINT64 i = 1; i < numNodes; i++) // For each read
 					{
 						Read *read1 = dataSet->getReadFromID(i); // Get the read

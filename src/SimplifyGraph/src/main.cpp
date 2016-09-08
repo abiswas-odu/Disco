@@ -99,8 +99,12 @@ int main(int argc, char **argv) {
 			MYEXIT("Unable to open file: "+unusedReads);
 		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 		{
-			if(!dataSet->at(i)->isUsedRead())
-				unUsedReadsFilePointer<<">"<<i<<endl<<dataSet->at(i)->getStringForward()<<endl;
+			UINT64 mateID = dataSet->getMatePair(i);
+			if((!dataSet->at(i)->isUsedRead() || !dataSet->at(mateID)->isUsedRead()) && i<mateID)
+			{
+				unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
+				unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<dataSet->at(mateID)->getStringForward()<<endl;
+			}
 		}
 		unUsedReadsFilePointer.close();
 	}

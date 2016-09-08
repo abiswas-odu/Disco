@@ -159,22 +159,31 @@ outSimplifyPrefix="${dataOutPath}/assembly/${outPrefix}"
 logFile="${dataOutPath}/${outPrefix}.log"
 #Create edge file list
 i=0
-while [ $i -lt $numThreads ]
+j=0
+while [ $j -lt $numProcs ]
 do
-   edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${i}_parGraph.txt,"
-   i=$(( $i+1 ))
+   while [ $i -lt $numThreads ]
+   do
+      edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${j}_${i}_parGraph.txt,"
+      i=$(( $i+1 ))
+   done
+   j=$(( $j+1 ))
 done
 edgeFiles=${edgeFiles%?}
 
 #Create contained read file list
 i=0
-while [ $i -lt $numThreads ]
+j=0
+while [ $j -lt $numProcs ]
 do
-   containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${i}_containedReads.txt,"
-   i=$(( $i+1 ))
+   while [ $i -lt $numThreads ]
+   do
+      containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${j}_${i}_containedReads.txt,"
+      i=$(( $i+1 ))
+   done
+   j=$(( $j+1 ))
 done
 containedReads=${containedReads%?}
-
 
 echo Starting Time is $(date)
 
@@ -201,8 +210,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
-      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
       `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
@@ -212,8 +221,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
-      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
       `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
@@ -223,8 +232,8 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
-      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
       `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
@@ -234,8 +243,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
-      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
       `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
@@ -245,8 +254,8 @@ elif [ -z "$readFileP" ] ; then
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
-      `cat ${outSimplifyPrefix}_contigsFinal_1.fasta ${outSimplifyPrefix}_contigsFinal_2.fasta ${outSimplifyPrefix}_contigsFinal_3.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
-      `cat ${outSimplifyPrefix}_scaffoldsFinal_1.fasta ${outSimplifyPrefix}_scaffoldsFinal_2.fasta ${outSimplifyPrefix}_scaffoldsFinal_3.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
       `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
