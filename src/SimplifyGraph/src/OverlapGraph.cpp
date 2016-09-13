@@ -2309,7 +2309,9 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 
 	for(UINT64 i = 0; i<listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport &&
+				listOfPairedEdges.at(i).edge1->getEdgeLength()>=minSizeToBeShortBranch &&
+				listOfPairedEdges.at(i).edge2->getEdgeLength()>=minSizeToBeShortBranch)
 		{
 			pairsOfEdgesMerged++;
 			FILE_LOG(logINFO) << setw(4) << i + 1 << " Merging (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()
@@ -2650,7 +2652,9 @@ UINT64 OverlapGraph::scaffolder(void)
 
 	for(UINT64 i = 0; i < listOfPairedEdges.size(); i++)
 	{
-		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport)
+		if(listOfPairedEdges.at(i).isFreed == false && listOfPairedEdges.at(i).uniqSupport >= minUinqSupport &&
+				listOfPairedEdges.at(i).edge1->getEdgeLength()>=minSizeToBeShortBranch &&
+				listOfPairedEdges.at(i).edge2->getEdgeLength()>=minSizeToBeShortBranch)
 		{
 			pairsOfEdgesMerged++;
 			FILE_LOG(logINFO) << setw(4) << i + 1 << " (" << setw(10) << listOfPairedEdges.at(i).edge1->getSourceRead()->getReadID()

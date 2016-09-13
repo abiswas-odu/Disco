@@ -45,15 +45,15 @@ case $key in
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
     exit 1
     ;;
-    -p|--parameterFile)     # overlap length to consider
+    -p|--parameterFile)     # parameter file for first interation of assembly
     asmParaFileP="$2"
     shift # past argument
     ;;
-    -p2|--parameterFile2)     # overlap length to consider
+    -p2|--parameterFile2)     # parameter file for second interation of assembly
     asmParaFileP2="$2"
     shift # past argument
     ;;
-    -p3|--parameterFile3)     # overlap length to consider
+    -p3|--parameterFile3)     # parameter file for subsequebt interation of assembly
     asmParaFileP3="$2"
     shift # past argument
     ;;
@@ -61,19 +61,19 @@ case $key in
     dataOutPath="$2"
     shift # past argument
     ;;
-    -in1)					# Forward paired end read file
+    -in1)					# Forward paired end read file -- single file
     readFile1="$2"
     shift # past argument
     ;;
-    -in2)					# Reverse paired end read file
+    -in2)					# Reverse paired end read file -- single file
     readFile2="$2"
     shift # past argument
     ;;
-    -inS)					# Single read file
+    -inS)					# Single read file  -- multiple files
     readFileS="$2"
     shift # past argument
     ;;
-    -inP)					# Interleaved paired end read file
+    -inP)					# Interleaved paired end read file -- multiple files
     readFileP="$2"
     shift # past argument
     ;;
