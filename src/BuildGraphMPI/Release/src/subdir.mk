@@ -1,7 +1,5 @@
 
 
--include ../../../../../compiler.mk
-
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
 ../../src/Dataset.cpp \
