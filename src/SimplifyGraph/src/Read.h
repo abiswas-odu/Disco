@@ -28,8 +28,10 @@ class Read
 		 * second: index(location) of this read on the edge and orientation
 		*/
 		Edge ** edgeP;						//Array of pointers to the edges containing the read
-		UINT32 * edgeOriIndex;				//MSB: Orientation of the read sequence in the Edge, 31 LSB index on the edge...
-		UINT64 *containedReads;				//Array of contained reads(2MSB:Read Orientation, next 30 MSB: overlap start, 32LSB: contained read ID, )											//31 LSB : Index of the read on the edge starting from source
+		UINT32 * edgeOriIndex;				//MSB: Orientation of the read sequence in the Edge,
+											//31 LSB : Index of the read on the edge starting from source
+		UINT64 *containedReads;				//Array of contained reads(2MSB:Read Orientation, next 30 MSB: overlap start, 32LSB: contained read ID, )
+
 		UINT64 m_readID;         // Unique Identification of the read.
 
 		UINT16 noOfEdges;					//Number of edges this read belongs to
@@ -40,6 +42,8 @@ class Read
 		UINT16 noOfConReads;				//Number of contained reads
 
 		bool containedReadFlag;				// True if read is contained...
+
+		bool usedRead;						// True if read is used by previous assembly...
 
 		/* ====================  METHODS      ======================================= */
 		void initEdgeInfo();
@@ -72,6 +76,12 @@ class Read
 		void setEdge(Edge *edge, UINT32 readIndx, UINT32 orient);
 
 		void delEdge(Edge *edge, UINT64 readIndx, UINT64 orient);
+
+		void ClearEdgeInfo();
+
+		void setUsedRead(bool val){
+			usedRead=val;
+		}
 
 		/* ====================  ACCESSORS     ======================================= */ 
 		std::string getStringForward(void) const {return m_seq->toString();}
@@ -111,6 +121,10 @@ class Read
 		vector<t_edge_loc_pair> getFwdEdges() const;
 
 		vector<t_edge_loc_pair> getBwdEdges() const;
+
+		bool isUsedRead() {
+			return usedRead;
+		}
 
 };/* End of class Read */
 

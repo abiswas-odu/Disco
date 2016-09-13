@@ -234,7 +234,7 @@ void mergeList(const Edge *edge1, const Edge *edge2,
 
 Edge * mergeEdges(const vector<Edge *> & list_edges);
 
-void createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize);
+UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize,UINT64 & unUsedMate, DataSet *d);
 
 void createRevList(Edge *fwdEdge, UINT64 **returnListReads, UINT64 &lSize, DataSet *d);
 

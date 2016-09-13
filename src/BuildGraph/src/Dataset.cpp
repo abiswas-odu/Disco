@@ -5,9 +5,9 @@
  * Author: Md. Bahlul Haider, Abhishek Biswas
  */
 
-#include "../src/Dataset.h"
+#include "Dataset.h"
 
-#include "../src/Common.h"
+#include "Common.h"
 
 
 /**********************************************************************************************************************

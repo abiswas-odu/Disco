@@ -7,30 +7,37 @@
  */
 
 
-#include "../src/Common.h"
-#include "../src/Dataset.h"
-#include "../src/Edge.h"
-#include "../src/HashTable.h"
-#include "../src/OverlapGraph.h"
-#include "../src/Read.h"
+#include "Common.h"
+#include "Dataset.h"
+#include "Edge.h"
+#include "HashTable.h"
+#include "OverlapGraph.h"
+#include "Read.h"
 
 void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, vector<string> & singleEndFileNames,
-		string & allFileName, UINT64 & minimumOverlapLength,
-		UINT64 & maxThreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB);
+		string & allFileName,UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile);
+
+UINT64 readOverlapParameter(string parameterFile);
 
 int main(int argc, char **argv)
 {
 	CLOCKSTART;
-	UINT64 minimumOverlapLength;
+
+	cout<<"Software: Omega Assembler"<<endl;
+	cout<<"Version : 3.0.1"<<endl;
+
 	vector<string> pairedEndFileNames, singleEndFileNames;
 	string allFileName;
+	string parameterFile;
 	UINT64 maxThreads = omp_get_max_threads();
 	UINT64 writeGraphSize = MID_PAR_GRAPH_SIZE;
 	UINT64 maxMemSizeGB = getMaxMemory();
 	cout<<"Max available memory: "<<maxMemSizeGB<< " GB"<<endl;
-	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength,
-			maxThreads, writeGraphSize,maxMemSizeGB);
+	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, allFileName,
+			maxThreads, writeGraphSize,maxMemSizeGB,parameterFile);
+	UINT64 minimumOverlapLength = readOverlapParameter(parameterFile);
 	cout<<"Max usable memory: "<<maxMemSizeGB<< " GB"<<endl;
+
 	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength);
 	OverlapGraph *overlapGraph;
 	HashTable *hashTable=new HashTable();
@@ -46,11 +53,9 @@ int main(int argc, char **argv)
 **********************************************************************************************************************/
 
 void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, vector<string> & singleEndFileNames,
-		string & allFileName, UINT64 & minimumOverlapLength,
-		UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB)
+		string & allFileName,UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile)
 {
 	allFileName = "";
-	minimumOverlapLength = 0;
 	vector<string> argumentsList;
 	cout << "PRINTING ARGUMENTS" << endl;
 	for(int i = 0; i < argc; i++)
@@ -63,11 +68,10 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 
 	if(argumentsList.size() == 1)
 	{
-		cerr << endl << "Usage: MetaGenomics [OPTION]...[PRARAM]..." << endl;
+		cerr << endl << "Usage: buildG [OPTION]...[PRARAM]..." << endl;
 		cerr << "  -pe\tnumber of files and paired-end file names" <<endl; 			// Paired-end file name in fasta/fastq format. mate pairs should be one after another in the file.
 		cerr << "  -se\tnumber of files and single-end file names" <<endl; 			// Single-end file name in fasta/fastq format.
 		cerr << "  -f\tAll file name prefix" <<endl; 			// all output file with have this name with different extensions.
-		cerr << "  -l\tminimum overlap length" << endl; 	// Minimum overlap length for two reads to overlap in the overlap graph.
 		cerr << "  -t\tmaximum threads used" << endl; 	// Maximum OMP threads used
 		cerr << "  -m\tmaximum memory usage allowed (default: max available; info: use atleast disk space size of reads + 1GB per thread specified by -t)" << endl; 	// Maximum memory to be used before written to disk
 		exit(0);
@@ -93,21 +97,20 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 		}
 		else if (argumentsList[i] == "-f")
 			allFileName = argumentsList[++i];
-		else if (argumentsList[i] == "-l")
-			minimumOverlapLength = atoi(argumentsList[++i].c_str());
 		else if (argumentsList[i] == "-t")
 			maxthreads = atoi(argumentsList[++i].c_str());
 		else if (argumentsList[i] == "-w")
 			writeGraphSize = atoi(argumentsList[++i].c_str());
 		else if (argumentsList[i] == "-m")
 			maxMemSizeGB = atoi(argumentsList[++i].c_str());
+		else if (argumentsList[i] == "-p")
+			parameterFile = argumentsList[++i];
 		else
 		{
-			cerr << endl << "Usage: MetaGenomics [OPTION]...[PRARAM]..." << endl;
+			cerr << endl << "Usage: buildG [OPTION]...[PRARAM]..." << endl;
 			cerr << "  -pe\tnumber of files and paired-end file names" <<endl; 			// Paired-end file name in fasta/fastq format. mate pairs should be one after another in the file.
 			cerr << "  -se\tnumber of files and single-end file names" <<endl; 			// Single-end file name in fasta/fastq format.
 			cerr << "  -f\tAll file name prefix" <<endl; 			// all output file with have this name with different extensions.
-			cerr << "  -l\tminimum overlap length" << endl; 	// Minimum overlap length for two reads to overlap in the overlap graph.
 			cerr << "  -t\tmaximum threads used" << endl; 	// Maximum OMP threads used
 			cerr << "  -m\tmaximum memory usage allowed (default: max available; info: use at least disk space size of reads + 1GB per thread specified by -t)" << endl; 	// Maximum memory to be used before written to disk
 			if (argumentsList[i] == "-h" || argumentsList[i] == "--help")
@@ -119,4 +122,30 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 			}
 		}
 	}
+}
+
+UINT64 readOverlapParameter(string parameterFile)
+{
+	ifstream filePointer;
+	filePointer.open(parameterFile.c_str());
+	UINT64 minimumOverlapLength=30;
+	if(!filePointer.is_open()) {
+		cerr<<"Unable to open parameter file: "<<parameterFile<<endl;
+		exit(1);
+	}
+	else {
+		string par_text="";
+		while(getline(filePointer,par_text)) {
+
+			if(par_text.find("=") != std::string::npos)
+			{
+				vector<string> tok = splitTok(par_text,'=');
+				string parName = trimmed(tok[0]);
+				string parVal = trimmed(tok[1]);
+				if(parName=="MinOverlap4BuildGraph")
+					minimumOverlapLength=stoi(parVal);
+			}
+		}
+	}
+	return minimumOverlapLength;
 }

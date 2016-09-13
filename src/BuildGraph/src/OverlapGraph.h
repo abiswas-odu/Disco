@@ -8,10 +8,10 @@
 
 #ifndef OVERLAPGRAPH_H_
 #define OVERLAPGRAPH_H_
-#include "../src/Common.h"
-#include "../src/Dataset.h"
-#include "../src/Edge.h"
-#include "../src/HashTable.h"
+#include "Common.h"
+#include "Dataset.h"
+#include "Edge.h"
+#include "HashTable.h"
 
 /**********************************************************************************************************************
 	Class to store the overlap graph.

@@ -3,9 +3,9 @@
 
 //============================================================================
 // Name        : Config.h
-// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey
-// Version     : v1.2
-// Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
+// Version     : v3.0
+// Copyright   : 2017 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : Config header file
 //============================================================================
 
@@ -38,13 +38,12 @@
 #include <fstream>
 #include <streambuf>
 #include <map>
-#include <unordered_map>
 #include <typeinfo>
-#include <tuple>
 #include <cstring>
 #include <set>
 #include <sys/wait.h>
 
+#define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
 
 // Local headers
 #include "logcpp/log.h"
@@ -83,6 +82,8 @@ extern unsigned int minEdgeLengthToBe1MinFlow;
 extern unsigned int minOvlDiffToClip;	
 // Minimum fold difference to consider branches to be short (default: 5)
 extern unsigned int minFoldToBeShortBranch;	
+// Minimum size to consider branches to be short (default: 5)
+extern unsigned int minSizeToBeShortBranch;
 
 //Minumum unique mate pair support to join edge (default: 3)
 extern unsigned int minUinqSupport;
@@ -92,11 +93,17 @@ extern unsigned int minNonUniqSupport;
 // minimum contig length to be reported (default: 1000)
 extern unsigned int minContigLengthTobeReported;
 
+// minimum reads in a contig to be reported (default: 5)
+extern unsigned int minNumberofReadsTobePrinted;
+
 // print contigs or not
 extern bool printContigs;
 
 // print scaffolds or not
 extern bool printScaffolds;
+
+ // print unused reads or not
+extern bool printUnused;
 //============================================================================
 
 
@@ -175,16 +182,18 @@ public:
     static vector<string> readInterPairedFilenamesList;
     static vector<string> edgeFilenamesList;
     static string outFilenamePrefix;
-    static string containedReadsFile;
+    static vector<string> containedReadsFile;
     static UINT64 parallelThreadPoolSize;
     static string simplifyGraphPath;
     static string paramFileName;
+    static string paramFileName2;
+    static string paramFileName3;
 
     // Get options
     static bool setConfig(int argc, char **argv);
 
     //Read and set parameter file
-    static void setParameters();
+    static void setParameters(string pFile);
 
     // Print help
     static void printHelp();
@@ -201,6 +210,9 @@ public:
     // Get edge filenames
     static vector<string> getEdgeFilenames() {return edgeFilenamesList;}
 
+    // Get contained read filenames
+    static vector<string> getContainedReadsFile() {return edgeFilenamesList;}
+
     // Get output prefix name
     static string getOutputFilenamePrefix() {return outFilenamePrefix;}
 
@@ -215,6 +227,12 @@ public:
 
     //Get parameter file name
     static string getParamFileName() {return paramFileName;}
+
+    //Get parameter file name
+    static string getParamFileName2() {return paramFileName2;}
+
+    //Get parameter file name
+    static string getParamFileName3() {return paramFileName3;}
 
     //
 };

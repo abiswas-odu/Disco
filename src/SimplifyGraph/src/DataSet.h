@@ -3,9 +3,9 @@
 
 //============================================================================
 // Name        : DataSet.h
-// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey
-// Version     : v1.2
-// Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
+// Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
+// Version     : v3.0
+// Copyright   : 2016 Oak Ridge National Lab (ORNL). All rights reserved.
 // Description : DataSet header file
 //============================================================================
 
@@ -57,9 +57,6 @@ class DataSet
 		// Load reads from an edge file, in this case, only the length is available
 		void loadReadsFromEdgeFile(const std::string &edge_file);
 
-		// Load contained read information from file
-		void storeContainedReadInformation(string containedReadFile);
-
 		//Check if read is good or bad
 		bool testRead(const string & read);
 	public:
@@ -67,7 +64,8 @@ class DataSet
 		DataSet();
 
 		// Load a list of files (either reads or edges)
-		DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles, vector<std::string> &read_PairInterFiles);
+		DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+				vector<std::string> &read_PairInterFiles);
 
 		// Copy constructor
 		DataSet(const DataSet &s_dataset);
@@ -86,6 +84,12 @@ class DataSet
 
 		void setSequenceLoaded(bool isLoaded) {isSequenceLoaded=isLoaded;}
 
+		// Load contained read information from file
+		UINT64 storeContainedReadInformation(vector<string> containedReadFile);
+
+		//Set previous used reads
+		UINT64 LoadUsedReads(string usedReadFileName);
+
 		/* ====================  ACCESSORS     ======================================= */ 
 		UINT64 size() const{ return m_vec_reads->size();}
 
@@ -101,9 +105,11 @@ class DataSet
 
 		vector<UINT64> getMatePairList(Read *read);
 
+		UINT64 getMatePair(UINT64 r1ID);
+
+		void writeUsedReads(string usedReadfileName);
 };
 
 bool compareEdgesByReads (const Edge *edge1, const Edge* edge2);
 
-void printUnorderedMap(const unordered_map<UINT64, UINT64> & readIDMap, ostream & out);
 #endif /* DATASET_H */

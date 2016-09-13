@@ -15,16 +15,16 @@
 #include "DataSet.h"
 #include "Edge.h"
 
-#define minimumUniqueSupport 2		// Minimum number of support required to merge to edges (both using matepair paths and scaffolding step)
-								// CP: should we consider using different thresholds for matepair paths and scaffolding?
-								// BH: If we want we can use different thresholds.
 #define loopLimit 15			// Number of time to loop in the main function.
-#define insertSizeRangeSD 3		// 3 means mean +/- 3 SD
-#define MAX_INNER_DIST_TRESH 2000
+#define allowedUsedReads 3
+#define EXPLORE_DEPTH 100
+#define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
+#define MAX_INNER_DIST_TRESH 100
+
 
 extern char **environ;
 
-#define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
+
 
 
 // This structure is used to store list of pair of edges and their support. Used in two function: 1. when we find path by mate-pairs 2. scaffolder.
@@ -40,12 +40,13 @@ struct pairedEdges
 		 */
 		Edge * edge1;
 		Edge * edge2;
-		UINT64 support;			// number of matepairs supporting these two edges
+		UINT64 uniqSupport;			// number of matepairs uniquely supporting these two edges
+		UINT64 nonUniqsupport;			// number of matepairs non-uniquely supporting these two edges
 		INT64 distance;		// sum of the end of read1 to the end of edge 1 and the beginning of read2 to the beginning of edge2
 		bool isFreed;
 		bool operator < (const pairedEdges& rhs) const
 		{
-		       return support > rhs.support;
+		       return uniqSupport > rhs.uniqSupport;
 		}
 
 };
@@ -147,9 +148,7 @@ class OverlapGraph
 		/* ====================  LIFECYCLE     ======================================= */
 		OverlapGraph(void);
 
-		OverlapGraph(const vector<std::string> &edge_files, 
-				const vector<std::string> &read_SingleFiles, const vector<std::string> &read_PairFiles,
-				vector<std::string> &read_PairInterFiles, string simplifyPartialPath,
+		OverlapGraph(const vector<std::string> &edge_files, string simplifyPartialPath, DataSet *dataSet,
 				const UINT64 minOvl, const UINT64 parallelThreadPoolSize);
 
 		~OverlapGraph();
@@ -158,6 +157,8 @@ class OverlapGraph
 		UINT64 getNumberOfEdges(void) const {return m_numberOfEdges;}
 
 		UINT64 getNumberOfNodes(void) const {return m_numberOfNodes;}
+
+		bool isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMate, Read *source, Read *destination);
 
 		/* ====================  MUTATORS      ======================================= */
 		void setMinOvl(const UINT64 & minOvl = 50){m_minOvl = minOvl;}
@@ -182,7 +183,7 @@ class OverlapGraph
 		// Some simple simplification.
 		void simplifyGraph(void);
 
-		void graphPathFindInitial(void);
+		void graphPathFindInitial();
 
 		// Calculate the minimum cost flow of the overlap graph using file
 		void calculateFlowStream(void);
@@ -191,11 +192,10 @@ class OverlapGraph
 		void getEdges(t_edge_vec & contigEdges) const;
 		
 		// Print contigs to file, only the ones longer than the specified printing threshold
-		void printContigs(ostream & out, string edge_file,string edge_cov_file,string namePrefix,
-				const vector<std::string> &readSingleFilenameList, const vector<std::string> &readPairedFilenameList);
+		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix);
 
 		// Print edges to a file, with an edgeName
-		void printEdge(Edge *contigEdges, ostream & filePointer, UINT64 edgeNameID) const;
+		void printEdge(Edge *contigEdges, ostream & filePointer,ostream & fileUsedReadPointer , UINT64 edgeNameID) const;
 
 		// Print all edges in the graph to a file
 		void printAllEdges(string edge_file) const;
@@ -217,14 +217,15 @@ class OverlapGraph
 		bool findPathBetweenMatepairs(const Read * read1, const Read * read2,
 				UINT8 orient, UINT8 datasetNumber, vector <Edge *> &copyOfPath, vector <UINT64> &copyOfFlags);
 
-		UINT64 exploreGraph(Edge* firstEdge, Edge * lastEdge, UINT64 distanceOnFirstEdge,
-				UINT64 distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags);
+		void exploreGraph(Edge* firstEdge, Edge * lastEdge, int distanceOnFirstEdge,
+				int distanceOnLastEdge, UINT64 datasetNumber, UINT64 level, vector <Edge *> &firstPath, vector <UINT64> &flags,
+				UINT64 &pathFound, vector <Edge *> &listOfEdges, vector <UINT64> &pathLengths);
 
 		UINT64 findSupportByMatepairsAndMerge(void);
 		UINT64 scaffolder(void);
 		vector<Edge *> * getListOfFeasibleEdges(const Edge *edge);
 		bool calculateMeanAndSdOfInnerDistance(void);
-		UINT64 checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance);
+		INT64 checkForScaffold(const Edge *edge1, const Edge *edge2, INT64 &averageGapDistance);
 		UINT64 findOverlap(const string & string1, const string & string2);
 		UINT8 mergedEdgeOrientationDisconnected(const Edge *edge1, const Edge *edge2);
 		UINT8 twinEdgeOrientation(UINT8 orientation);

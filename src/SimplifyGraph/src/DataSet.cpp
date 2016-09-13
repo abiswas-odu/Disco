@@ -145,6 +145,34 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 	m_vec_reads->shrink_to_fit();
 	CLOCKSTOP;
 }
+/*
+ * Load used read from previous rounds of assembly.
+ */
+UINT64 DataSet::LoadUsedReads(string usedReadFileName)
+{
+	// Open file and read used reads is available...
+	ifstream usedReadFilePointer;
+	UINT64 usedReadCtr=0;
+	usedReadFilePointer.open(usedReadFileName.c_str());
+	if(!usedReadFilePointer.is_open()){
+		FILE_LOG(logWARNING) << "No used read file present: " << usedReadFileName << "\n";
+	}
+	else
+	{
+		string text;
+		while(getline(usedReadFilePointer,text))
+		{
+			UINT64 readID = stoi(text);
+			if(!at(readID)->isUsedRead())
+			{
+				at(readID)->setUsedRead(true);
+				usedReadCtr++;
+			}
+		}
+		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
+	}
+	return usedReadCtr;
+}
 DataSet::~DataSet()
 {
 	if (m_vec_reads != nullptr){
@@ -214,32 +242,43 @@ bool DataSet::testRead(const string & read)
 /**********************************************************************************************************************
 	This function reads the contained read file generated during graph construction and store matepair information.
 **********************************************************************************************************************/
-void DataSet::storeContainedReadInformation(string containedReadFile)
+UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
-	cout << "Store contained read information of from file: " << containedReadFile<< endl;
-	ifstream myFile;
-	myFile.open(containedReadFile.c_str());
-	if(!myFile)
-		MYEXIT("Unable to open file: "+containedReadFile);
-
-	string text;
-	while(getline (myFile,text))
+	FILE_LOG(logINFO)<< "Store contained read information..."<< endl;
+	UINT64 containedReadCtr=0;
+	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
-		vector<string> toks = Utils::split(text,'\t');
-		UINT64 containedReadID = atoi(toks[0].c_str());
-		UINT64 containingReadID = atoi(toks[1].c_str());
+		ifstream myFile;
+		myFile.open(containedReadFile[i].c_str());
+		if(!myFile)
+			MYEXIT("Unable to open file: "+containedReadFile[i]);
 
-		vector<string> info = Utils::split(toks[2],',');
-		UINT64 containedReadOri = atoi(info[0].c_str());
-		UINT64 containedReadOverlapStart = atoi(info[8].c_str());
+		string text;
+		while(getline (myFile,text))
+		{
+			vector<string> toks = Utils::split(text,'\t');
+			UINT64 containedReadID = atoi(toks[0].c_str());
+			UINT64 containingReadID = atoi(toks[1].c_str());
 
-		at(containedReadID)->setIsContained(true);
+			vector<string> info = Utils::split(toks[2],',');
+			UINT64 containedReadOri = atoi(info[0].c_str());
+			UINT64 containedReadOverlapStart = atoi(info[8].c_str());
 
-		at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
+			if(!at(containedReadID)->isContainedRead())
+			{
+				at(containedReadID)->setIsContained(true);
+				containedReadCtr++;
+			}
+
+			at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
+		}
+		myFile.close();
 	}
-	myFile.close();
+	FILE_LOG(logINFO) << "Total number of contained reads loaded from read file(s): "
+			<< containedReadCtr << "\n";
 	CLOCKSTOP;
+	return containedReadCtr;
 }
 
 /*
@@ -279,11 +318,12 @@ UINT32 DataSet::getReadCoverage(UINT64 readID, UINT64 indx) const
 	}
 	return cov;
 }
-
-vector<UINT64> DataSet::getMatePairList(Read *read)
+/****
+ * Returns the mate id of a read, 0 otherwise
+ */
+UINT64 DataSet::getMatePair(UINT64 r1ID)
 {
-	vector<UINT64> mpList;
-	UINT64 r1ID = read->getReadID();
+	UINT64 r2ID=0;
 	for(size_t i=0; i < dataSetInfo->size();i++)
 	{
 		if(dataSetInfo->at(i).isPaired)
@@ -293,33 +333,48 @@ vector<UINT64> DataSet::getMatePairList(Read *read)
 				if(dataSetInfo->at(i).isReadInterleaved)			//Check if the read is from an interleaved read file.
 				{
 					int testForR = (r1ID-dataSetInfo->at(i).r1Start);
-					UINT64 r2ID = 0;
 					if (testForR % 2)  //If odd reverse read
 						r2ID = r1ID-1;
 					else				//If odd forward read
 						r2ID = r1ID+1;
 					if(r2ID!=0 && !at(r2ID)->isContainedRead())
-						mpList.push_back(r2ID);
+						return r2ID;
 					break;
 				}
 				else
 				{
 					UINT64 r2ID = (r1ID-dataSetInfo->at(i).r1Start) + dataSetInfo->at(i).r2Start;
 					if(!at(r2ID)->isContainedRead())
-						mpList.push_back(r2ID);
+						return r2ID;
 					break;
 				}
 			}
 			else if(r1ID>=dataSetInfo->at(i).r2Start && r1ID<=dataSetInfo->at(i).r2End)  //Interleaved file check not required as r2Start and r2End are 0s in interleaved files
 			{
-				UINT64 r2ID = (r1ID-dataSetInfo->at(i).r2Start) + dataSetInfo->at(i).r1Start;
+				r2ID = (r1ID-dataSetInfo->at(i).r2Start) + dataSetInfo->at(i).r1Start;
 				if(!at(r2ID)->isContainedRead())
-					mpList.push_back(r2ID);
+					return r2ID;
 				break;
 			}
 		}
 	}
-	return mpList;
+	return r2ID;
+}
 
+vector<UINT64> DataSet::getMatePairList(Read *read)
+{
+	vector<UINT64> mpList;
+	UINT64 r1ID = read->getReadID();
+	UINT64 r2ID = getMatePair(r1ID);
+	if(r2ID!=0)
+		mpList.push_back(r2ID);
+	for(UINT64 i=0;i<read->getContainedReadCount();i++)
+	{
+		UINT64 c1ID = read->getContainedReadID(i);
+		UINT64 c2ID = getMatePair(c1ID);
+		if(c2ID!=0)
+			mpList.push_back(c2ID);
+	}
+	return mpList;
 }
 

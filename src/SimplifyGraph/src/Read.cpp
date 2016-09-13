@@ -22,6 +22,7 @@ Read::Read(const std::string &seq)
 	containedReads = nullptr;
 	noOfConReads=0;
 	containedReadFlag=false;
+	usedRead=false;
 }
 
 /* 
@@ -74,6 +75,13 @@ void Read::delEdge(Edge *edge, UINT64 readIndx, UINT64 orient)
 		edgeOriIndex[i] = edgeOriIndex[i+1];
 	}
 	noOfEdges--;
+}
+/*
+ * Clear all edge information from the Read
+ */
+void Read::ClearEdgeInfo()
+{
+	noOfEdges=0;
 }
 std::ostream &operator<<(std::ostream & out, const Read & read)
 {

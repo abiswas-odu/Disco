@@ -411,8 +411,9 @@ void mergeList(const Edge *edge1, const Edge *edge2,
 //=============================================================================
 // Create the forward list of reads, list of overlap offsets and list of orientations from the string of edges in the file.
 //=============================================================================
-void createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize)
+UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize,UINT64 & unUsedMate, DataSet *d)
 {
+	UINT64 usedReads=0;
 	if(readList.length()>0)
 	{
 		//The reads are in ordered triplets (readID, orientation, offset)
@@ -431,9 +432,32 @@ void createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize)
 			overlapOff = overlapOff << 32;
 			UINT64 packedReadInfo =  readID | overlapOff | orient;
 			listReads[lCtr++] = packedReadInfo;
+
+			//Check if mate exists and has been used in previous assembly
+			UINT64 readIDMate = d->getMatePair(readID);
+			if(d->at(readID)->isUsedRead()) //Check if read has been used
+				usedReads++;
+
+			if(readIDMate > 0)		//Mate exists
+			{
+				if(!d->at(readIDMate)->isUsedRead()) //Check if mate has been used
+					unUsedMate++;
+			}
+
+			/*if(readIDMate > 0)		//Mate exists
+			{
+				if(d->at(readID)->isUsedRead() && d->at(readIDMate)->isUsedRead()) //Check if both have been used
+					usedReads++;
+			}
+			else
+			{
+				if(d->at(readID)->isUsedRead()) //Check if read has been used
+					usedReads++;
+			}*/
 		}
 		*returnListReads = listReads;
 	}
+	return usedReads;
 //	CLOCKSTOP;
 }
 
@@ -630,7 +654,7 @@ bool operator==(const Edge &subject, const Edge &query)
 }
 
 /*
- * Add edge to the edge list
+ * Add edge to the edge list of a read
  */
 void Read::setEdge(Edge *edge, UINT32 readIndx, UINT32 orient)
 {

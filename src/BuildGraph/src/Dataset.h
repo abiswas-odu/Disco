@@ -8,8 +8,8 @@
 
 #ifndef DATASET_H_
 #define DATASET_H_
-#include "../src/Common.h"
-#include "../src/Read.h"
+#include "Common.h"
+#include "Read.h"
 
 
 /**********************************************************************************************************************

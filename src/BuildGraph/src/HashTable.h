@@ -7,8 +7,8 @@
 
 #ifndef HASHTABLE_H_
 #define HASHTABLE_H_
-#include "../src/Common.h"
-#include "../src/Dataset.h"
+#include "Common.h"
+#include "Dataset.h"
 
 #define BIG_CONSTANT(x) (x##LLU)
 

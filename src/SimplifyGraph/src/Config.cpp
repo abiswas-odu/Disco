@@ -30,34 +30,41 @@ vector<string> Config::readPairedFilenamesList;
 vector<string> Config::readInterPairedFilenamesList;
 vector<string> Config::edgeFilenamesList;
 string Config::outFilenamePrefix = "new_omega_out";
-string Config::containedReadsFile = "";
+vector<string> Config::containedReadsFile;
 string Config::simplifyGraphPath ="";
 UINT64 Config::parallelThreadPoolSize(4);
-string Config::paramFileName="parameter.cfg";
+string Config::paramFileName="omega3.cfg";
+string Config::paramFileName2="omega3_2.cfg";
+string Config::paramFileName3="omega3_3.cfg";
 
 // global variables with default value
 unsigned int minOvl=40;
 
-unsigned int minReadsCountInEdgeToBeNotDeadEnd = 20;
-unsigned int minEdgeLengthToBeNotDeadEnd = 1000;
+unsigned int minReadsCountInEdgeToBeNotDeadEnd = 5;
+unsigned int minEdgeLengthToBeNotDeadEnd = 500;
 
-unsigned int minReadsCountToHave0Flow = 15;
-unsigned int minEdgeLengthToHave0Flow = 1500;
+unsigned int minReadsCountToHave0Flow = 10;
+unsigned int minEdgeLengthToHave0Flow = 1000;
 
-unsigned int minReadsCountInEdgeToBe1MinFlow = 10;
+unsigned int minReadsCountInEdgeToBe1MinFlow = 20;
 unsigned int minEdgeLengthToBe1MinFlow = 1000;
 
-unsigned int minOvlDiffToClip = 15;
+unsigned int minOvlDiffToClip = 25;
 unsigned int minFoldToBeShortBranch = 5;
+unsigned int minSizeToBeShortBranch = 5000;
 
-unsigned int minUinqSupport=3;
+unsigned int minUinqSupport=20;
 unsigned int minNonUniqSupport=0;
 
-unsigned int minContigLengthTobeReported = 1000;
+unsigned int minContigLengthTobeReported = 500;
+
+unsigned int minNumberofReadsTobePrinted = 5;
 
 bool printContigs=false;
 
-bool printScaffolds=false;
+bool printScaffolds=true;
+
+bool printUnused=true;
 //=============================================================================
 // print help usage
 //=============================================================================
@@ -84,12 +91,12 @@ void Config::printHelp()
 		<< endl;
 }
 
-void Config::setParameters()
+void Config::setParameters(string pFile)
 {
 	ifstream filePointer;
-	filePointer.open(paramFileName.c_str());
+	filePointer.open(pFile.c_str());
 	if(!filePointer.is_open()) {
-		MYEXIT("Unable to open parameter file: "+paramFileName);
+		MYEXIT("Unable to open parameter file: "+pFile);
 	}
 	else {
 		string par_text="";
@@ -115,6 +122,8 @@ void Config::setParameters()
 					minEdgeLengthToHave0Flow=stoi(parVal);
 				else if(parName== "minSequenceLengthTobePrinted")
 					minContigLengthTobeReported=stoi(parVal);
+				else if(parName== "minNumberofReadsTobePrinted")
+					minNumberofReadsTobePrinted=stoi(parVal);
 				else if(parName== "minOverlapDifference4ClipBranches")
 					minOvlDiffToClip=stoi(parVal);
 				else if(parName== "minFoldToBeShortBranch")
@@ -123,14 +132,21 @@ void Config::setParameters()
 					minUinqSupport=stoi(parVal);
 				else if(parName== "minNonUniquePEsupport")
 					minNonUniqSupport=stoi(parVal);
-				else if(parName== "MinOverlap4BuildGraph")
-					minOvl=stoi(parVal);
 				else if(parName== "MinOverlap4SimplifyGraph")
 					minOvl=stoi(parVal);
-				else if(parName== "PrintContigs")
-					printContigs=false;
-				else if(parName== "PrintScaffolds")
-					printScaffolds=false;
+				else if(parName== "minSizeToBeShortBranch")
+					minSizeToBeShortBranch=stoi(parVal);
+				else if(parName== "MinOverlap4BuildGraph")
+					continue;
+				else if(parName == "PrintContigs") {
+					if(parVal=="true") printContigs = true;
+				}
+				else if(parName == "PrintUnused") {
+					if(parVal=="true") printUnused = true;
+				}
+				else if(parName== "PrintScaffolds") {
+					if(parVal=="false") printScaffolds = false;
+				}
 				else
 					MYEXIT("Unknown parameter in parameter file: "+parName);
 			}
@@ -203,7 +219,7 @@ bool Config::setConfig(int argc, char **argv)
 				exit(0);
 			}
 		}
-		// -e: ovelapped edge property graph filename(s) (comma separated edge list)
+		// -e: overlapped edge property graph filename(s) (comma separated file list)
 		else if (argumentsList[i] == "-e") {
 			string inputFilenames=argumentsList[++i];
 			stringstream ss(inputFilenames);
@@ -218,13 +234,29 @@ bool Config::setConfig(int argc, char **argv)
 		else if (argumentsList[i] == "-log") {
 			FILELog::ReportingLevel() = FILELog::FromString(argumentsList[++i]);
 		}
+		// -crd: contained read filename(s) (comma separated file list)
 		else if (argumentsList[i] == "-crd")
 		{
-			Config::containedReadsFile = argumentsList[++i];
+			string inputFilenames=argumentsList[++i];
+			stringstream ss(inputFilenames);
+			string item;
+
+			while (getline(ss, item, ','))
+			{
+				Config::containedReadsFile.push_back(item);
+			}
 		}
 		else if (argumentsList[i] == "-p")
 		{
 			Config::paramFileName = argumentsList[++i];
+		}
+		else if (argumentsList[i] == "-p2")
+		{
+			Config::paramFileName2 = argumentsList[++i];
+		}
+		else if (argumentsList[i] == "-p3")
+		{
+			Config::paramFileName3 = argumentsList[++i];
 		}
 		else if (argumentsList[i] == "-simPth")
 		{

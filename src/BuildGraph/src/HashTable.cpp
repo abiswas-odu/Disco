@@ -6,9 +6,9 @@
  */
 
 
-#include "../src/HashTable.h"
+#include "HashTable.h"
 
-#include "../src/Common.h"
+#include "Common.h"
 
 
 
