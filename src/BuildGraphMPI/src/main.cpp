@@ -102,18 +102,19 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 	{
 		if(argumentsList[i] == "-pe")
 		{
-			UINT64 numberOfPairedEndDatasets = atoi(argumentsList[++i].c_str());
-			for(UINT64 j = 0; j < numberOfPairedEndDatasets; j++)
+			string fileNames = argumentsList[++i];
+			vector<string> files = splitTok(fileNames,',');
+			for(UINT64 j = 0; j < files.size(); j++)
 			{
-				pairedEndFileNames.push_back(argumentsList[++i]);
+				pairedEndFileNames.push_back(files[j]);
 			}
 		}
 		else if(argumentsList[i] == "-se")
 		{
-			UINT64 numberOfSingleEndDatasets = atoi(argumentsList[++i].c_str());
-			for(UINT64 j = 0; j < numberOfSingleEndDatasets; j++)
+			vector<string> files = splitTok(argumentsList[++i].c_str(),',');
+			for(UINT64 j = 0; j < files.size(); j++)
 			{
-				singleEndFileNames.push_back(argumentsList[++i]);
+				singleEndFileNames.push_back(files[j]);
 			}
 		}
 		else if (argumentsList[i] == "-f")
