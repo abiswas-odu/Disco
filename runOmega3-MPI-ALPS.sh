@@ -9,7 +9,7 @@ fi;
 
 #Basic parameters defaults
 numThreads=`nproc`
-numProcs=3
+numProcs=$PBS_NUM_NODES
 readFile1=""
 readFile2=""
 readFileS=""
@@ -27,13 +27,13 @@ do
 key="$1"
 case $key in
     -h|--help)              # help output
-    echo -e "Usage:\n"
+    echo -e "Usage: For clusters using Application Level Placement Scheduler (ALPS) \n"
     echo -e "   runOmega3.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
-    echo -e "   -inS\t single read filename.\n"
-    echo -e "   -in1\t forward paired read filename.\n"
-    echo -e "   -in2\t reverse paired read filename.\n"
-    echo -e "   -inP\t interleaved paired read filename.\n"
+    echo -e "   -inS\t single read filenames (comma seperated).\n"
+    echo -e "   -in1\t forward paired read filename (single file).\n"
+    echo -e "   -in2\t reverse paired read filename (single file).\n"
+    echo -e "   -inP\t interleaved paired read filenames (comma seperated).\n"
     echo -e "   -d\t output directory path.\n"
     echo -e "   -o\t output filename prefix.\n"
     echo -e "   -p\t assembly parameter file.\n"
