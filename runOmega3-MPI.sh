@@ -44,6 +44,7 @@ case $key in
     echo -e "   -n\t number of threads (DEFAULT: $numThreads).\n"
     echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
+    echo -e "   -rma\t enable distributed memory with remote memory acess (DEFAULT: False).\n"
     exit 1
     ;;
     -p|--parameterFile)     # overlap length to consider

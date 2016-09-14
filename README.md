@@ -3,9 +3,54 @@
 Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **Omega3**. 
 
 ### Setup and Installation
+
+### Dependencies
+
+* C++11 i.e. gcc4.9+ or above
+** mpic++ wrapper should be available
+** If you are on a Cray cluster and the wrapper is "CC". You will need to edit the compiler.mk file. Uncomment the line "CC := CC" and comment out "CC := mpic++"  
+* OpenMPI 1.8 and above or cray-mpich/7.4.0 and above
+
+### Installation Steps
 1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on both Linux and MacOS systems, but not under Windows.
-2. If you decide to sownload the executable, type `make` to build.
-3. If compiled successfully, the executabled required will be generated. The assembler is invoked through a run script `./runOmega3.sh`. Use `./runOmega3.sh -h` for help information.
+2. If you decide to download the executable, type `make` to build.
+3. If compiled successfully, the required executables will be built. 
+
+### Quickly Running The Assembler
+
+There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster.  
+
+* Single Machine Version: This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runOmega3.sh`. Make sure the RAM on the machine is more than the disk space size of the reads. The quick start commands are:   
+
+```
+#!/bin/bash
+
+# Seperated paired end reads
+runOmega3.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
+
+```
+Use `./runOmega3.sh -h` for help information.
+
+* MPI Version: This version of the assembler should be used if you are going to run the assembler with MPI support on a cluster. The run script to invoke the assembler depends on the cluster management and job scheduling system.
+
+	1. If you have ORTE i.e. "mpirun" is avilable, invoke the assembler using the run script `runOmega3-MPI.sh`. 
+	2. If you have SLRUM i.e. "srun" is available, invoke the assembler using the run script `runOmega3-MPI-SLRUM.sh`.
+	3. If you have ALPS i.e. "aprun" is available, invoke the assembler using the run script `runOmega3-MPI-ALPS.sh`.
+ 
+For the basic MPI version make sure the RAM on the nodes is more than the disk space size of the reads. If you have a large dataset, then use the Remote Memory Access (RMA) version. The RMA version of the assembler will equally distribute about 70% of the memory usage across all the MPI nodes. The quick start commands are:
+```
+#!/bin/bash
+
+### MPI Verion 
+### Seperated paired end reads
+runOmega3-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
+
+### MPI Remote Memory Access(RMA) Verion 
+### Seperated paired end reads
+runOmega3-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} -rma 
+
+```
+Use `runOmega3-MPI.sh -h` for help information.
 
 ### Features
 
@@ -186,10 +231,6 @@ minEdgeLengthToBe1MinFlow = 2000
 #### Omega3 Assembler Output
 
 Please see the OUTPUT.md file for description of the output files.  
-
-### Dependencies
-
-* C++11, gcc4.9+
 
 ### Questions?
 
