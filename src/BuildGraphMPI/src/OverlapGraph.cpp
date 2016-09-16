@@ -667,6 +667,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 																										// Orientation 1 means suffix of forward of the read
 																										// Orientation 2 means prefix of reverse of the read
 																										// Orientation 3 means prefix of reverse of the read
+									if(read2->superReadID!=0)		//If read is already marked as contained, there is no need to check if its contained again
+										continue;
 									UINT64 read2Len = hashTable->getReadLength(read2->getReadHashOffset());
 
 									if(read1->getReadNumber() != read2->getReadNumber() && checkOverlapForContainedRead(read1String,read2,(data >> 62),j)) // read1 need to be longer than read2 in order to contain read2
