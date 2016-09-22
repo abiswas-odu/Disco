@@ -264,7 +264,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 				}
 			}
 			INT64 mem_used = checkMemoryUsage();
-			if(writtenMakedNodes>0)
+			if(writtenMakedNodes>5)
 				cout<<"Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
 			saveParGraphToFile(fnamePrefix + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 			for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
@@ -371,11 +371,13 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 						UINT64 data = listOfReads->at(k); // We used bit operation in the hash table to store read ID and orientation
 						UINT64 read2ID = data & 0X3FFFFFFFFFFFFFFF;
 						Read *read2 = dataSet->getReadFromID(read2ID); 	// Least significant 62 bits store the read number.
-																							// Most significant 2 bits store the orientation.
-																							// Orientation 0 means prefix of forward of the read
-																							// Orientation 1 means suffix of forward of the read
-																							// Orientation 2 means prefix of reverse of the read
-																							// Orientation 3 means prefix of reverse of the read
+																		// Most significant 2 bits store the orientation.
+																		// Orientation 0 means prefix of forward of the read
+																		// Orientation 1 means suffix of forward of the read
+																		// Orientation 2 means prefix of reverse of the read
+																		// Orientation 3 means prefix of reverse of the read
+						if(read2->superReadID!=0)		//If read is already marked as contained, there is no need to check if its contained again
+							continue;
 						UINT64 read2Len = hashTable->getReadLength(read2->getReadHashOffset());
 
 						if(read1->getReadNumber() != read2->getReadNumber() && checkOverlapForContainedRead(readString,read2,(data >> 62),j)) // read1 need to be longer than read2 in order to contain read2
