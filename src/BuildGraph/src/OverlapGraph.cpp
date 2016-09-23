@@ -394,8 +394,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 									case 2: orientation = 2; overlapLen = read1Len - j; break; 				// 2 = r1>-------<r2
 									case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 								}
-								if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
-									read2->superReadID = i;
+								//if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
+								//	read2->superReadID = i;
 								//Write contained read information regardless as it is a super read has been identified
 								*(filePointerList[threadID]) <<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 										<<read2Len<<","
