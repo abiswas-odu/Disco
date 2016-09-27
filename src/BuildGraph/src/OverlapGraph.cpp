@@ -593,7 +593,8 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 		vector<UINT64> * listOfReads=hashTable->getListOfReads(subString); // Search the string in the hash table.
 		if(listOfReads) // If there are some reads that contain s as prefix or suffix of the read or their reverse complement
 		{
-			for(UINT64 k = 0; k < listOfReads->size(); k++) // For each such reads.
+			int insertCtr=0;
+			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < 10; k++) // For each such reads.
 			{
 				UINT64 data = listOfReads->at(k);			// We used bit operations in the hash table. Most significant 2 bits store orientation and least significant 62 bits store read ID.
 				UINT64 read2ID = (data & 0X3FFFFFFFFFFFFFFF);
@@ -617,6 +618,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 					}
 					insertEdge(read1,read2,orientation,read1Len-overlapLen, parGraph); 			// Insert the edge in the graph.
 					insertedEdgeList.push_back(read2ID);
+					insertCtr++;
 				}
 			}
 			delete listOfReads;
