@@ -12,7 +12,7 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.8
+#define MAX_USED 0.6
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
