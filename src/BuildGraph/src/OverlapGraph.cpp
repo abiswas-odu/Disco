@@ -594,7 +594,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 		if(listOfReads) // If there are some reads that contain s as prefix or suffix of the read or their reverse complement
 		{
 			int insertCtr=0;
-			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < 1024; k++) // For each such reads.
+			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < 64; k++) // For each such reads.
 			{
 				UINT64 data = listOfReads->at(k);			// We used bit operations in the hash table. Most significant 2 bits store orientation and least significant 62 bits store read ID.
 				UINT64 read2ID = (data & 0X3FFFFFFFFFFFFFFF);
