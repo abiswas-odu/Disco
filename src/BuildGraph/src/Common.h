@@ -33,6 +33,9 @@
 #include <ctime>
 #include <functional>
 #include <memory>
+#include <zlib.h>
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
 
 using namespace std;
 

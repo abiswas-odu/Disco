@@ -383,7 +383,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 						if(read1->getReadNumber() != read2->getReadNumber() && checkOverlapForContainedRead(readString,read2,(data >> 62),j)) // read1 need to be longer than read2 in order to contain read2
 																																				 // Check if the remaining of the strings also match
 						{
-							if(readString.length() > read2Len)
+							if(readString.length() > read2Len) 			//Contained read
 							{
 								UINT64 overlapLen=0;
 								UINT64 orientation=1;
@@ -394,8 +394,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 									case 2: orientation = 2; overlapLen = read1Len - j; break; 				// 2 = r1>-------<r2
 									case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 								}
-								//if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
-								//	read2->superReadID = i;
+								if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
+									read2->superReadID = i;
 								//Write contained read information regardless as it is a super read has been identified
 								*(filePointerList[threadID]) <<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 										<<read2Len<<","
@@ -408,7 +408,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 										<<read1Len-overlapLen+read2Len
 										<<endl;
 							}
-							else if(readString.length() == read2Len && read1->getReadNumber() < read2->getReadNumber())
+							else if(readString.length() == read2Len && read1->getReadNumber() < read2->getReadNumber()) //Duplicate read
 							{
 								UINT64 overlapLen=0;
 								UINT64 orientation=1;
@@ -594,7 +594,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 		if(listOfReads) // If there are some reads that contain s as prefix or suffix of the read or their reverse complement
 		{
 			int insertCtr=0;
-			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < 10; k++) // For each such reads.
+			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < 1024; k++) // For each such reads.
 			{
 				UINT64 data = listOfReads->at(k);			// We used bit operations in the hash table. Most significant 2 bits store orientation and least significant 62 bits store read ID.
 				UINT64 read2ID = (data & 0X3FFFFFFFFFFFFFFF);

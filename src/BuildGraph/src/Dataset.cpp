@@ -84,75 +84,111 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 {
 	CLOCKSTART;
 	cout << "Reading dataset: " << datasetNumber << " from file: " << fileName << endl;
-	ifstream myFile;
-	myFile.open (fileName.c_str());
-	if(!myFile)
-		MYEXIT("Unable to open file: "+fileName)
 	UINT64 goodReads = 0, badReads = 0;
-	vector<string> line;
-	string text;
-	enum FileType { FASTA, FASTQ, UNDEFINED};
-	FileType fileType = UNDEFINED;
-	while(getline(myFile,text))
+	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
-		string line1="",line0="";
-		if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-			cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-		if(fileType == UNDEFINED)
-		{
-			if(text[0] == '>')
-				fileType = FASTA;
-			else if(text[0] == '@')
-				fileType = FASTQ;
-			else
-				MYEXIT("Unknown input file format.");
-		}
-		line.clear();
-		if(fileType == FASTA) 			// Fasta file
-		{
-			line.push_back(text);
-			getline (myFile,text,'>');
-			line.push_back(text);
-
-			line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1);								// The first string is in the 2nd line.
-
-		}
-		else if(fileType == FASTQ) 					// Fastq file.
-		{
-			line.push_back(text);
-			for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+		gzFile fp;
+		kseq_t *seq;
+		int l;
+		fp = gzopen(fileName.c_str(), "r");
+		seq = kseq_init(fp);
+		while ((l = kseq_read(seq)) >= 0) {
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			string line1=seq->seq.s;
+			fIndx++;							//Increment file index of the read
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
 			{
-				getline (myFile,text);
-				line.push_back(text);
+				Read *r1=new Read(fIndx);
+				UINT64 len = line1.length();
+				if(len > longestReadLength)
+					longestReadLength = len;
+				if(len < shortestReadLength)
+					shortestReadLength = len;
+				reads->push_back(r1);						// Store the first string in the dataset.
+				numberOfReads++;							// Counter of the total number of reads.
+				goodReads++;
 			}
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1); 			// The first string is in the 2nd line.
+			else
+				badReads++;
 		}
-		fIndx++;							//Increment file index of the read
-		for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-		    *p = toupper(*p);
-		if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
-		{
-			Read *r1=new Read(fIndx);
-			UINT64 len = line1.length();
-			if(len > longestReadLength)
-				longestReadLength = len;
-			if(len < shortestReadLength)
-				shortestReadLength = len;
-
-			reads->push_back(r1);						// Store the first string in the dataset.
-			numberOfReads++;							// Counter of the total number of reads.
-			goodReads++;
-		}
-		else
-			badReads++;
+		kseq_destroy(seq);
+		gzclose(fp);
 	}
+	else
+	{
+		ifstream myFile;
+		myFile.open (fileName.c_str());
+		if(!myFile)
+			MYEXIT("Unable to open file: "+fileName)
 
-	myFile.close();
+		vector<string> line;
+		string text;
+		enum FileType { FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+		while(getline(myFile,text))
+		{
+			string line1="",line0="";
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			if(fileType == UNDEFINED)
+			{
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else
+					MYEXIT("Unknown input file format.");
+			}
+			line.clear();
+			if(fileType == FASTA) 			// Fasta file
+			{
+				line.push_back(text);
+				getline (myFile,text,'>');
+				line.push_back(text);
+
+				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1);								// The first string is in the 2nd line.
+
+			}
+			else if(fileType == FASTQ) 					// Fastq file.
+			{
+				line.push_back(text);
+				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+				{
+					getline (myFile,text);
+					line.push_back(text);
+				}
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1); 			// The first string is in the 2nd line.
+			}
+			fIndx++;							//Increment file index of the read
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+			{
+				Read *r1=new Read(fIndx);
+				UINT64 len = line1.length();
+				if(len > longestReadLength)
+					longestReadLength = len;
+				if(len < shortestReadLength)
+					shortestReadLength = len;
+
+				reads->push_back(r1);						// Store the first string in the dataset.
+				numberOfReads++;							// Counter of the total number of reads.
+				goodReads++;
+			}
+			else
+				badReads++;
+		}
+
+		myFile.close();
+	}
     cout << endl << "Dataset: " << setw(2) << datasetNumber << endl;
     cout << "File name: " << fileName << endl;
 	cout << setw(10) << goodReads << " good reads in current dataset."  << endl;
