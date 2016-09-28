@@ -12,7 +12,7 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.6
+#define MAX_USED 0.8
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
@@ -216,7 +216,6 @@ void SetParameters(int interationCount)
 		Config::setParameters(Config::getParamFileName2());
 	else
 		Config::setParameters(Config::getParamFileName3());
-
 	FILE_LOG(logINFO) << "Log level is " << FILELog::ReportingLevel() << ":\t" << Config::getLogLevel() << endl;
 	FILE_LOG(logINFO) << "Minimum overlap length is: " << minOvl << endl;
 	FILE_LOG(logINFO) << "Maximum read count in dead-end edge is: " << minReadsCountInEdgeToBeNotDeadEnd << endl;
@@ -226,5 +225,4 @@ void SetParameters(int interationCount)
 	FILE_LOG(logINFO) << "Minimum edge length for edges to be reported is: " << minContigLengthTobeReported << endl;
 	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
 	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
-
 }
