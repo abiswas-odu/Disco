@@ -6,9 +6,9 @@
  */
 
 #include "Dataset.h"
-
 #include "Common.h"
-
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
 
 /**********************************************************************************************************************
 	Default constructor
