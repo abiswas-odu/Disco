@@ -49,7 +49,7 @@ all: fullsimplify parsimplify
 fullsimplify: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++ -fopenmp -o "fullsimplify" $(OBJS) $(USER_OBJS) $(LIBS)
+	g++ -fopenmp -o "fullsimplify" $(OBJS) $(USER_OBJS) $(LIBS) -lz
 	@echo 'Finished building target: $@'
 	@echo ' '
 	
@@ -57,7 +57,7 @@ fullsimplify: $(OBJS) $(USER_OBJS)
 parsimplify: $(OBJS2) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++ -fopenmp -o "parsimplify" $(OBJS2) $(USER_OBJS) $(LIBS)
+	g++ -fopenmp -o "parsimplify" $(OBJS2) $(USER_OBJS) $(LIBS) -lz
 	@echo 'Finished building target: $@'
 	@echo ' '
 

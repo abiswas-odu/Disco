@@ -42,6 +42,7 @@
 #include <cstring>
 #include <set>
 #include <sys/wait.h>
+#include <zlib.h>
 
 #define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
 

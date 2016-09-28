@@ -7,6 +7,8 @@
 //============================================================================
 
 #include "DataSet.h"
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
 
 void DataSet::loadReadsFromReadFile(const std::string &read_file)
 {
@@ -17,70 +19,99 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 	// To count of reads in this file
 	UINT64 readCount = 0;
 
-	// Open file
-	ifstream filePointer;
-	filePointer.open(read_file.c_str());
-	if(!filePointer.is_open()){
-		FILE_LOG(logWARNING) << "Unable to open file: " << read_file << "\n";
-		return;
-	}
-
-	// Variables
-	string text;
-	enum FileType {FASTA, FASTQ, UNDEFINED};
-	FileType fileType = UNDEFINED;
-
-	while(getline(filePointer,text))
+	if(read_file.substr( read_file.length() - 3 )==".gz")
 	{
-		string line0="",line1="";
-		// Check FASTA and FASTQ
-		if(fileType == UNDEFINED) {
-			if (text.length() > 0){
-				if(text[0] == '>'){
-					FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
-					fileType = FASTA;
-				}
-				else if(text[0] == '@'){
-					FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
-					fileType = FASTQ;
-				}
-				else{
-					FILE_LOG(logERROR) << "Unknown input file format."<<endl;
-					break;
-				}
+		gzFile fp;
+		kseq_t *seq;
+		int l;
+		fp = gzopen(read_file.c_str(), "r");
+		seq = kseq_init(fp);
+		while ((l = kseq_read(seq)) >= 0) {
+			string line1=seq->seq.s;
+			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
+			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
+				std::replace( line1.begin(), line1.end(), 'N', 'A');
+			Read *r = new Read(line1);
+			r->setReadID(readID);
+			// add read to the dataset
+			addRead(r);
+			++readID;
+			++readCount;
+			if(readCount % 1000000 == 0){
+				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
+					<< " reads loaded to memory, "
+					<< setw(7) << checkMemoryUsage() << " MB\n";
 			}
 		}
-		line0=text;	// get ID line
-		// FASTA file read
-		if(fileType == FASTA) {
-			getline (filePointer,line1,'>');	// get string line
-			line1.erase(std::remove(line1.begin(), line1.end(), '\n'), 
-					line1.end());
-			//std::transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
-		}
-		// FASTQ file read
-		else if(fileType == FASTQ) {
-			getline(filePointer, line1);	// String
-			// Ignore the next two lines
-			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-		transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
-		if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
-			std::replace( line1.begin(), line1.end(), 'N', 'A');
-		Read *r = new Read(line1);
-		r->setReadID(readID);
-		// add read to the dataset
-		addRead(r);
-		++readID;
-		++readCount;
-		if(readCount % 1000000 == 0){
-			FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"  
-				<< " reads loaded to memory, "
-				<< setw(7) << checkMemoryUsage() << " MB\n";
-		}
+		kseq_destroy(seq);
+		gzclose(fp);
 	}
-	filePointer.close();
+	else
+	{
+		// Open file
+		ifstream filePointer;
+		filePointer.open(read_file.c_str());
+		if(!filePointer.is_open()){
+			FILE_LOG(logWARNING) << "Unable to open file: " << read_file << "\n";
+			return;
+		}
+		// Variables
+		string text;
+		enum FileType {FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+
+		while(getline(filePointer,text))
+		{
+			string line0="",line1="";
+			// Check FASTA and FASTQ
+			if(fileType == UNDEFINED) {
+				if (text.length() > 0){
+					if(text[0] == '>'){
+						FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
+						fileType = FASTA;
+					}
+					else if(text[0] == '@'){
+						FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
+						fileType = FASTQ;
+					}
+					else{
+						FILE_LOG(logERROR) << "Unknown input file format."<<endl;
+						break;
+					}
+				}
+			}
+			line0=text;	// get ID line
+			// FASTA file read
+			if(fileType == FASTA) {
+				getline (filePointer,line1,'>');	// get string line
+				line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
+						line1.end());
+				//std::transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
+			}
+			// FASTQ file read
+			else if(fileType == FASTQ) {
+				getline(filePointer, line1);	// String
+				// Ignore the next two lines
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
+			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
+				std::replace( line1.begin(), line1.end(), 'N', 'A');
+			Read *r = new Read(line1);
+			r->setReadID(readID);
+			// add read to the dataset
+			addRead(r);
+			++readID;
+			++readCount;
+			if(readCount % 1000000 == 0){
+				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
+					<< " reads loaded to memory, "
+					<< setw(7) << checkMemoryUsage() << " MB\n";
+			}
+		}
+		filePointer.close();
+	}
 	FILE_LOG(logDEBUG) << setw(10) << readCount << " reads loaded from this read file\n";
 	CLOCKSTOP;
 }
