@@ -87,7 +87,7 @@ case $key in
     numThreads="$2"
     shift # past argument
     ;;
-    -np|--numprocs)		# Threads to use
+    -np|--numprocs)		# MPI processes to use
     numProcs="$2"
     shift # past argument
     ;;
