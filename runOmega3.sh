@@ -125,9 +125,9 @@ fi
 
 SIMPLIFYEXE="${exePath}/fullsimplify"
 if [ -f $SIMPLIFYEXE ] ; then
-   echo "Graph simplification module $PARSIMPLIFYEXE exists."
+   echo "Graph simplification module $SIMPLIFYEXE exists."
 else
-   echo "Graph simplification module $PARSIMPLIFYEXE does not exist in script directory."
+   echo "Graph simplification module $SIMPLIFYEXE does not exist in script directory."
 fi
 #All exe files in place
 
