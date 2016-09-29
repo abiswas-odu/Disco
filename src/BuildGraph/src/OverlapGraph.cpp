@@ -213,6 +213,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 					isPrevMarked=true;
 				if(!isPrevMarked || read1==startReadID)
 				{
+					cout<<"Thread:"<<threadID<<" Next Read ID:"<<read1<<" Reads Processed:"<<writtenMakedNodes<< endl;
 					if(exploredReads->find(read1) ==  exploredReads->end()) //if node is UNEXPLORED
 					{
 						insertAllEdgesOfRead(read1, exploredReads, parGraph);					// Explore current node.

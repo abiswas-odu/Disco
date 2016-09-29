@@ -454,36 +454,39 @@ vector<UINT64> * HashTable::getListOfReads(const string & subString) const
 		UINT64 orient = hashData[startOffset] >> 63;
 		UINT64 stringLen = (hashData[startOffset] >> 48) & 0X0000000000007FFF;
 		UINT64 dataLen = (stringLen / 32) + (stringLen % 32 != 0);
-		if(orient==0){
-			string forwardRead = toString(startOffset+1,stringLen);
-			string prefixForward = forwardRead.substr(0,hashStringLength);
-			string suffixReverse = reverseComplement(prefixForward);
-			if(subString==prefixForward)
-			{
-				UINT64 orientation=0;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+		if(dataSet->getReadFromID(readID)->superReadID == 0) //if non-contained read, then add to list with correct orientation
+		{
+			if(orient==0){
+				string forwardRead = toString(startOffset+1,stringLen);
+				string prefixForward = forwardRead.substr(0,hashStringLength);
+				string suffixReverse = reverseComplement(prefixForward);
+				if(subString==prefixForward)
+				{
+					UINT64 orientation=0;
+					UINT64 data = readID | (orientation << 62);
+					readHits->push_back(data);
+				}
+				else if(subString==suffixReverse){
+					UINT64 orientation=3;
+					UINT64 data = readID | (orientation << 62);
+					readHits->push_back(data);
+				}
 			}
-			else if(subString==suffixReverse){
-				UINT64 orientation=3;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
-			}
-		}
-		else {
-			string forwardRead = toString(startOffset+1,stringLen);
-			string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);
-			string prefixReverse = reverseComplement(suffixForward);
-			if(subString==suffixForward)
-			{
-				UINT64 orientation=1;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
-			}
-			else if(subString==prefixReverse){
-				UINT64 orientation=2;
-				UINT64 data = readID | (orientation << 62);
-				readHits->push_back(data);
+			else {
+				string forwardRead = toString(startOffset+1,stringLen);
+				string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);
+				string prefixReverse = reverseComplement(suffixForward);
+				if(subString==suffixForward)
+				{
+					UINT64 orientation=1;
+					UINT64 data = readID | (orientation << 62);
+					readHits->push_back(data);
+				}
+				else if(subString==prefixReverse){
+					UINT64 orientation=2;
+					UINT64 data = readID | (orientation << 62);
+					readHits->push_back(data);
+				}
 			}
 		}
 		startOffset+=dataLen+1;
