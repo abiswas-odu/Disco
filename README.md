@@ -170,9 +170,7 @@ The configurable parameters include the following:
 # Increase this to reduce N50 and mis-assemblies
 MinOverlap4BuildGraph = 40  
 
-
 ###################################################
-
 
 #### Parameters for simplifying an overlap graph ####
 # You can run graph simplification using different settings below on the same assembly graph without re-doing graph construction.
