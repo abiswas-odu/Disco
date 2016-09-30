@@ -100,25 +100,20 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 # 13. 1>trim.o 2>&1, redirect stderr to stdout, and save both to file *trim.o*
 adapters= bbmap_dir/resources/adapters.fa
 phiX_adapters= bbmap_dir/resources/phix174_ill.ref.fa.gz
-bbduk.sh in=$reads out=trim.fq.gz ftm=5 k=23 ktrim=r mink=11 qhdist=1 tbo tpe qtrim=r trimq=10 minlength=70 ref=$adapters -Xmx8g 1>trim.o 2>&1
-bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=31 threads=48
+bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=10
+bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=31
 ```
 
 ##### Error correction with Tadpole
 
-Tarpole is a memory efficient error correction tool that runs within reasonable time. We suggest using this for error correction. 
-
+Tarpole is a memory efficient error correction tool from the bbtools package that runs within reasonable time. We suggest using this for error correction. 
 ```
 #!bash
 # 1. mode=correct, use tadpole for correction
 # 2. ecc=t, error correct via kmer counts
-# 3. shave, remove dead ends in the kmer graph
-# 4. rinse, remove bubbles
-# 5. -Xmx120g, use 120G memory
-# 6. markbadbases=2, change bases fully covered by less than 2 kmers to N
-tadpole.sh in=merged.fq.gz out=merged_EC.fq.gz mode=correct markbadbases=2 ecc=t shave rinse -Xmx120g &> ecc.out
-# 1. maxns=0, reads more than 0 Ns after trimming wil be discarded.
-reformat.sh in=merged_EC.fq.gz out=merged_EC_reformat.fq.gz maxns=0 -Xmx120g 1>> ecc.out 2>&1
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=1 prealloc k=31
+#If the above goes out of memory, try
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=31
 ```
 
 ### Assembly of Error Corrected Data
