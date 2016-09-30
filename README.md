@@ -13,9 +13,9 @@ Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-co
 ### Installation Steps
 1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on both Linux and MacOS systems, but not under Windows.
 2. If you decide to download the source code, use the following commands to build:
-..i. OpenMP version "make openmp" 
-..ii. MPI distributed computing version "make mpi-dist-comp" 
-..iii. MPI distributed memory version "make mpi-dist-mem"
+  i. OpenMP version "make openmp" 
+  ii. MPI distributed computing version "make mpi-dist-comp" 
+  iii. MPI distributed memory version "make mpi-dist-mem"
 3. If compiled successfully, the required executables will be built. 
 
 ### Quickly Running The Assembler
