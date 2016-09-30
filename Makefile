@@ -87,7 +87,7 @@ all:
 		cp runOmega3.sh Omega3
 		cp runOmega3-MPI.sh Omega3
 		cp runOmega3-MPI-ALPS.sh Omega3
-		cp runOmega3-MPI-SLRUM.sh Omega3
+		cp runOmega3-MPI-SLURM.sh Omega3
 		cp README.md Omega3
 		cp OUTPUT.md Omega3
 		cp LICENSE Omega3
@@ -98,7 +98,9 @@ clean:
 		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) clean
 		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) clean
 		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) clean
-		-$(RM) -rf buildG buildG-MPI buildG-MPIRMA fullsimplify parsimplify Omega3_x86-Linux.tar.gz Omega3
+		-$(RM) -rf buildG buildG-MPI buildG-MPIRMA fullsimplify parsimplify 
+		-$(RM) -rf Omega3_omp_x86-Linux.tar.gz Omega3_MPI_DC_x86-Linux.tar.gz 
+		-$(RM) -rf Omega3_All_x86-Linux.tar.gz Omega3_MPI_DM_x86-Linux.tar.gz Omega3
 
 
 

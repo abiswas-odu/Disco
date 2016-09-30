@@ -8,11 +8,14 @@ Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-co
 
 1. GNU GCC with C++11 support i.e. gcc4.9+ or above
 2. MPI Library with MPI-3 support i.e. OpenMPI 1.8 and above or cray-mpich/7.4.0 and above. By default the mpic++ wrapper is needed. If you are on a Cray cluster and the wrapper is "CC". You will need to edit the compiler.mk file. Uncomment the line "CC := CC" and comment out "CC := mpic++".   
-3. Zlib/1.2.8 
+3. zlib/1.2.8 
  
 ### Installation Steps
 1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on both Linux and MacOS systems, but not under Windows.
-2. If you decide to download the executable, type `make` to build.
+2. If you decide to download the source code, use the following commands to build:
+	i. OpenMP version "make openmp" 
+	ii. MPI distributed computing version "make mpi-dist-comp" 
+	iii. MPI distributed memory version "make mpi-dist-mem"
 3. If compiled successfully, the required executables will be built. 
 
 ### Quickly Running The Assembler
@@ -24,8 +27,11 @@ There are two basic versions of the assembler one for running on a single machin
 ```
 #!/bin/bash
 
-# Seperated paired end reads
-runOmega3.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
+# Seperated mate pair reads
+runOmega3.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_DIR} 
+
+# Interleaved mate pair reads
+runOmega3.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_DIR} 
 
 ```
 Use `./runOmega3.sh -h` for help information.
