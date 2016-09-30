@@ -2,6 +2,9 @@
 
 Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **Omega3**. 
 
+### Current Version
+* v3.0.2
+
 ### Setup and Installation
 
 ### Dependencies
@@ -68,9 +71,6 @@ Use `runOmega3-MPI.sh -h` for help information.
 
     3. The assembler includes a paired end read based scaffolding step. 
     
- ### Current Version
-* v3.0.1
-
 ### Assembly of Metagenomic sequencing reads from raw Illumina data
 
 #### Preprocessing of the Illumina data
