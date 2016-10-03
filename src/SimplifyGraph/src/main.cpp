@@ -21,7 +21,7 @@ string outputFilenamePrefix = "omega3";
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
-		UINT64 minOvl, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
+		UINT64 minOvl,UINT64 &ctgCount, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
 
 void SetParameters(int interationCount);
 
@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
 	string simplifyPartialPath = Config::getSimplifyGraphPath();
 	loglevel 				= FILELog::ReportingLevel();
 	UINT64 threadPoolSize = Config::getThreadPoolSize();
+	UINT64 ctgCount=0;
 	FILE_LOG(logINFO) << "File(s) including reads: ";
 	if(loglevel > 1){
 		for(vector<std::string>::iterator it = readSingleFilenameList.begin(); it!=readSingleFilenameList.end(); ++it)
@@ -71,7 +72,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(1);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-			minOvl, threadPoolSize,containedCtr, 1);
+			minOvl, ctgCount, threadPoolSize,containedCtr, 1);
 
 	//Do more iterations
 	for(int i=2;i < FINAL_ITER; i++)
@@ -87,7 +88,7 @@ int main(int argc, char **argv) {
 		//Read parameter file and set assembly parameters
 		SetParameters(i);
 		SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-					minOvl, threadPoolSize,containedCtr, i);
+					minOvl, ctgCount, threadPoolSize,containedCtr, i);
 	}
 	//Print unused reads
 	if(printUnused)
@@ -100,10 +101,18 @@ int main(int argc, char **argv) {
 		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 		{
 			UINT64 mateID = dataSet->getMatePair(i);
-			if((!dataSet->at(i)->isUsedRead() || !dataSet->at(mateID)->isUsedRead()) && i<mateID)
+			if(mateID!=0)
 			{
-				unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
-				unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<dataSet->at(mateID)->getStringForward()<<endl;
+				if((!dataSet->at(i)->isUsedRead() || !dataSet->at(mateID)->isUsedRead()) && i<mateID)
+				{
+					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
+					unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<dataSet->at(mateID)->getStringForward()<<endl;
+				}
+			}
+			else
+			{
+				if(!dataSet->at(i)->isUsedRead())
+					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
 			}
 		}
 		unUsedReadsFilePointer.close();
@@ -114,7 +123,8 @@ int main(int argc, char **argv) {
 }
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
-		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
+		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 &ctgCount,
+		UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO) <<"Graph Simplification Iteration: "<<interationCount<<endl;
@@ -155,7 +165,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig");
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 	}
 
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
@@ -190,7 +200,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff");
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",ctgCount);
 	}
 
 	//Print the total used read count

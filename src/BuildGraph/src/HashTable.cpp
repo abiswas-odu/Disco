@@ -8,8 +8,10 @@
 
 #include "HashTable.h"
 #include "Common.h"
+#ifdef INCLUDE_READGZ
 #include "kseq.h"
 KSEQ_INIT(gzFile, gzread)
+#endif
 
 
 /**********************************************************************************************************************
@@ -123,6 +125,7 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 	UINT64 goodReads = 0, badReads = 0;
 	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
+#ifdef INCLUDE_READGZ
 		gzFile fp;
 		kseq_t *seq;
 		int l;
@@ -148,6 +151,11 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 		}
 		kseq_destroy(seq);
 		gzclose(fp);
+#else
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
+				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
+				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
 	}
 	else
 	{
@@ -228,6 +236,7 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 	UINT64 goodReads = 0, badReads = 0;
 	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
+#ifdef INCLUDE_READGZ
 		gzFile fp;
 		kseq_t *seq;
 		int l;
@@ -250,6 +259,11 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 		}
 		kseq_destroy(seq);
 		gzclose(fp);
+#else
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
+				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
+				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
 	}
 	else
 	{

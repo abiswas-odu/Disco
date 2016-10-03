@@ -33,12 +33,15 @@ CPP2_DEPS += \
 ./src/dna.d \
 ./src/mainParSimplify.d 
 
+ifeq ($(READGZ), 1)  #at this point, the makefile checks if FEATURE is enabled
+OPTS = -DINCLUDE_READGZ #variable passed to g++
+endif
 
 # Each subdirectory must supply rules for building sources it contributes
 src/%.o: ../src/%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	g++ -O0 -g3 -Wall -c -fmessage-length=0 -fopenmp -lz -lgomp -std=c++11 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	g++ $(OPTS) -O0 -g3 -Wall -c -fmessage-length=0 -fopenmp -lz -lgomp -std=c++11 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

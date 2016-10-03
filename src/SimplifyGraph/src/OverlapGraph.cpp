@@ -1994,7 +1994,8 @@ bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMat
  *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
  * =====================================================================================
  */
-void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix)
+void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
+		string usedReadFileName, string namePrefix, UINT64 &printed_contigs)
 {
 	CLOCKSTART;
 
@@ -2025,7 +2026,6 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 	if(!fileUsedReadPointer)
 			MYEXIT("Unable to open file: "+usedReadFileName);
 
-	UINT64 printed_contigs(0);
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{

@@ -4,6 +4,12 @@
 
 -include ../makefile.init
 
+ifeq ($(READGZ), 1)  #at this point, the makefile checks if FEATURE is enabled
+GZOPTS = 1  #variable passed to g++
+else
+GZOPTS = 0  #variable passed to g++
+endif
+
 
 BUILD_GRAPH_CODE_DIR = src/BuildGraph/Release
 BUILD_GRAPH_MPI_CODE_DIR = src/BuildGraphMPI/Release
@@ -13,8 +19,8 @@ SIMPLIFY_GRAPH_CODE_DIR = src/SimplifyGraph/Release
 .PHONY: all clean 
 
 openmp:
-		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR)
-		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR)
+		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(BUILD_GRAPH_CODE_DIR)/buildG .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
@@ -30,8 +36,8 @@ openmp:
 		tar -cvzf Omega3_omp_x86-Linux.tar.gz Omega3
 		rm -rf Omega3
 mpi-dist-comp:
-		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR)
-		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR)
+		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
 		cp $(BUILD_GRAPH_MPI_CODE_DIR)/buildG-MPI .
@@ -49,8 +55,8 @@ mpi-dist-comp:
 		tar -cvzf Omega3_MPI_DC_x86-Linux.tar.gz Omega3
 		rm -rf Omega3
 mpi-dist-mem:
-		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR)
-		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR)
+		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
 		cp $(BUILD_GRAPH_MPIRMA_CODE_DIR)/buildG-MPIRMA .
@@ -68,10 +74,10 @@ mpi-dist-mem:
 		tar -cvzf Omega3_MPI_DM_x86-Linux.tar.gz Omega3
 		rm -rf Omega3
 all:
-		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR)
-		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR)
-		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR)
-		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR)
+		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(BUILD_GRAPH_CODE_DIR)/buildG .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .

@@ -44,7 +44,7 @@ all: buildG
 buildG: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++ -fopenmp -o "buildG" $(OBJS) $(USER_OBJS) $(LIBS) -lz
+	g++ -fopenmp -o "buildG" $(OBJS) $(USER_OBJS) $(LIBS) $(OPTS) -lz
 	@echo 'Finished building target: $@'
 	@echo ' '
 
