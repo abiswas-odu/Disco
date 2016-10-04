@@ -33,7 +33,9 @@
 #include <ctime>
 #include <functional>
 #include <memory>
+#ifdef INCLUDE_READGZ
 #include <zlib.h>
+#endif
 
 using namespace std;
 

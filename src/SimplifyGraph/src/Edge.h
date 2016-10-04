@@ -48,10 +48,11 @@ class Edge{
 		UINT32 m_listSize;				// Size of m_listOfReads
 
 
-		/* overlap offset in the following example is 6
+		/* sum of the overlap offset in the following example is 9
 		*   012345678901234567890123456789
 		* u ACTTACGGGATTATACCATCGAGA
 		* v       GGGATTATACCATCGAGATTCAAT
+		* j		     ATTATACCATCGAGATTCAATACTTAA
 		*/
 		UINT32 m_overlapOffset;
 

@@ -45,7 +45,7 @@ all: buildG-MPIRMA
 buildG-MPIRMA: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	-$(CC) -fopenmp -o "buildG-MPIRMA" $(OBJS) $(USER_OBJS) $(LIBS)
+	-$(CC) $(OPTS) -fopenmp -o "buildG-MPIRMA" $(OBJS) $(USER_OBJS) $(LIBS) -lz
 	@echo 'Finished building target: $@'
 	@echo ' '
 

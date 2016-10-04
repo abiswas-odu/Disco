@@ -41,7 +41,7 @@ endif
 src/%.o: ../src/%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	g++ $(OPTS) -O0 -g3 -Wall -c -fmessage-length=0 -fopenmp -lz -lgomp -std=c++11 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	g++ $(OPTS) -O0 -g3 -Wall -c -fmessage-length=0 -fopenmp -Wno-sign-compare -lz -lgomp -std=c++11 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

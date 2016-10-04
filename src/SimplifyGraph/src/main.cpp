@@ -12,7 +12,7 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.6
+#define MAX_USED 0.99
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
@@ -21,7 +21,7 @@ string outputFilenamePrefix = "omega3";
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
-		UINT64 minOvl,UINT64 &ctgCount, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
+		UINT64 minOvl, UINT64 &ctgCount, UINT64 &scfCount, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
 
 void SetParameters(int interationCount);
 
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 	string simplifyPartialPath = Config::getSimplifyGraphPath();
 	loglevel 				= FILELog::ReportingLevel();
 	UINT64 threadPoolSize = Config::getThreadPoolSize();
-	UINT64 ctgCount=0;
+	UINT64 ctgCount=0, scfCount=0;
 	FILE_LOG(logINFO) << "File(s) including reads: ";
 	if(loglevel > 1){
 		for(vector<std::string>::iterator it = readSingleFilenameList.begin(); it!=readSingleFilenameList.end(); ++it)
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 	//Read parameter file and set assembly parameters
 	SetParameters(1);
 	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-			minOvl, ctgCount, threadPoolSize,containedCtr, 1);
+			minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, 1);
 
 	//Do more iterations
 	for(int i=2;i < FINAL_ITER; i++)
@@ -88,34 +88,12 @@ int main(int argc, char **argv) {
 		//Read parameter file and set assembly parameters
 		SetParameters(i);
 		SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-					minOvl, ctgCount, threadPoolSize,containedCtr, i);
+					minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, i);
 	}
 	//Print unused reads
 	if(printUnused)
 	{
-		string unusedReads = outputFilenamePrefix+"_UnusedReads.fasta";
-		ofstream unUsedReadsFilePointer;
-		unUsedReadsFilePointer.open(unusedReads.c_str());
-		if(!unUsedReadsFilePointer)
-			MYEXIT("Unable to open file: "+unusedReads);
-		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
-		{
-			UINT64 mateID = dataSet->getMatePair(i);
-			if(mateID!=0)
-			{
-				if((!dataSet->at(i)->isUsedRead() || !dataSet->at(mateID)->isUsedRead()) && i<mateID)
-				{
-					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
-					unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<dataSet->at(mateID)->getStringForward()<<endl;
-				}
-			}
-			else
-			{
-				if(!dataSet->at(i)->isUsedRead())
-					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<dataSet->at(i)->getStringForward()<<endl;
-			}
-		}
-		unUsedReadsFilePointer.close();
+		dataSet->writeUnUsedReads(outputFilenamePrefix);
 	}
 	delete dataSet;
 	CLOCKSTOP;
@@ -123,7 +101,7 @@ int main(int argc, char **argv) {
 }
 
 void SimplifyGraph(const vector<std::string> &edgeFilenameList,
-		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 &ctgCount,
+		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 &ctgCount,UINT64 &scfCount,
 		UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
 {
 	CLOCKSTART;
@@ -135,6 +113,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i)+".txt";
 		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
 		UINT64 nonContainedReads = dataSet->size()-containedCtr;
+		cout<<"Contained Reads:"<<containedCtr<<endl;
 		if(usedReads>(MAX_USED*nonContainedReads))
 		{
 			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
@@ -167,7 +146,15 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 	}
-
+	//Print GFA file
+	string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa";
+	ofstream gfaFilePointer;
+	gfaFilePointer.open(gfa_file.c_str());
+	if(!gfaFilePointer)
+		MYEXIT("Unable to open file: "+gfa_file);
+	overlapGraph->generateGFAOutput(gfaFilePointer);
+	gfaFilePointer.close();
+	//Start scaffolding
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
 	UINT64 iteration=0, counter = 0;
 	do
@@ -200,7 +187,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",ctgCount);
+		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 	}
 
 	//Print the total used read count

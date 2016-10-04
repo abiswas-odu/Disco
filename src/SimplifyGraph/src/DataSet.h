@@ -108,6 +108,8 @@ class DataSet
 		UINT64 getMatePair(UINT64 r1ID);
 
 		void writeUsedReads(string usedReadfileName);
+
+		void writeUnUsedReads(string outputFilenamePrefix);
 };
 
 bool compareEdgesByReads (const Edge *edge1, const Edge* edge2);

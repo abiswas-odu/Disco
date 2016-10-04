@@ -5,9 +5,9 @@
  * Author: Md. Bahlul Haider
  */
 
-#include "../../BuildGraphMPIRMA/src/Edge.h"
+#include "Edge.h"
 
-#include "../../BuildGraphMPIRMA/src/Common.h"
+#include "Common.h"
 
 
 /**********************************************************************************************************************

@@ -988,11 +988,21 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	// loop edgeFilenameList and load partially simplified graphs
 	if(edge_files.size()>0)
 	{
-		string prev_composite_out_edge_file = outputFilenamePrefix + "_" + SSTR(0) +"_ParSimpleEdges.txt";
-
-		if(ifstream(prev_composite_out_edge_file.c_str()))
+		//check if all partial graph files exist...
+		bool reCalcParSimpEdges=true;
+		for(size_t i = 0;i< edge_files.size();i++)
+		{
+			string composite_out_edge_file = outputFilenamePrefix + "_" + SSTR(i) +"_ParSimpleEdges.txt";
+			if(!ifstream(composite_out_edge_file))
+			{
+				reCalcParSimpEdges=false;
+				break;
+			}
+		}
+		if(reCalcParSimpEdges)
 		{
 			FILE_LOG(logINFO) << "Partial graphs already exist. Loading those..."<<endl;
+			string prev_composite_out_edge_file = outputFilenamePrefix + "_" + SSTR(0) +"_ParSimpleEdges.txt";
 			readParEdges(prev_composite_out_edge_file);
 			for(size_t i = 1;i < edge_files.size();i++)
 			{
@@ -1002,6 +1012,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 		}
 		else
 		{
+			string prev_composite_out_edge_file = outputFilenamePrefix + "_" + SSTR(0) +"_ParSimpleEdges.txt";
 			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_files[0] + " " + prev_composite_out_edge_file
 					+ " " + SSTR(minOvl) + " " + SSTR(parallelThreadPoolSize) ;
 			//Perform the first partial graph simplification
@@ -2780,7 +2791,7 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 			FILE_LOG(logINFO) << "Calculating mean and SD of dataset: " << d << endl;
 			innerDistSizes->clear();
 			#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
-			for(UINT64 i = 1; i <= m_dataset->size(); i++)	// for each read in the dataset
+			for(UINT64 i = m_dataset->getDataSetInfo()->at(d).r1Start; i <= m_dataset->getDataSetInfo()->at(d).r1End; i++)	// for each read in the dataset
 			{
 				Read *read1 = m_dataset->at(i), *read2;	// Get a read read1 in the graph.
 				vector<UINT64> r1MPList = m_dataset->getMatePairList(read1);
@@ -3238,5 +3249,81 @@ void OverlapGraph::updateEdgeInfo(Read * updateRead, Edge *edge, UINT32 read_ind
 	}
 	//CLOCKSTOP;
 }
+
+
+void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
+{
+	gfaFilePointer << "H\tVN:Z:1.0" << std::endl;
+	UINT64 path_id=0;
+	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
+	{
+		//Write segments
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t"<<m_dataset->at(i)->getStringForward() << std::endl;
+		auto it = m_graph->find(i);
+		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
+		{
+			t_edge_vec *eList = it->second;
+			for(UINT64 j = 0; j < eList->size(); j++)	//For each edge
+			{
+				Edge *e = eList->at(j);
+				//Write links
+				UINT64 source = e->getSourceRead()->getReadID();
+				UINT64 destination = e->getDestinationRead()->getReadID();
+				string fOrientation=(e->getOrientation()==2||e->getOrientation()==3)?"+":"-";		//Orientation of source read in the first link of the edge
+				string lOrientation=(e->getOrientation()==1||e->getOrientation()==3)?"+":"-";		//Orientation of destination read in the last link of the edge
+				if(source < destination || (source == destination && e < e->getReverseEdge()))
+				{
+					if(e->getListofReadsSize()>0)
+					{
+						//Add first link with source
+						gfaFilePointer << "E\t" << source << "\t"<<fOrientation<<"\t";
+						string orientation=(e->getInnerOrientation(0)==0)?"-":"+";
+						gfaFilePointer << e->getInnerReadID(0) << "\t"<<orientation<<"\t"<<
+							e->getSourceRead()->getReadLength() - e->getInnerOverlapOffset(0)<<"M"<< std::endl;
+						string pathStr=SSTR(source)+fOrientation+",";
+						string pathStrOverlap=SSTR(e->getSourceRead()->getReadLength()-e->getInnerOverlapOffset(0))+"M"+",";
+						//Add middle links
+						for(size_t j=1;j<e->getListofReadsSize();j++)
+						{
+							string orientation=(e->getInnerOrientation(j-1)==0)?"-":"+";
+							gfaFilePointer << "E\t" << e->getInnerReadID(j-1) << "\t"<<orientation<<"\t";
+							pathStr=pathStr+SSTR(e->getInnerReadID(j-1))+orientation+",";
+
+							orientation=(e->getInnerOrientation(j)==0)?"-":"+";
+							gfaFilePointer << e->getInnerReadID(j) << "\t"<<orientation<<"\t"<<
+									m_dataset->at(e->getInnerReadID(j-1))->getReadLength() - e->getInnerOverlapOffset(j)<<"M"<< std::endl;
+							pathStrOverlap=pathStrOverlap+SSTR(m_dataset->at(e->getInnerReadID(j-1))->getReadLength() - e->getInnerOverlapOffset(j))+"M"+",";
+						}
+						//Add last link
+						size_t lastInnerReadID=e->getInnerReadID(e->getListofReadsSize()-1);		//Get ID of last inner read
+						orientation=(e->getInnerOrientation(e->getListofReadsSize()-1)==0)?"-":"+";			//Get the orientation
+						gfaFilePointer << "E\t" << lastInnerReadID << "\t"<<orientation<<"\t";
+						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<
+								m_dataset->at(lastInnerReadID)->getReadLength() - (e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize()))<<"M" << std::endl;
+						pathStr=pathStr+SSTR(destination)+lOrientation;
+						pathStrOverlap=pathStrOverlap.substr(0,pathStrOverlap.length()-1);
+						path_id++;
+						gfaFilePointer << "O\t" << path_id << "\t"<< pathStr <<"\t" << pathStrOverlap <<std::endl;
+					}
+					else
+					{
+						//Add first link with source-destination (simple edge)
+						gfaFilePointer << "L\t" << source << "\t"<<fOrientation<<"\t";
+						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<e->getOverlapOffset() << std::endl;
+					}
+
+				}
+			}
+		}
+	}
+}
+
+
+
+
+
+
+
+
 
 

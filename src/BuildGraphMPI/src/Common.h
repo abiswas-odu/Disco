@@ -38,6 +38,9 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#ifdef INCLUDE_READGZ
+#include <zlib.h>
+#endif
 using namespace std;
 
 typedef unsigned char UINT8;

@@ -192,7 +192,7 @@ class OverlapGraph
 		void getEdges(t_edge_vec & contigEdges) const;
 		
 		// Print contigs to file, only the ones longer than the specified printing threshold
-		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix);
+		void printContigs(string contig_file, string edge_file,string edge_cov_file,string usedReadFileName, string namePrefix, UINT64 &printed_contigs);
 
 		// Print edges to a file, with an edgeName
 		void printEdge(Edge *contigEdges, ostream & filePointer,ostream & fileUsedReadPointer , UINT64 edgeNameID) const;
@@ -241,6 +241,8 @@ class OverlapGraph
 		void updateEdgeInfo(Read * updateRead, Edge *edge, UINT32 read_index, EdgeOP operation);
 
 		void printEdgeCoverage(Edge *contigEdge, ostream & filePointer, UINT64 edgeNameID) const;
+
+		void generateGFAOutput(ostream & edgeFilePointer);
 
 };
 

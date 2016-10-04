@@ -7,9 +7,11 @@
 
 
 #include "HashTable.h"
-
 #include "Common.h"
-
+#ifdef INCLUDE_READGZ
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
+#endif
 
 
 /**********************************************************************************************************************
@@ -174,70 +176,107 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 {
 	CLOCKSTART;
 	cout << "Reading read lengths from file: " << fileName << endl;
-	ifstream myFile;
-	myFile.open (fileName.c_str());
-	if(!myFile)
-		MYEXIT("Unable to open file: "+fileName)
 	UINT64 goodReads = 0, badReads = 0;
-	vector<string> line;
-	string text;
-	enum FileType { FASTA, FASTQ, UNDEFINED};
-	FileType fileType = UNDEFINED;
-	while(getline(myFile,text))
+	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
-		string line1="",line0="";
-		if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-			cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-		if(fileType == UNDEFINED)
-		{
-			if(text[0] == '>')
-				fileType = FASTA;
-			else if(text[0] == '@')
-				fileType = FASTQ;
-			else
-				MYEXIT("Unknown input file format.");
-		}
-		line.clear();
-		if(fileType == FASTA) 			// Fasta file
-		{
-			line.push_back(text);
-			getline (myFile,text,'>');
-			line.push_back(text);
-
-			line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1);								// The first string is in the 2nd line.
-
-		}
-		else if(fileType == FASTQ) 					// Fastq file.
-		{
-			line.push_back(text);
-			for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+#ifdef INCLUDE_READGZ
+		gzFile fp;
+		kseq_t *seq;
+		int l;
+		fp = gzopen(fileName.c_str(), "r");
+		seq = kseq_init(fp);
+		while ((l = kseq_read(seq)) >= 0) {
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			//printf("name: %s\n", seq->name.s);
+			//if (seq->comment.l) printf("comment: %s\n", seq->comment.s);
+			//printf("seq: %s\n", seq->seq.s);
+			//if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
+			string line1=seq->seq.s;
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
 			{
-				getline (myFile,text);
-				line.push_back(text);
+				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
 			}
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1); 			// The first string is in the 2nd line.
+			else
+				badReads++;
 		}
-		for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-		    *p = toupper(*p);
-		if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
-		{
-			hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
-			goodReads++;
-		}
-		else
-			badReads++;
+		kseq_destroy(seq);
+		gzclose(fp);
+#else
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
+				"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+				"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
 	}
+	else
+	{
+		ifstream myFile;
+		myFile.open (fileName.c_str());
+		if(!myFile)
+			MYEXIT("Unable to open file: "+fileName)
+		vector<string> line;
+		string text;
+		enum FileType { FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+		while(getline(myFile,text))
+		{
+			string line1="",line0="";
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			if(fileType == UNDEFINED)
+			{
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else
+					MYEXIT("Unknown input file format.");
+			}
+			line.clear();
+			if(fileType == FASTA) 			// Fasta file
+			{
+				line.push_back(text);
+				getline (myFile,text,'>');
+				line.push_back(text);
 
-	myFile.close();
-    cout << "File name: " << fileName << endl;
+				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1);								// The first string is in the 2nd line.
+
+			}
+			else if(fileType == FASTQ) 					// Fastq file.
+			{
+				line.push_back(text);
+				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+				{
+					getline (myFile,text);
+					line.push_back(text);
+				}
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1); 			// The first string is in the 2nd line.
+			}
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			{
+				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
+			}
+			else
+				badReads++;
+		}
+		myFile.close();
+	}
+	cout << "File name: " << fileName << endl;
 	cout << setw(10) << goodReads << " good reads in current file."  << endl;
 	cout << setw(10) << badReads << " bad reads in current file." << endl;
 	cout << setw(10) << goodReads + badReads << " total reads in current file." << endl;
+
 	CLOCKSTOP;
 }
 
@@ -248,67 +287,101 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 {
 	CLOCKSTART;
 	cout << "Reading read data from file: " << fileName << endl;
-	ifstream myFile;
-	myFile.open (fileName.c_str());
-	if(!myFile)
-		MYEXIT("Unable to open file: "+fileName)
 	UINT64 goodReads = 0, badReads = 0;
-	vector<string> line;
-	string text;
-	enum FileType { FASTA, FASTQ, UNDEFINED};
-	FileType fileType = UNDEFINED;
-	while(getline(myFile,text))
+	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
-		string line1="",line0="";
-		if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-			cout<< setw(10) << goodReads + badReads << " read sequence added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-		if(fileType == UNDEFINED)
-		{
-			if(text[0] == '>')
-				fileType = FASTA;
-			else if(text[0] == '@')
-				fileType = FASTQ;
-			else
-				MYEXIT("Unknown input file format.");
-		}
-		line.clear();
-		if(fileType == FASTA) 			// Fasta file
-		{
-			line.push_back(text);
-			getline (myFile,text,'>');
-			line.push_back(text);
-
-			line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1);								// The first string is in the 2nd line.
-
-		}
-		else if(fileType == FASTQ) 					// Fastq file.
-		{
-			line.push_back(text);
-			for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+#ifdef INCLUDE_READGZ
+		gzFile fp;
+		kseq_t *seq;
+		int l;
+		fp = gzopen(fileName.c_str(), "r");
+		seq = kseq_init(fp);
+		while ((l = kseq_read(seq)) >= 0) {
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read sequences added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			string line1=seq->seq.s;
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
 			{
-				getline (myFile,text);
-				line.push_back(text);
+				readID++;
+				insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths, myid); 									// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
 			}
-			line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-			line0=line.at(0);
-			line1 = line.at(1); 			// The first string is in the 2nd line.
+			else
+				badReads++;
 		}
-		for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-		    *p = toupper(*p);
-		if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
-		{
-			readID++;
-			insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths, myid); 								// Calculate the offset lengths of each hash table key in the hash table.
-			goodReads++;
-		}
-		else
-			badReads++;
+		kseq_destroy(seq);
+		gzclose(fp);
+#else
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
+				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
+				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
 	}
+	else
+	{
+		ifstream myFile;
+		myFile.open (fileName.c_str());
+		if(!myFile)
+			MYEXIT("Unable to open file: "+fileName)
+		vector<string> line;
+		string text;
+		enum FileType { FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+		while(getline(myFile,text))
+		{
+			string line1="",line0="";
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read sequence added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			if(fileType == UNDEFINED)
+			{
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else
+					MYEXIT("Unknown input file format.");
+			}
+			line.clear();
+			if(fileType == FASTA) 			// Fasta file
+			{
+				line.push_back(text);
+				getline (myFile,text,'>');
+				line.push_back(text);
 
-	myFile.close();
+				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1);								// The first string is in the 2nd line.
+
+			}
+			else if(fileType == FASTQ) 					// Fastq file.
+			{
+				line.push_back(text);
+				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+				{
+					getline (myFile,text);
+					line.push_back(text);
+				}
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1); 			// The first string is in the 2nd line.
+			}
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			{
+				readID++;
+				insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths, myid); 								// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
+			}
+			else
+				badReads++;
+		}
+
+		myFile.close();
+	}
     cout << "File name: " << fileName << endl;
 	cout << setw(10) << goodReads << " good reads in current file."  << endl;
 	cout << setw(10) << badReads << " bad reads in current file." << endl;

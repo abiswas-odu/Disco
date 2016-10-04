@@ -49,9 +49,9 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 		kseq_destroy(seq);
 		gzclose(fp);
 #else
-		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
-				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
-				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
+				"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+				"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
 #endif
 	}
 	else
@@ -415,5 +415,49 @@ vector<UINT64> DataSet::getMatePairList(Read *read)
 			mpList.push_back(c2ID);
 	}
 	return mpList;
+}
+
+void DataSet::writeUnUsedReads(string outputFilenamePrefix)
+{
+	for(UINT64 d = 0; d < getDataSetInfo()->size(); d++)	// For each dataset.
+	{
+		if(getDataSetInfo()->at(d).isPaired)
+		{
+			string unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedPairedReads.fasta";
+			ofstream unUsedReadsFilePointer;
+			unUsedReadsFilePointer.open(unusedReads.c_str());
+			if(!unUsedReadsFilePointer)
+				MYEXIT("Unable to open file: "+unusedReads);
+			FILE_LOG(logINFO) << "Writing unused paired reads from dataset : " << d << endl;
+			for(UINT64 i = getDataSetInfo()->at(d).r1Start; i <= getDataSetInfo()->at(d).r1End; i++)	// for each read in the dataset
+			{
+				UINT64 mateID = getMatePair(i);
+				if(mateID!=0)
+				{
+					if((!at(i)->isUsedRead() || !at(mateID)->isUsedRead()) && i<mateID)
+					{
+						unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<at(i)->getStringForward()<<endl;
+						unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<at(mateID)->getStringForward()<<endl;
+					}
+				}
+			}
+			unUsedReadsFilePointer.close();
+		}
+		else
+		{
+			string unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedSingleReads.fasta";
+			ofstream unUsedReadsFilePointer;
+			unUsedReadsFilePointer.open(unusedReads.c_str());
+			if(!unUsedReadsFilePointer)
+				MYEXIT("Unable to open file: "+unusedReads);
+			FILE_LOG(logINFO) << "Writing unused singleton reads from dataset : " << d << endl;
+			for(UINT64 i = getDataSetInfo()->at(d).r1Start; i <= getDataSetInfo()->at(d).r1End; i++)	// for each read in the dataset
+			{
+				if(!at(i)->isUsedRead())
+					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<at(i)->getStringForward()<<endl;
+			}
+			unUsedReadsFilePointer.close();
+		}
+	}
 }
 

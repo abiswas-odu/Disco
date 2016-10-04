@@ -152,9 +152,9 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 		kseq_destroy(seq);
 		gzclose(fp);
 #else
-		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
-				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
-				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
+				"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+				"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
 #endif
 	}
 	else

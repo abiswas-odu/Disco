@@ -7,8 +7,8 @@
 
 #ifndef EDGE_H_
 #define EDGE_H_
-#include "../../BuildGraphMPIRMA/src/Common.h"
-#include "../../BuildGraphMPIRMA/src/Read.h"
+#include "Common.h"
+#include "Read.h"
 
 /**********************************************************************************************************************
 	Class to store an edge.
