@@ -147,7 +147,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 	}
 	//Print GFA file
-	string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa";
+	string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa2";
 	ofstream gfaFilePointer;
 	gfaFilePointer.open(gfa_file.c_str());
 	if(!gfaFilePointer)
