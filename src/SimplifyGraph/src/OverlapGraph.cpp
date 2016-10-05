@@ -3253,7 +3253,7 @@ void OverlapGraph::updateEdgeInfo(Read * updateRead, Edge *edge, UINT32 read_ind
 
 void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 {
-	gfaFilePointer << "H\tVN:Z:1.0" << std::endl;
+	gfaFilePointer << "H\tVN:Z:2.0" << std::endl;
 	UINT64 path_id=0;
 	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
 	{
@@ -3276,7 +3276,7 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 					if(e->getListofReadsSize()>0)
 					{
 						//Add first link with source
-						gfaFilePointer << "E\t" << source << "\t"<<fOrientation<<"\t";
+						gfaFilePointer << "L\t" << source << "\t"<<fOrientation<<"\t";
 						string orientation=(e->getInnerOrientation(0)==0)?"-":"+";
 						gfaFilePointer << e->getInnerReadID(0) << "\t"<<orientation<<"\t"<<
 							e->getSourceRead()->getReadLength() - e->getInnerOverlapOffset(0)<<"M"<< std::endl;
@@ -3286,7 +3286,7 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 						for(size_t j=1;j<e->getListofReadsSize();j++)
 						{
 							string orientation=(e->getInnerOrientation(j-1)==0)?"-":"+";
-							gfaFilePointer << "E\t" << e->getInnerReadID(j-1) << "\t"<<orientation<<"\t";
+							gfaFilePointer << "L\t" << e->getInnerReadID(j-1) << "\t"<<orientation<<"\t";
 							pathStr=pathStr+SSTR(e->getInnerReadID(j-1))+orientation+",";
 
 							orientation=(e->getInnerOrientation(j)==0)?"-":"+";
@@ -3297,13 +3297,13 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 						//Add last link
 						size_t lastInnerReadID=e->getInnerReadID(e->getListofReadsSize()-1);		//Get ID of last inner read
 						orientation=(e->getInnerOrientation(e->getListofReadsSize()-1)==0)?"-":"+";			//Get the orientation
-						gfaFilePointer << "E\t" << lastInnerReadID << "\t"<<orientation<<"\t";
+						gfaFilePointer << "L\t" << lastInnerReadID << "\t"<<orientation<<"\t";
 						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<
 								m_dataset->at(lastInnerReadID)->getReadLength() - (e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize()))<<"M" << std::endl;
 						pathStr=pathStr+SSTR(destination)+lOrientation;
 						pathStrOverlap=pathStrOverlap.substr(0,pathStrOverlap.length()-1);
 						path_id++;
-						gfaFilePointer << "O\t" << path_id << "\t"<< pathStr <<"\t" << pathStrOverlap <<std::endl;
+						gfaFilePointer << "P\t" << path_id << "\t"<< pathStr <<"\t" << pathStrOverlap <<std::endl;
 					}
 					else
 					{
@@ -3318,6 +3318,106 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 	}
 }
 
+void OverlapGraph::generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UINT64 source, string sOri,
+		UINT64 destination,string dOri, UINT64 offset)
+{
+	if(sOri=="+" && dOri=="+")
+	{
+		gfaFilePointer << "E\t" << edge_id <<"\t"<< source << "\t"<<sOri<<"\t"<<destination<<"\t";
+
+		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
+		gfaFilePointer << offset <<"\t"<< m_dataset->at(source)->getReadLength() <<"$\t0\t"<<
+				ovlLength<<"\t"<<ovlLength<<"M"<<std::endl;
+	}
+	if(sOri=="+" && dOri=="-")
+	{
+		gfaFilePointer << "E\t" << edge_id <<"\t"<< source << "\t"<<dOri<<"\t"<<destination<<"\t";
+
+		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
+		gfaFilePointer << offset <<"\t"<< m_dataset->at(source)->getReadLength() <<"$\t"
+				<<m_dataset->at(source)->getReadLength()-ovlLength<<"\t"
+				<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M"<<std::endl;
+	}
+	else if(sOri=="-" && dOri=="+")
+	{
+		gfaFilePointer << "E\t" << edge_id <<"\t"<< destination << "\t"<<sOri<<"\t"<<source<<"\t";
+
+		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
+		gfaFilePointer << "0\t"<< ovlLength <<"$\t"
+						<<m_dataset->at(source)->getReadLength()-ovlLength<<"\t"
+						<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M"<<std::endl;
+	}
+	else if(sOri=="-" && dOri=="-")
+	{
+		gfaFilePointer << "E\t" << edge_id <<"\t"<< source << "\t"<<dOri<<"\t"<<destination<<"\t";
+
+		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
+		gfaFilePointer << "0\t"<< ovlLength <<"$\t"
+						<<m_dataset->at(destination)->getReadLength()<<"$\t"
+						<< m_dataset->at(destination)->getReadLength()-ovlLength<<"$\t"<<ovlLength<<"M"<<std::endl;
+	}
+}
+
+void OverlapGraph::generateGFA2Output(ostream & gfaFilePointer)
+{
+	gfaFilePointer << "H\tVN:Z:2.0" << std::endl;
+	UINT64 path_id=0, edge_id=0;
+
+	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
+	{
+		//Write segments
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t*" << std::endl;
+		auto it = m_graph->find(i);
+		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
+		{
+			t_edge_vec *eList = it->second;
+			for(UINT64 j = 0; j < eList->size(); j++)	//For each edge
+			{
+				Edge *e = eList->at(j);
+				//Write links
+				UINT64 source = e->getSourceRead()->getReadID();
+				UINT64 destination = e->getDestinationRead()->getReadID();
+				string fOrientation=(e->getOrientation()==2||e->getOrientation()==3)?"+":"-";		//Orientation of source read in the first link of the edge
+				string lOrientation=(e->getOrientation()==1||e->getOrientation()==3)?"+":"-";		//Orientation of destination read in the last link of the edge
+				if(source < destination || (source == destination && e < e->getReverseEdge()))
+				{
+					if(e->getListofReadsSize()>0)
+					{
+						//Add first link with source
+						edge_id++;
+						string orientation=(e->getInnerOrientation(0)==0)?"-":"+";
+						generateGFA2Edge(gfaFilePointer,edge_id,source,fOrientation,e->getInnerReadID(0),orientation,e->getInnerOverlapOffset(0));
+						string pathStr=SSTR(edge_id)+"\t";
+						//Add middle links
+						for(size_t j=1;j<e->getListofReadsSize();j++)
+						{
+							string sorientation=(e->getInnerOrientation(j-1)==0)?"-":"+";
+							string dorientation=(e->getInnerOrientation(j)==0)?"-":"+";
+							edge_id++;
+							generateGFA2Edge(gfaFilePointer,edge_id,e->getInnerReadID(j-1),sorientation,e->getInnerReadID(j),dorientation,e->getInnerOverlapOffset(j));
+							pathStr=pathStr+SSTR(edge_id)+"\t";
+						}
+						//Add last link
+						size_t lastInnerReadID=e->getInnerReadID(e->getListofReadsSize()-1);		//Get ID of last inner read
+						orientation=(e->getInnerOrientation(e->getListofReadsSize()-1)==0)?"-":"+";			//Get the orientation
+						edge_id++;
+						generateGFA2Edge(gfaFilePointer,edge_id,lastInnerReadID,orientation,destination,lOrientation,
+								(e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize())));
+						pathStr=pathStr+SSTR(edge_id);
+						path_id++;
+						gfaFilePointer << "PO\t" << path_id << "\t"<< pathStr <<std::endl;
+					}
+					else
+					{
+						//Add first link with source-destination (simple edge)
+						edge_id++;
+						generateGFA2Edge(gfaFilePointer,edge_id,source,fOrientation,destination,lOrientation,e->getOverlapOffset());
+					}
+				}
+			}
+		}
+	}
+}
 
 
 

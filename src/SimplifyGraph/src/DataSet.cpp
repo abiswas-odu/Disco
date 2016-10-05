@@ -309,7 +309,6 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 				at(containedReadID)->setIsContained(true);
 				containedReadCtr++;
 			}
-
 			at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
 		}
 		myFile.close();

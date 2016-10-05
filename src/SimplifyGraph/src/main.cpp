@@ -152,7 +152,7 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	gfaFilePointer.open(gfa_file.c_str());
 	if(!gfaFilePointer)
 		MYEXIT("Unable to open file: "+gfa_file);
-	overlapGraph->generateGFAOutput(gfaFilePointer);
+	overlapGraph->generateGFA2Output(gfaFilePointer);
 	gfaFilePointer.close();
 	//Start scaffolding
 	overlapGraph->calculateMeanAndSdOfInnerDistance();

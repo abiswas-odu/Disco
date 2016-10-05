@@ -212,7 +212,7 @@ public:
     static vector<string> getEdgeFilenames() {return edgeFilenamesList;}
 
     // Get contained read filenames
-    static vector<string> getContainedReadsFile() {return edgeFilenamesList;}
+    static vector<string> getContainedReadsFile() {return containedReadsFile;}
 
     // Get output prefix name
     static string getOutputFilenamePrefix() {return outFilenamePrefix;}

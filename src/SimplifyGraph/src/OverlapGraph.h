@@ -244,6 +244,11 @@ class OverlapGraph
 
 		void generateGFAOutput(ostream & edgeFilePointer);
 
+		void generateGFA2Output(ostream & gfaFilePointer);
+
+		void generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UINT64 source, string sOri,
+				UINT64 destination,string dOri, UINT64 offset);
+
 };
 
 void createRevList(Edge *fwdEdge, UINT64 **returnListReads, UINT64 &lSize);
