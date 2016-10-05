@@ -47,7 +47,7 @@ HashTable::HashTable(void)
 /**********************************************************************************************************************
 	Add Database in hashTable
 **********************************************************************************************************************/
-bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parallelThreadPoolSize)
+bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parallelThreadPoolSize, string allFileName)
 {
 	CLOCKSTART;
 	dataSet=d;
@@ -57,6 +57,14 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 	setHashTableSize(size);
 
 	populateReadLengths(); 				//Each hash entry is populated with the length of it's record
+
+	ofstream filePointer;
+	filePointer.open(allFileName+"hist.txt");
+	for(size_t i=1; i<hashTableSize; i++)
+	{
+		filePointer<<i<<","<<hashTable[i]<<endl;
+	}
+	filePointer.close();
 
 	//Change lengths of records to offset at each index...
 	UINT64 nextOffset=hashTable[0];

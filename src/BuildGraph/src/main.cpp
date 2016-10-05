@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength);
 	OverlapGraph *overlapGraph;
 	HashTable *hashTable=new HashTable();
-	hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads);
+	hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads,allFileName);
 	overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,allFileName); //hashTable deleted by this function after building the graph also writes graph
 	delete dataSet;
 	delete overlapGraph;

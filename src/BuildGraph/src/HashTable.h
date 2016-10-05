@@ -48,7 +48,7 @@ class HashTable{
 		HashTable(void);							// Default constructor.
 		~HashTable();								// Destructor.
 		void createOffsetTable();
-		bool insertDataset(Dataset *d, UINT64 minOverlapLength,UINT64 parallelThreadPoolSize);	// Insert the dataset in the hash table.
+		bool insertDataset(Dataset *d, UINT64 minOverlapLength,UINT64 parallelThreadPoolSize, string allFileName);	// Insert the dataset in the hash table.
 		vector<UINT64> * getListOfReads(const string & subString) const; 			// Get the list of reads that contain subString as prefix or suffix.
 		UINT64 hashFunction(const string & subString) const; 						// Hash function.
 		UINT64 getHashTableSize(void) const {return hashTableSize;}		// Get the size of the hash table.
