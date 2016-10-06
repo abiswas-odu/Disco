@@ -62,7 +62,8 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 	filePointer.open(allFileName+"hist.csv");
 	for(size_t i=1; i<hashTableSize; i++)
 	{
-		filePointer<<i<<","<<hashTable[i]<<endl;
+		if(hashTable[i]>10)
+			filePointer<<hashTable[i]<<endl;
 	}
 	filePointer.close();
 
