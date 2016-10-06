@@ -20,6 +20,7 @@ asmParaFileP3="${exePath}/omega3_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
 useMPIRMA=""
+dataOutPath="."
 phymem=`grep MemTotal /proc/meminfo | awk '{print $2}'`
 maxMem=$((phymem/1048576))
 while [[ $# > 0 ]]
