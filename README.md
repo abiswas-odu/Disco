@@ -11,15 +11,17 @@ Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-co
 
 1. GNU GCC with C++11 support i.e. gcc4.9+ or above
 2. MPI Library with MPI-3 support i.e. OpenMPI 1.8 and above or cray-mpich/7.4.0 and above. By default the mpic++ wrapper is needed. If you are on a Cray cluster and the wrapper is "CC". You will need to edit the compiler.mk file. Uncomment the line "CC := CC" and comment out "CC := mpic++".   
-3. zlib/1.2.8 
+3. zlib/1.2.8 is optional for reading gzipped fasta/fastq files.
  
 ### Installation Steps
-1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on both Linux and MacOS systems, but not under Windows.
+1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on Linux a, but not under Windows or MacOSX.
 2. If you decide to download the source code, use the following commands to build:
-  1. OpenMP version "make openmp" 
+  1. OpenMP version "make openmp". This is also the default make option.  
   2. MPI distributed computing version "make mpi-dist-comp" 
   3. MPI distributed memory version "make mpi-dist-mem"
-3. If compiled successfully, the required executables will be built. 
+  4. All the versions can be built with "make all"
+3. The assembler can be built with the make option "READGZ=1". 
+If compiled successfully, the required executables will be built anf the runOmega3 scripts can be used to run the assembler. 
 
 ### Quickly Running The Assembler
 

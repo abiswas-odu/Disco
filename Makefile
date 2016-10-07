@@ -107,6 +107,3 @@ clean:
 		-$(RM) -rf buildG buildG-MPI buildG-MPIRMA fullsimplify parsimplify 
 		-$(RM) -rf Omega3_omp_x86-Linux.tar.gz Omega3_MPI_DC_x86-Linux.tar.gz 
 		-$(RM) -rf Omega3_All_x86-Linux.tar.gz Omega3_MPI_DM_x86-Linux.tar.gz Omega3
-
-
-

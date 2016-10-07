@@ -25,13 +25,14 @@ CPP_DEPS += \
 
 ifeq ($(READGZ), 1)  #at this point, the makefile checks if FEATURE is enabled
 OPTS = -DINCLUDE_READGZ #variable passed to g++
+GZLIB = -lz 
 endif
 
 # Each subdirectory must supply rules for building sources it contributes
 src/%.o: ../src/%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	g++ $(OPTS) -g3 -Wall -c -fmessage-length=0 -fopenmp -Wno-sign-compare -lz -std=c++11 -O3 -lgomp -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	g++ $(OPTS) -g3 -Wall -c -fmessage-length=0 -fopenmp -Wno-sign-compare $(GZLIB) -std=c++11 -O3 -lgomp -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
