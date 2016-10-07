@@ -278,7 +278,7 @@ bool Dataset::testRead(const string & read)
 			return false;
 		cnt[(read[i] >> 1) & 0X03]++; // Least significant 2nd and 3rd bits of ASCII value used here
 	}
-	UINT64 threshold = read.length()*.8;	// 80% of the length.
+	UINT64 threshold = read.length()*.7;	// 70% of the length.
 	if(cnt[0] >= threshold || cnt[1] >= threshold || cnt[2] >= threshold || cnt[3] >= threshold)
 		return false;	// If 80% bases are the same base.
 
