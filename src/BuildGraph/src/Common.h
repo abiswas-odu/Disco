@@ -169,7 +169,7 @@ inline std::string trimmed(std::string s) {
     return s;
 }
 
-int countSubstring(const std::string& str, const std::string& sub)
+inline int countSubstring(const std::string& str, const std::string& sub)
 {
     if (sub.length() == 0) return 0;
     int count = 0;
