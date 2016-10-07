@@ -24,7 +24,7 @@ class Dataset
 		vector<Read *> *reads; 								// List of reads in the dataset.
 		string reverseComplement(const string & read); 		// Get the reverse complement of a string.
 															// The dataset contains only good quality reads.
-
+		vector<string> filterStrings;
 	public:
 		vector<string> pairedEndDatasetFileNames;
 		vector<string> singleEndDatasetFileNames;

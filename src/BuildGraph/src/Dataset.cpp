@@ -44,6 +44,46 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	minimumOverlapLength = minOverlap;
 	UINT64 counter = 0, fileIndex=0;
 
+	filterStrings = {"ACACACACACACACACACACACACACACA",
+			"AGAGAGAGAGAGAGAGAGAGAGAGAGAGA",
+			"ATATATATATATATATATATATATATATA",
+			"CGCGCGCGCGCGCGCGCGCGCGCGCGCGC",
+			"CTCTCTCTCTCTCTCTCTCTCTCTCTCTC",
+			"AAGAAGAAGAAGAAGAAGAAGAAGAAGAA",
+			"ATAATAATAATAATAATAATAATAATAAT",
+			"TAATAATAATAATAATAATAATAATAATA",
+			"AACAACAACAACAACAACAACAACAACAA",
+			"ACAACAACAACAACAACAACAACAACAAC",
+			"CAACAACAACAACAACAACAACAACAACA",
+			"AAGAAGAAGAAGAAGAAGAAGAAGAAGAA",
+			"AGAAGAAGAAGAAGAAGAAGAAGAAGAAG",
+			"GAAGAAGAAGAAGAAGAAGAAGAAGAAGA",
+			"TTCTTCTTCTTCTTCTTCTTCTTCTTCTT",
+			"AAATAAATAAATAAATAAATAAATAAATA",
+			"TAAATAAATAAATAAATAAATAAATAAAT",
+			"ATAAATAAATAAATAAATAAATAAATAAA",
+			"AATAAATAAATAAATAAATAAATAAATAA",
+			"AATTAATTAATTAATTAATTAATTAATTA",
+			"ATTAATTAATTAATTAATTAATTAATTAA",
+			"TTAATTAATTAATTAATTAATTAATTAAT",
+			"TAATTAATTAATTAATTAATTAATTAATT",
+			"AAAGAAAGAAAGAAAGAAAGAAAGAAAGA",
+			"AAAGAAAGAAAGAAAGAAAGAAAGAAAGA",
+			"AGAAAGAAAGAAAGAAAGAAAGAAAGAAA",
+			"GAAAGAAAGAAAGAAAGAAAGAAAGAAAG",
+			"TACATACATACATACATACATACATACAT",
+			"ACATACATACATACATACATACATACATA",
+			"CATACATACATACATACATACATACATAC",
+			"ATACATACATACATACATACATACATACA",
+			"GTTTGTTTGTTTGTTTGTTTGTTTGTTTG",
+			"TGTTTGTTTGTTTGTTTGTTTGTTTGTTT",
+			"TTGTTTGTTTGTTTGTTTGTTTGTTTGTT",
+			"TTTGTTTGTTTGTTTGTTTGTTTGTTTGT",
+			"AGGGAGGGAGGGAGGGAGGGAGGGAGGGA",
+			"GAGGGAGGGAGGGAGGGAGGGAGGGAGGG",
+			"GGAGGGAGGGAGGGAGGGAGGGAGGGAGG",
+			"GGGAGGGAGGGAGGGAGGGAGGGAGGGAG"};
+
 	ofstream filePointer;
 	string fileName = fileNamePrefix+"_ReadIDMap.txt";
 	filePointer.open(fileName.c_str());
@@ -230,10 +270,9 @@ UINT64 Dataset::getNumberOfUniqueReads(void)
 **********************************************************************************************************************/
 bool Dataset::testRead(const string & read)
 {
-
 	UINT64 cnt[4] = {0,0,0,0};
 	UINT64 readLength = read.length();
-	for(UINT64 i = 0; i < readLength; i++) // Count the number of A's, C's , G's and T's in the string.
+	for(UINT64 i = 0; i < readLength; i++) // Count the number of A's, C's , G's and T's in the string and check no other characters exist
 	{
 		if(read[i]!= 'A' && read[i] != 'C' && read[i] != 'G' && read[i] != 'T')
 			return false;
@@ -242,6 +281,77 @@ bool Dataset::testRead(const string & read)
 	UINT64 threshold = read.length()*.8;	// 80% of the length.
 	if(cnt[0] >= threshold || cnt[1] >= threshold || cnt[2] >= threshold || cnt[3] >= threshold)
 		return false;	// If 80% bases are the same base.
+
+	//Check if dimers exist
+	threshold = read.length()*.5;	// 50% of the length.
+	size_t dimerCtr = countSubstring(read, "AC");
+	dimerCtr = dimerCtr*2;
+	if(dimerCtr >= threshold)
+			return false;	// If 50% bases are the same base.
+	dimerCtr = countSubstring(read, "AG");
+	dimerCtr = dimerCtr*2;
+	if(dimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	dimerCtr = countSubstring(read, "AT");
+	dimerCtr = dimerCtr*2;
+	if(dimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	dimerCtr = countSubstring(read, "CG");
+	dimerCtr = dimerCtr*2;
+	if(dimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	dimerCtr = countSubstring(read, "CT");
+	dimerCtr = dimerCtr*2;
+	if(dimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+
+	//Check if trimers exist
+	threshold = read.length()*.5;	// 50% of the length.
+	size_t trimerCtr = countSubstring(read, "AAT");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+			return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "ATA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "TAA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "AAC");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "ACA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "CAA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "AAG");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "AGA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+	trimerCtr = countSubstring(read, "GAA");
+	trimerCtr = trimerCtr*3;
+	if(trimerCtr >= threshold)
+		return false;	// If 50% bases are the same base.
+
+	for(size_t i=0;i<filterStrings.size();i++)
+	{
+		UINT64 len=filterStrings[i].size();
+		if(filterStrings[i] == read.substr(0,len))
+			return false;
+		if(filterStrings[i] == read.substr(read.length()-len))
+			return false;
+	}
 	return true;
 }
 
