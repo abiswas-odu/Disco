@@ -103,16 +103,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 	hashTable = ht;
 	dataSet = ht->getDataset();
 
-	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
-	map<UINT64, UINT64> *fIndxReadIDMap = new map<UINT64, UINT64>;
-	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++)
-	{
-		UINT64 fIndx = dataSet->getReadFromID(i)->getFileIndex();
-		auto it = fIndxReadIDMap->end();
-		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
-	}
-
-	markContainedReads(fnamePrefix, fIndxReadIDMap);
+	markContainedReads(fnamePrefix, dataSet->getFRMap());
 
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 	bool * allMarked = new bool[numNodes];
@@ -126,7 +117,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 		else
 			allMarked[i]=1;
 	}
-
 	//Check if partial previous run data exists... Load partial graph data and mark reads.
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
@@ -147,8 +137,10 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 				//Get source destination IDs
 				UINT64 sourceReadFindex = atoi(toks[0].c_str());
 				UINT64 destReadFindex = atoi(toks[1].c_str());
-				auto sourceIt = fIndxReadIDMap->find(sourceReadFindex);
-				auto destIt = fIndxReadIDMap->find(destReadFindex);
+				auto sourceIt = dataSet->getFRMap()->find(sourceReadFindex);
+				auto destIt = dataSet->getFRMap()->find(destReadFindex);
+				if(sourceIt == dataSet->getFRMap()->end() || destIt == dataSet->getFRMap()->end() ) // If the reads do not exist go to the next record
+					continue;
 
 				//Check if both marked or not
 				vector<string> toks2 = splitTok(toks[2],',');
@@ -174,7 +166,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 	}
 
 	//Restart operations complete. Delete file index to read ID map
-	delete fIndxReadIDMap;
+	dataSet->freeFindexReadIDMAP();
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		UINT64 startReadID=0,prevReadID=0;
@@ -326,10 +318,13 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				UINT64 containedReadFindex = atoi(toks[0].c_str());
 				UINT64 containingReadFindex = atoi(toks[1].c_str());
 				auto it = fIndxReadIDMap->find(containedReadFindex);
-				Read *r = dataSet->getReadFromID(it->second); // Get the read
-				r->superReadID=containingReadFindex;
-				if(procCtr%1000000==0)
-					cout<<procCtr<<" contained reads processed..."<<endl;
+				if(it != fIndxReadIDMap->end())
+				{
+					Read *r = dataSet->getReadFromID(it->second); // Get the read
+					r->superReadID=containingReadFindex;
+					if(procCtr%1000000==0)
+						cout<<procCtr<<" contained reads processed..."<<endl;
+				}
 			}
 			filePointer.close();
 		}

@@ -35,9 +35,10 @@ class HashTable{
 		UINT64 *hashTable; 							// AB: List of hash offset of each hash key location
 		UINT64 *hashData; 							// AB: List of hash keys of read number (ID) and orientation.
 		UINT16 hashStringLength;					// Ted: Length of prefix and suffix of the reads to hash. This is equal to the minumum overlap length.
+		UINT64 parallelThreadPoolSize;				// Number of OMP threads
 		mutable UINT64 numberOfHashCollision;		// Counter to count the number of hash collisions. For debugging only.
 													// It's mutable such that it can be modified in the const member function, getListOfReads
-		bool insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
+		bool insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
 		bool hashReadLengths(string forwardRead); 					// Ted: Hash prefix and suffix of the read and its reverse complement in the hash table. Turn over to the constant
 		void setHashTableSize(UINT64 size); 		// Set the size of the hash table.
 		void setHashTableDataSize(UINT64 size);		// Set the size of the hash data table.
@@ -48,7 +49,7 @@ class HashTable{
 		HashTable(void);							// Default constructor.
 		~HashTable();								// Destructor.
 		void createOffsetTable();
-		bool insertDataset(Dataset *d, UINT64 minOverlapLength,UINT64 parallelThreadPoolSize, string allFileName);	// Insert the dataset in the hash table.
+		bool insertDataset(Dataset *d, UINT64 minOverlapLength,UINT64 maxThreads, string allFileName);	// Insert the dataset in the hash table.
 		vector<UINT64> * getListOfReads(const string & subString) const; 			// Get the list of reads that contain subString as prefix or suffix.
 		UINT64 hashFunction(const string & subString) const; 						// Hash function.
 		UINT64 getHashTableSize(void) const {return hashTableSize;}		// Get the size of the hash table.
@@ -62,7 +63,7 @@ class HashTable{
 		void readReadLengthsFromFile(string fileName, UINT64 minOverlap);
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData();												//Populate the read sequence in the hash data
-		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID);
+		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex);
 
 };
 

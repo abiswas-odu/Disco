@@ -59,12 +59,11 @@ unsigned int minNonUniqSupport=0;
 unsigned int minContigLengthTobeReported = 500;
 
 unsigned int minNumberofReadsTobePrinted = 5;
-
 bool printContigs=false;
-
 bool printScaffolds=true;
-
 bool printUnused=true;
+bool printGFA = false;
+bool printGFA2 =false;
 //=============================================================================
 // print help usage
 //=============================================================================
@@ -143,6 +142,12 @@ void Config::setParameters(string pFile)
 				}
 				else if(parName == "PrintUnused") {
 					if(parVal=="true") printUnused = true;
+				}
+				else if(parName == "PrintGFA") {
+					if(parVal=="true") printGFA = true;
+				}
+				else if(parName == "PrintGFA2") {
+					if(parVal=="true") printGFA2 = true;
 				}
 				else if(parName== "PrintScaffolds") {
 					if(parVal=="false") printScaffolds = false;

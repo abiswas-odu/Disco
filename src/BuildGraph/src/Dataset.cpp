@@ -31,7 +31,8 @@ Dataset::Dataset(void)
 /**********************************************************************************************************************
 	Another constructor
 **********************************************************************************************************************/
-Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFileNames, string fileNamePrefix, UINT64 minOverlap)
+Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFileNames,
+		string fileNamePrefix, UINT64 minOverlap, UINT64 maxThreads)
 {
 	// Initialize the variables.
 	numberOfUniqueReads = 0;
@@ -84,6 +85,10 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 			"GGAGGGAGGGAGGGAGGGAGGGAGGGAGG",
 			"GGGAGGGAGGGAGGGAGGGAGGGAGGGAG"};
 
+	merCheckStrings={"AC","AG","AT","CG","CT","AAT","ATA","TAA","AAC","ACA","CAA","AAG","AGA","GAA"};
+
+	parallelThreadPoolSize=maxThreads;
+
 	ofstream filePointer;
 	string fileName = fileNamePrefix+"_ReadIDMap.txt";
 	filePointer.open(fileName.c_str());
@@ -118,6 +123,23 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 		reads->at(i)->setReadNumber(i + 1);
 	numberOfUniqueReads=reads->size();
 	reads->shrink_to_fit();
+
+	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
+	fIndxReadIDMap = new map<UINT64, UINT64>;
+	for(UINT64 i = 1; i <= getNumberOfUniqueReads(); i++)
+	{
+		UINT64 fIndx = getReadFromID(i)->getFileIndex();
+		auto it = fIndxReadIDMap->end();
+		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
+	}
+}
+
+/*
+ * Deallocate the memory storing the map between file index and read id after its not needed
+ */
+void Dataset::freeFindexReadIDMAP()
+{
+	delete fIndxReadIDMap;
 }
 /**********************************************************************************************************************
 	This function reads the dataset from FASTA/FASTQ files
@@ -135,27 +157,51 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		int l;
 		fp = gzopen(fileName.c_str(), "r");
 		seq = kseq_init(fp);
-		while ((l = kseq_read(seq)) >= 0) {
-			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-				cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-			string line1=seq->seq.s;
-			fIndx++;							//Increment file index of the read
-			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-				*p = toupper(*p);
-			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+		#pragma omp parallel num_threads(parallelThreadPoolSize)
+		{
+			#pragma omp single
 			{
-				Read *r1=new Read(fIndx);
-				UINT64 len = line1.length();
-				if(len > longestReadLength)
-					longestReadLength = len;
-				if(len < shortestReadLength)
-					shortestReadLength = len;
-				reads->push_back(r1);						// Store the first string in the dataset.
-				numberOfReads++;							// Counter of the total number of reads.
-				goodReads++;
+				while ((l = kseq_read(seq)) >= 0) {
+					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+						cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+					string line1=seq->seq.s;
+					fIndx++;							//Increment file index of the read
+					UINT64 fileIndexOfRead=fIndx;
+					#pragma omp task firstprivate(line1, fileIndexOfRead)
+					{
+						for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+							*p = toupper(*p);
+						if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+						{
+							Read *r1=new Read(fileIndexOfRead);
+							UINT64 len = line1.length();
+							//Calculate length stats
+							if(len > longestReadLength)
+							{
+								#pragma omp atomic write
+									longestReadLength = len;
+							}
+							if(len < shortestReadLength)
+							{
+								#pragma omp atomic write
+									shortestReadLength = len;
+							}
+
+							#pragma omp critical
+							{
+								reads->push_back(r1);						// Store the first string in the dataset.
+							}
+							#pragma omp atomic
+								goodReads++;
+						}
+						else
+						{
+							#pragma omp atomic
+								badReads++;
+						}
+					}
+				}
 			}
-			else
-				badReads++;
 		}
 		kseq_destroy(seq);
 		gzclose(fp);
@@ -176,67 +222,90 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
-		while(getline(myFile,text))
+		#pragma omp parallel num_threads(parallelThreadPoolSize)
 		{
-			string line1="",line0="";
-			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-				cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-			if(fileType == UNDEFINED)
+			#pragma omp single
 			{
-				if(text[0] == '>')
-					fileType = FASTA;
-				else if(text[0] == '@')
-					fileType = FASTQ;
-				else
-					MYEXIT("Unknown input file format.");
-			}
-			line.clear();
-			if(fileType == FASTA) 			// Fasta file
-			{
-				line.push_back(text);
-				getline (myFile,text,'>');
-				line.push_back(text);
-
-				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-				line0=line.at(0);
-				line1 = line.at(1);								// The first string is in the 2nd line.
-
-			}
-			else if(fileType == FASTQ) 					// Fastq file.
-			{
-				line.push_back(text);
-				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+				while(getline(myFile,text))
 				{
-					getline (myFile,text);
-					line.push_back(text);
+					string line1="",line0="";
+					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+						cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+					if(fileType == UNDEFINED)
+					{
+						if(text[0] == '>')
+							fileType = FASTA;
+						else if(text[0] == '@')
+							fileType = FASTQ;
+						else
+							MYEXIT("Unknown input file format.");
+					}
+					line.clear();
+					if(fileType == FASTA) 			// Fasta file
+					{
+						line.push_back(text);
+						getline (myFile,text,'>');
+						line.push_back(text);
+
+						line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+						line0=line.at(0);
+						line1 = line.at(1);								// The first string is in the 2nd line.
+
+					}
+					else if(fileType == FASTQ) 					// Fastq file.
+					{
+						line.push_back(text);
+						for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+						{
+							getline (myFile,text);
+							line.push_back(text);
+						}
+						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+						line0=line.at(0);
+						line1 = line.at(1); 			// The first string is in the 2nd line.
+					}
+					fIndx++;							//Increment file index of the read
+					UINT64 fileIndexOfRead=fIndx;
+					#pragma omp task firstprivate(line1, fileIndexOfRead)
+					{
+						for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+							*p = toupper(*p);
+						if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+						{
+							Read *r1=new Read(fileIndexOfRead);
+							UINT64 len = line1.length();
+
+							if(len > longestReadLength)
+							{
+								#pragma omp atomic write
+									longestReadLength = len;
+							}
+							if(len < shortestReadLength)
+							{
+								#pragma omp atomic write
+									shortestReadLength = len;
+							}
+
+							#pragma omp critical
+							{
+								reads->push_back(r1);						// Store the first string in the dataset.
+							}
+							#pragma omp atomic
+								goodReads++;
+						}
+						else
+						{
+							#pragma omp atomic
+								badReads++;
+						}
+					}
 				}
-				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-				line0=line.at(0);
-				line1 = line.at(1); 			// The first string is in the 2nd line.
 			}
-			fIndx++;							//Increment file index of the read
-			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-				*p = toupper(*p);
-			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
-			{
-				Read *r1=new Read(fIndx);
-				UINT64 len = line1.length();
-				if(len > longestReadLength)
-					longestReadLength = len;
-				if(len < shortestReadLength)
-					shortestReadLength = len;
-
-				reads->push_back(r1);						// Store the first string in the dataset.
-				numberOfReads++;							// Counter of the total number of reads.
-				goodReads++;
-			}
-			else
-				badReads++;
 		}
-
 		myFile.close();
 	}
+	numberOfReads+=goodReads;				// Counter of the total number of reads.
     cout << endl << "Dataset: " << setw(2) << datasetNumber << endl;
     cout << "File name: " << fileName << endl;
 	cout << setw(10) << goodReads << " good reads in current dataset."  << endl;
@@ -282,68 +351,7 @@ bool Dataset::testRead(const string & read)
 	if(cnt[0] >= threshold || cnt[1] >= threshold || cnt[2] >= threshold || cnt[3] >= threshold)
 		return false;	// If 80% bases are the same base.
 
-	//Check if dimers exist
-	threshold = read.length()*.5;	// 50% of the length.
-	size_t dimerCtr = countSubstring(read, "AC");
-	dimerCtr = dimerCtr*2;
-	if(dimerCtr >= threshold)
-			return false;	// If 50% bases are the same base.
-	dimerCtr = countSubstring(read, "AG");
-	dimerCtr = dimerCtr*2;
-	if(dimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	dimerCtr = countSubstring(read, "AT");
-	dimerCtr = dimerCtr*2;
-	if(dimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	dimerCtr = countSubstring(read, "CG");
-	dimerCtr = dimerCtr*2;
-	if(dimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	dimerCtr = countSubstring(read, "CT");
-	dimerCtr = dimerCtr*2;
-	if(dimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-
-	//Check if trimers exist
-	threshold = read.length()*.5;	// 50% of the length.
-	size_t trimerCtr = countSubstring(read, "AAT");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-			return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "ATA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "TAA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "AAC");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "ACA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "CAA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "AAG");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "AGA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-	trimerCtr = countSubstring(read, "GAA");
-	trimerCtr = trimerCtr*3;
-	if(trimerCtr >= threshold)
-		return false;	// If 50% bases are the same base.
-
+	//This loop filters out reads with unusually micro-repeating kmers at start or end
 	for(size_t i=0;i<filterStrings.size();i++)
 	{
 		UINT64 len=filterStrings[i].size();
@@ -351,6 +359,15 @@ bool Dataset::testRead(const string & read)
 			return false;
 		if(filterStrings[i] == read.substr(read.length()-len))
 			return false;
+	}
+	//Check if dimers or trimers exist in very large numbers
+	threshold = read.length()*.5;	// 50% of the length.
+	for(size_t i=0;i<merCheckStrings.size();i++)
+	{
+		size_t repeatCtr = countSubstring(read, merCheckStrings[i]);
+		repeatCtr = repeatCtr * merCheckStrings[i].length();
+		if(repeatCtr >= threshold)		//Check if repeat appears over more than 50% of the read's sequence
+			return false;				//One of the dimers/trimers exist in large micro repeats
 	}
 	return true;
 }
@@ -421,5 +438,4 @@ Dataset::~Dataset(void)
 		delete reads->at(i);
 	}
 	delete reads;
-
 }

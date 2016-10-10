@@ -12,7 +12,7 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.99
+#define MAX_USED 0.80
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
@@ -113,7 +113,6 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i)+".txt";
 		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
 		UINT64 nonContainedReads = dataSet->size()-containedCtr;
-		cout<<"Contained Reads:"<<containedCtr<<endl;
 		if(usedReads>(MAX_USED*nonContainedReads))
 		{
 			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
@@ -147,13 +146,27 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 	}
 	//Print GFA file
-	string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa2";
-	ofstream gfaFilePointer;
-	gfaFilePointer.open(gfa_file.c_str());
-	if(!gfaFilePointer)
-		MYEXIT("Unable to open file: "+gfa_file);
-	overlapGraph->generateGFA2Output(gfaFilePointer);
-	gfaFilePointer.close();
+	if(printGFA)
+	{
+		string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa";
+		ofstream gfaFilePointer;
+		gfaFilePointer.open(gfa_file.c_str());
+		if(!gfaFilePointer)
+			MYEXIT("Unable to open file: "+gfa_file);
+		overlapGraph->generateGFAOutput(gfaFilePointer);
+		gfaFilePointer.close();
+	}
+	//Print GFA2 file
+	if(printGFA2)
+	{
+		string gfa_file = outputFilenamePrefix+"_Graph_"+SSTR(interationCount)+".gfa2";
+		ofstream gfaFilePointer;
+		gfaFilePointer.open(gfa_file.c_str());
+		if(!gfaFilePointer)
+			MYEXIT("Unable to open file: "+gfa_file);
+		overlapGraph->generateGFA2Output(gfaFilePointer);
+		gfaFilePointer.close();
+	}
 	//Start scaffolding
 	overlapGraph->calculateMeanAndSdOfInnerDistance();
 	UINT64 iteration=0, counter = 0;

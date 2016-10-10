@@ -105,6 +105,11 @@ extern bool printScaffolds;
 
  // print unused reads or not
 extern bool printUnused;
+
+// print GFA/GFA2 graph
+extern bool printGFA;
+extern bool printGFA2;
+
 //============================================================================
 
 
