@@ -1904,6 +1904,8 @@ void OverlapGraph::readParEdges(string edge_file)
 	if(!filePointer.is_open() )
 		MYEXIT("Unable to open file: "+edge_file);
 
+	FILE_LOG(logINFO) << "Reading partial edge file:"<<edge_file<<endl;
+
 	// Read file
 	std::string edge_text;
 	while(getline(filePointer,edge_text)) {
