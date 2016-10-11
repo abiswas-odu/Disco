@@ -12,14 +12,14 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.80
+#define MAX_USED 0.70
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
 TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
 string outputFilenamePrefix = "omega3";
 
-void SimplifyGraph(const vector<std::string> &edgeFilenameList,
+bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl, UINT64 &ctgCount, UINT64 &scfCount, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
 
@@ -71,11 +71,11 @@ int main(int argc, char **argv) {
 		<< dataSet->size() << "\n";
 	//Read parameter file and set assembly parameters
 	SetParameters(1);
-	SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
+	bool continueSimplification=SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 			minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, 1);
 
 	//Do more iterations
-	for(int i=2;i < FINAL_ITER; i++)
+	for(int i=2;i < FINAL_ITER && continueSimplification; i++)
 	{
 		//Clear edge information stored in the reads before the second iteration
 		#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
 
 		//Read parameter file and set assembly parameters
 		SetParameters(i);
-		SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
+		continueSimplification=SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 					minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, i);
 	}
 	//Print unused reads
@@ -100,24 +100,17 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-void SimplifyGraph(const vector<std::string> &edgeFilenameList,
+bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 &ctgCount,UINT64 &scfCount,
 		UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO) <<"Graph Simplification Iteration: "<<interationCount<<endl;
-
-	//Load already used reads
-	for(int i=1;i < interationCount; i++)
+	UINT64 nonContainedReads = dataSet->size()-containedCtr;
+	for(int i=1;i < interationCount; i++)	//Load used reads
 	{
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i)+".txt";
-		UINT64 usedReads = dataSet->LoadUsedReads(usedReadFileName);
-		UINT64 nonContainedReads = dataSet->size()-containedCtr;
-		if(usedReads>(MAX_USED*nonContainedReads))
-		{
-			FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
-			return;
-		}
+		dataSet->LoadUsedReads(usedReadFileName);
 	}
 
 	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
@@ -125,10 +118,6 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 
 	//Initial Simplification
 	overlapGraph->graphPathFindInitial();
-	/*std::string graph_file = outputFilenamePrefix+"_graph0.cytoscape";
-	ofstream g_out(graph_file.c_str());
-	g_out << *overlapGraph;
-	g_out.close();*/
 	//ClipBranches and remove similar edges
 	overlapGraph->simplifyGraph();
 	// Flow analysis
@@ -212,8 +201,13 @@ void SimplifyGraph(const vector<std::string> &edgeFilenameList,
 			usedReads++;
 	}
 	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<" Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
-
 	delete overlapGraph;
+	if(usedReads>(MAX_USED*nonContainedReads))
+	{
+		FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
+		return false;
+	}
+	return true;
 	CLOCKSTOP;
 }
 

@@ -1085,7 +1085,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 		MYEXIT("No edge files provided. Therefore there is no graph to simplify. So we are done!!!");
 
 	sortEdgesByDestID();
-	FILE_LOG(logDEBUG1) << "graph has " << m_graph->size() << " unique number of reads.\n";
+	FILE_LOG(logDEBUG1) << "graph has " << m_graph->size() << " unique number of nodes.\n";
 	FILE_LOG(logERROR) << "numberOfEdges loaded from edge file(s): " << m_numberOfEdges << "\n";
 
 	UINT64 counter(0);
@@ -1670,7 +1670,9 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 		edgeFilePointer<<source<<"\t";		// store the source read information
 		edgeFilePointer<<destination<<"\t";	// store the destination read information
 		fileUsedReadPointer<<source<<endl;		//Write the source read as used up
+		m_dataset->at(source)->setUsedRead(true);	//set as used
 		fileUsedReadPointer<<destination<<endl;		//Write the destination read as used up
+		m_dataset->at(destination)->setUsedRead(true);	//set as used
 		edgeFilePointer<<orientation<<",";
 		edgeFilePointer<<contigEdge->getOverlapOffset()-offsetSum<<",";  //first overlap offset
 		edgeFilePointer<<offsetSum+(contigEdge->getDestinationRead()->getReadLength()-lastOffset)<<","; //overlap length
@@ -2035,7 +2037,7 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 
 	//Open used read file
 	ofstream fileUsedReadPointer;
-	fileUsedReadPointer.open(usedReadFileName.c_str());
+	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
 	if(!fileUsedReadPointer)
 			MYEXIT("Unable to open file: "+usedReadFileName);
 
