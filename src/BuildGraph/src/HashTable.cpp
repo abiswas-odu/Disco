@@ -77,14 +77,15 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 maxThr
 void HashTable::populateReadLengths()
 {
 	CLOCKSTART;
+	UINT64 fileIndex=0;
 	for(UINT64 i = 0; i < dataSet->pairedEndDatasetFileNames.size(); i++)						// Read the paired-end datasets.
 	{
-		readReadLengthsFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1);
+		readReadLengthsFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1,fileIndex);
 	}
 
 	for(UINT64 i = 0; i < dataSet->singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
 	{
-		readReadLengthsFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1);
+		readReadLengthsFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1,fileIndex);
 	}
 	CLOCKSTOP;
 }
@@ -115,7 +116,7 @@ void HashTable::populateReadData()
 /**********************************************************************************************************************
 	Read sequence lengths into the hashTable
 **********************************************************************************************************************/
-void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
+void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex)
 {
 	CLOCKSTART;
 	cout << "Reading read lengths from file: " << fileName << endl;
@@ -128,37 +129,28 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 		int l;
 		fp = gzopen(fileName.c_str(), "r");
 		seq = kseq_init(fp);
-		#pragma omp parallel num_threads(parallelThreadPoolSize)
-		{
-			#pragma omp single
+
+		while ((l = kseq_read(seq)) >= 0) {
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			//printf("name: %s\n", seq->name.s);
+			//if (seq->comment.l) printf("comment: %s\n", seq->comment.s);
+			//printf("seq: %s\n", seq->seq.s);
+			//if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
+			string line1=seq->seq.s;
+			fileIndex++;
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read is good and exists
 			{
-				while ((l = kseq_read(seq)) >= 0) {
-					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-						cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-					//printf("name: %s\n", seq->name.s);
-					//if (seq->comment.l) printf("comment: %s\n", seq->comment.s);
-					//printf("seq: %s\n", seq->seq.s);
-					//if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
-					string line1=seq->seq.s;
-					#pragma omp task firstprivate(line1)
-					{
-						for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-							*p = toupper(*p);
-						if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
-						{
-							hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
-							#pragma omp atomic
-								goodReads++;
-						}
-						else
-						{
-							#pragma omp atomic
-								badReads++;
-						}
-					}
-				}
+				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
 			}
+			else
+				badReads++;
 		}
+
 		kseq_destroy(seq);
 		gzclose(fp);
 #else
@@ -177,67 +169,57 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
-		#pragma omp parallel num_threads(parallelThreadPoolSize)
+		while(getline(myFile,text))
 		{
-			#pragma omp single
+			string line1="",line0="";
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			if(fileType == UNDEFINED)
 			{
-				while(getline(myFile,text))
-				{
-					string line1="",line0="";
-					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-						cout<< setw(10) << goodReads + badReads << " read lengths added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-					if(fileType == UNDEFINED)
-					{
-						if(text[0] == '>')
-							fileType = FASTA;
-						else if(text[0] == '@')
-							fileType = FASTQ;
-						else
-							MYEXIT("Unknown input file format.");
-					}
-					line.clear();
-					if(fileType == FASTA) 			// Fasta file
-					{
-						line.push_back(text);
-						getline (myFile,text,'>');
-						line.push_back(text);
-
-						line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-						line0=line.at(0);
-						line1 = line.at(1);								// The first string is in the 2nd line.
-
-					}
-					else if(fileType == FASTQ) 					// Fastq file.
-					{
-						line.push_back(text);
-						for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
-						{
-							getline (myFile,text);
-							line.push_back(text);
-						}
-						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-						line0=line.at(0);
-						line1 = line.at(1); 			// The first string is in the 2nd line.
-					}
-					#pragma omp task firstprivate(line1)
-					{
-						for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-							*p = toupper(*p);
-						if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
-						{
-							hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
-							#pragma omp atomic
-								goodReads++;
-						}
-						else
-						{
-							#pragma omp atomic
-								badReads++;
-						}
-					}
-				}
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else
+					MYEXIT("Unknown input file format.");
 			}
+			line.clear();
+			if(fileType == FASTA) 			// Fasta file
+			{
+				line.push_back(text);
+				getline (myFile,text,'>');
+				line.push_back(text);
+
+				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1);								// The first string is in the 2nd line.
+
+			}
+			else if(fileType == FASTQ) 					// Fastq file.
+			{
+				line.push_back(text);
+				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
+				{
+					getline (myFile,text);
+					line.push_back(text);
+				}
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1); 			// The first string is in the 2nd line.
+			}
+			fileIndex++;
+			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
+				*p = toupper(*p);
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read is good and exists
+			{
+				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
+				goodReads++;
+			}
+			else
+				badReads++;
+
 		}
 		myFile.close();
 	}
