@@ -97,6 +97,9 @@ extern unsigned int minContigLengthTobeReported;
 // minimum reads in a contig to be reported (default: 5)
 extern unsigned int minNumberofReadsTobePrinted;
 
+// Fraction of reads used before iteration
+extern double maxReadsUsed;
+
 // print contigs or not
 extern bool printContigs;
 

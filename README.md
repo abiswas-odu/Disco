@@ -140,6 +140,52 @@ For all the options of omega3, use `./runOmega3.sh -h`
 
 In case the program crashes due to exceeding wall clock time, the assembler can be restarted with the same command. 
 
+#### Assembly on a Distributed Nodes
+
+The assembler can be run on a distributed machine using the three distributed assembly scripts. 
+
+#### Assembly Run Script Options
+
+Usage:
+
+   runOmega3.sh [OPTION]...<PARAM>...
+
+
+<PARAMS>
+
+   -inS	 single read filenames (comma seperated fasta/fastq/fastq.gz file).
+
+   -in1	 forward paired read filename (single fasta/fastq/fastq.gz file).
+
+   -in2	 reverse paired read filename (single fasta/fastq/fastq.gz file).
+
+   -inP	 interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).
+
+   -d	 output directory path (DEFAULT: current directory).
+
+   -o	 output filename prefix (DEFAULT: omega3).
+
+<OPTIONS>
+
+   -h	 help.
+
+   -m	 maximum memory to be used (DEFAULT: 125 GB).
+
+   -n	 number of threads (DEFAULT: 32).
+
+   -obg	 only build overlap graph (DEFAULT: False).
+
+   -osg	 only simplify existing overlap graph (DEFAULT: False).
+   
+   -p	 assembly parameter file for 1st assembly iteration.
+
+   -p2	 assembly parameter file for 2nd assembly iteration.
+
+   -p3	 assembly parameter file for 3rd assembly iteration.
+
+
+The assembly script has basic options to specify required parameters. 
+
 #### Controlling memory usage
 
 The memory usage of Omega can be controlled using the `-m` option to the run script as shown above. The default memory usage is to take all the system resources. In case that has to be avoided or the program crashes ot is too slow due to memory page swapping, the user can set a ubber bound on the memory. The minumum memory to assemble a dataset is:
@@ -180,9 +226,14 @@ MinOverlap4BuildGraph = 40
 # Parameters for Omega output
 
 # Print contigs or not. Options are "false" (default) or "true". Printing takes a non-trivial amount of wall-clock time.
-PrintContigs = false
+PrintContigs = true
 # Print scaffolds or not. Options are "true" (default) or "false"
 PrintScaffolds = true
+# Print unused reads or not. Options are "true" or "false" (default)
+PrintUnused = true
+# Print GFA/GFA2 graph format. Options are "true" or "false" (default)
+PrintGFA = false
+PrintGFA2 = false
 # Minimum length of contigs or scaffolds to be printed (default: 1000 bp)
 minSequenceLengthTobePrinted = 1000
 

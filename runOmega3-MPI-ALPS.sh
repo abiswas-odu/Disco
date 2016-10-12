@@ -31,13 +31,12 @@ case $key in
     echo -e "Usage: For clusters using Application Level Placement Scheduler (ALPS) \n"
     echo -e "   runOmega3.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
-    echo -e "   -inS\t single read filenames (comma seperated).\n"
-    echo -e "   -in1\t forward paired read filename (single file).\n"
-    echo -e "   -in2\t reverse paired read filename (single file).\n"
-    echo -e "   -inP\t interleaved paired read filenames (comma seperated).\n"
+    echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
+    echo -e "   -in1\t forward paired read filename (single fasta/fastq/fastq.gz file).\n"
+    echo -e "   -in2\t reverse paired read filename (single fasta/fastq/fastq.gz file).\n"
+    echo -e "   -inP\t interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
     echo -e "   -d\t output directory path.\n"
     echo -e "   -o\t output filename prefix.\n"
-    echo -e "   -p\t assembly parameter file.\n"
     echo -e "<OPTIONS>\n"
     echo -e "   -h\t help.\n"
     echo -e "   -m\t maximum memory to be used (DEFAULT: $maxMem GB).\n"
@@ -46,6 +45,9 @@ case $key in
     echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
     echo -e "   -rma\t enable distributed memory with remote memory acess (DEFAULT: False).\n"
+    echo -e "   -p\t assembly parameter file for 1st assembly iteration.\n"
+    echo -e "   -p2\t assembly parameter file for 2nd assembly iteration.\n"
+    echo -e "   -p3\t assembly parameter file for 3rd assembly iteration.\n"
     exit 1
     ;;
     -p|--parameterFile)     # overlap length to consider

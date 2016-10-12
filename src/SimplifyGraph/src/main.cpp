@@ -12,7 +12,6 @@
 #include "logcpp/log.h"
 
 #define FINAL_ITER 4
-#define MAX_USED 0.70
 
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
@@ -202,7 +201,7 @@ bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
 	}
 	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<" Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
 	delete overlapGraph;
-	if(usedReads>(MAX_USED*nonContainedReads))
+	if(usedReads>(maxReadsUsed*nonContainedReads))
 	{
 		FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
 		return false;
