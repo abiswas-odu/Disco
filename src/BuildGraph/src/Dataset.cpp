@@ -222,6 +222,7 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
+		map<UINT64,string> readList;
 		#pragma omp parallel num_threads(parallelThreadPoolSize)
 		{
 			#pragma omp single
@@ -266,40 +267,49 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 						line1 = line.at(1); 			// The first string is in the 2nd line.
 					}
 					fIndx++;							//Increment file index of the read
-					UINT64 fileIndexOfRead=fIndx;
-					#pragma omp task firstprivate(line1, fileIndexOfRead)
+					if(readList.size()>10000)
 					{
-						for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-							*p = toupper(*p);
-						if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+						#pragma omp task firstprivate(readList)
 						{
-							Read *r1=new Read(fileIndexOfRead);
-							UINT64 len = line1.length();
+							for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
+								UINT64 fileIndexOfRead=iterator->first;
+								string seqLine=iterator->second;
+								for (std::string::iterator p = seqLine.begin(); seqLine.end() != p; ++p) // Change the case
+									*p = toupper(*p);
+								if(seqLine.length() > minOverlap && testRead(seqLine) ) // Test the read is of good quality.
+								{
+									Read *r1=new Read(fileIndexOfRead);
+									UINT64 len = seqLine.length();
 
-							if(len > longestReadLength)
-							{
-								#pragma omp atomic write
-									longestReadLength = len;
-							}
-							if(len < shortestReadLength)
-							{
-								#pragma omp atomic write
-									shortestReadLength = len;
-							}
+									if(len > longestReadLength)
+									{
+										#pragma omp atomic write
+											longestReadLength = len;
+									}
+									if(len < shortestReadLength)
+									{
+										#pragma omp atomic write
+											shortestReadLength = len;
+									}
 
-							#pragma omp critical
-							{
-								reads->push_back(r1);						// Store the first string in the dataset.
+									#pragma omp critical
+									{
+										reads->push_back(r1);						// Store the first string in the dataset.
+									}
+									#pragma omp atomic
+										goodReads++;
+								}
+								else
+								{
+									#pragma omp atomic
+										badReads++;
+								}
 							}
-							#pragma omp atomic
-								goodReads++;
 						}
-						else
-						{
-							#pragma omp atomic
-								badReads++;
-						}
+						readList.clear();
 					}
+					else
+						readList.insert(std::pair<UINT64, string>(fIndx, line1));
 				}
 			}
 		}
