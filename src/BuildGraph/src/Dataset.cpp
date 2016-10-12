@@ -149,6 +149,7 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 	CLOCKSTART;
 	cout << "Reading dataset: " << datasetNumber << " from file: " << fileName << endl;
 	UINT64 goodReads = 0, badReads = 0;
+	map<UINT64,string> readList;
 	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
 #ifdef INCLUDE_READGZ
@@ -222,7 +223,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
-		map<UINT64,string> readList;
 		#pragma omp parallel num_threads(parallelThreadPoolSize)
 		{
 			#pragma omp single
@@ -267,8 +267,9 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 						line1 = line.at(1); 			// The first string is in the 2nd line.
 					}
 					fIndx++;							//Increment file index of the read
-					if(readList.size()>10000)
+					if(readList.size()>=10000)
 					{
+						readList.insert(std::pair<UINT64, string>(fIndx, line1));
 						#pragma omp task firstprivate(readList)
 						{
 							for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
@@ -311,9 +312,36 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 					else
 						readList.insert(std::pair<UINT64, string>(fIndx, line1));
 				}
+				#pragma omp taskwait
 			}
 		}
 		myFile.close();
+	}
+	//Insert remaining reads left in the map
+	for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
+		UINT64 fileIndexOfRead=iterator->first;
+		string seqLine=iterator->second;
+		for (std::string::iterator p = seqLine.begin(); seqLine.end() != p; ++p) // Change the case
+			*p = toupper(*p);
+		if(seqLine.length() > minOverlap && testRead(seqLine) ) // Test the read is of good quality.
+		{
+			Read *r1=new Read(fileIndexOfRead);
+			UINT64 len = seqLine.length();
+			if(len > longestReadLength)
+			{
+				longestReadLength = len;
+			}
+			if(len < shortestReadLength)
+			{
+				shortestReadLength = len;
+			}
+			reads->push_back(r1);						// Store the first string in the dataset.
+			goodReads++;
+		}
+		else
+		{
+				badReads++;
+		}
 	}
 	numberOfReads+=goodReads;				// Counter of the total number of reads.
     cout << endl << "Dataset: " << setw(2) << datasetNumber << endl;
