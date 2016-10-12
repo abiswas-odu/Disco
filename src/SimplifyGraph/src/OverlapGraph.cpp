@@ -1922,14 +1922,14 @@ void OverlapGraph::readParEdges(string edge_file)
 
 		// Make the forward edge list
 		UINT64 *listReadsForward = nullptr;
-		UINT64 lFSize=0;
+		UINT64 innerReadCount=0;
 		UINT64 usedReadCtr=0;
 		UINT64 unUsedMate=0;
 		if(tok.size()>3)			//If composite edge load the inner reads
-			usedReadCtr = createFwdList(tok[3], &listReadsForward, lFSize, unUsedMate, m_dataset);		//Returns the count of inner reads that have been used before
+			usedReadCtr = createFwdList(tok[3], &listReadsForward, innerReadCount, unUsedMate, m_dataset);		//Returns the count of inner reads that have been used before
 
 		//Do not load edge into graph if the edge was used in previous assemblies...
-		if(isUsedEdge(lFSize,usedReadCtr,unUsedMate,source,destination))
+		if(isUsedEdge(innerReadCount,usedReadCtr,unUsedMate,source,destination))
 		{
 			delete[] listReadsForward;
 			listReadsForward = nullptr;
@@ -1937,7 +1937,7 @@ void OverlapGraph::readParEdges(string edge_file)
 		else
 		{
 			Edge *edgeForward = new Edge(source,destination,orientationForward,
-					overlapOffsetForward, listReadsForward, lFSize);
+					overlapOffsetForward, listReadsForward, innerReadCount);
 
 			// Make the reverse edge
 			UINT64 *listReadsReverse = nullptr;
