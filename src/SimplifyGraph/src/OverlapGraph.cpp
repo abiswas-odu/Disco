@@ -2052,10 +2052,14 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 				++printed_contigs;
 				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
 				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
+				//contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
+				//<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", "
+				//<< (*it)->getDestinationRead()->getReadID()
+				//<< ") String Length: " << contigString.length() << "\n";
+				(*it)->updateBaseByBaseCoverageStat(m_dataset);
 				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
-				<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", " 
-				<< (*it)->getDestinationRead()->getReadID() 
-				<< ") String Length: " << contigString.length() << "\n";
+				<<" Coverage: " << (*it)->getCovDepth()
+				<<" Length: " << contigString.length() << "\n";
 
 				UINT32 start=0;
 				do

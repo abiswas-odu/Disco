@@ -85,7 +85,7 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 			"GGAGGGAGGGAGGGAGGGAGGGAGGGAGG",
 			"GGGAGGGAGGGAGGGAGGGAGGGAGGGAG"};
 
-	merCheckStrings={"AC","AG","AT","CG","CT","AAT","ATA","TAA","AAC","ACA","CAA","AAG","AGA","GAA"};
+	merCheckStrings={"AC","AG","AT","CG","CT","GT","AAT","ATA","TAA","AAC","ACA","CAA","AAG","AGA","GAA"};
 
 	parallelThreadPoolSize=maxThreads;
 
