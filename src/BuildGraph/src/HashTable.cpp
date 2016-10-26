@@ -347,12 +347,10 @@ bool HashTable::hashReadLengths(string forwardRead)
 	size_t dna_word = (forwardRead.length() / 32) + (forwardRead.length() % 32 != 0);
 
 	UINT64 index = getHashIndex(prefixForward);						// Get the index using the hash function.
-	#pragma omp atomic update
-		hashTable[index]+=(dna_word+1);
+	hashTable[index]+=(dna_word+1);
 
 	index = getHashIndex(suffixForward);
-	#pragma omp atomic update
-		hashTable[index]+=(dna_word+1);
+	hashTable[index]+=(dna_word+1);
 
 	return true;
 }

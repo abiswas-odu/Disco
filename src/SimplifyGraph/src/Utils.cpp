@@ -661,4 +661,17 @@ namespace Utils
         trim(s);
         return s;
     }
+
+    void writeCheckPointFile(std::string allFileNamePrefix, std::string message)
+    {
+    	//Write checkpoint file and set graph construction complete
+		std::ofstream filePointer;
+		std::string fileName = allFileNamePrefix+"_SimplificationCheckpointInfo.txt";
+		filePointer.open(fileName.c_str(), std::ios_base::app);
+		if(!filePointer)
+			MYEXIT("Unable to open file: "+fileName);
+		filePointer<<message<<std::endl;
+		filePointer.close();
+    }
+
 }

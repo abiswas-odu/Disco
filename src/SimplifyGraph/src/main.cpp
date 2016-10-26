@@ -6,10 +6,10 @@
 // Description : Main code
 //============================================================================
 
-#include "Config.h"
 #include "DataSet.h"
 #include "OverlapGraph.h"
 #include "logcpp/log.h"
+#include "Utils.h"
 
 #define FINAL_ITER 4
 
@@ -18,11 +18,13 @@ int OverlapGraph::s_nGoodEdges = 0;
 TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
 string outputFilenamePrefix = "omega3";
 
-bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
+bool SimplifyGraph(vector<vector<int>> &checkPointParams, const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl, UINT64 &ctgCount, UINT64 &scfCount, UINT64 parallelThreadPoolSize,UINT64 containedCtr, int interationCount);
 
 void SetParameters(int interationCount);
+
+UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams);
 
 int main(int argc, char **argv) {
 
@@ -62,20 +64,24 @@ int main(int argc, char **argv) {
 	CLOCKSTART;
 	//Load reads before simplification...
 	DataSet *dataSet = new DataSet(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList); // construct dataset from reads file(s)
-
 	//Load and get count of contained reads
 	UINT64 containedCtr = dataSet->storeContainedReadInformation(containedReadsFileName);
 
 	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
 		<< dataSet->size() << "\n";
-	//Read parameter file and set assembly parameters
-	SetParameters(1);
-	bool continueSimplification=SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-			minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, 1);
+	//Read checkpoint file and set checkpoint parameters
+	vector< vector<int> > checkPointParams;
+	int startItr=readCheckpointInfo(checkPointParams);
 
-	//Do more iterations
-	for(int i=2;i < FINAL_ITER && continueSimplification; i++)
+	//Do simplification iterations
+	bool continueSimplification= true;
+	for(int i=startItr;i < FINAL_ITER && continueSimplification; i++)
 	{
+		//Read parameter file and set assembly parameters
+		SetParameters(i);
+		continueSimplification=SimplifyGraph(checkPointParams,edgeFilenameList, simplifyPartialPath, dataSet,
+					minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, i);
+
 		//Clear edge information stored in the reads before the second iteration
 		#pragma omp parallel for schedule(guided) num_threads(threadPoolSize)
 		for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
@@ -83,11 +89,6 @@ int main(int argc, char **argv) {
 			dataSet->at(i)->ClearEdgeInfo();
 			dataSet->at(i)->setUsedRead(false);
 		}
-
-		//Read parameter file and set assembly parameters
-		SetParameters(i);
-		continueSimplification=SimplifyGraph(edgeFilenameList, simplifyPartialPath, dataSet,
-					minOvl, ctgCount, scfCount, threadPoolSize,containedCtr, i);
 	}
 	//Print unused reads
 	if(printUnused)
@@ -99,40 +100,96 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
+bool SimplifyGraph(vector<vector<int>> &checkPointParams,const vector<std::string> &edgeFilenameList,
 		string simplifyPartialPath, DataSet *dataSet, UINT64 minOvl, UINT64 &ctgCount,UINT64 &scfCount,
 		UINT64 threadPoolSize, UINT64 containedCtr, int interationCount)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO) <<"Graph Simplification Iteration: "<<interationCount<<endl;
+	UINT64 usedReads = 0;
+	Utils::writeCheckPointFile(outputFilenamePrefix,"Iteration="+SSTR(interationCount));
 	UINT64 nonContainedReads = dataSet->size()-containedCtr;
 	for(int i=1;i < interationCount; i++)	//Load used reads
 	{
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(i)+".txt";
-		dataSet->LoadUsedReads(usedReadFileName);
+		usedReads += dataSet->LoadUsedReads(usedReadFileName);
 	}
-
-	OverlapGraph *overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
+	if(usedReads>(maxReadsUsed*nonContainedReads))
+	{
+		FILE_LOG(logINFO) <<"Graph simplification iteration terminated. Most reads used already. Assembly simplification complete."<<endl;
+		return false;
+	}
+	OverlapGraph *overlapGraph;
+	//Check if the simple edges have been processed
+	if(checkPointParams[interationCount-1][0]==0)	//Simple edges need to be processed into composite graph
+	{
+		overlapGraph = new OverlapGraph(edgeFilenameList, simplifyPartialPath, dataSet,
 				minOvl, threadPoolSize);
-
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"ParSimplify=1");
+	}
+	else											//Simple edges already processed into composite graph; load global graph
+	{
+		string parGlobalGraph = outputFilenamePrefix+"_CurrGraph_.txt";
+		overlapGraph = new OverlapGraph(parGlobalGraph, simplifyPartialPath, dataSet,
+						minOvl, threadPoolSize);
+	}
 	//Initial Simplification
-	overlapGraph->graphPathFindInitial();
+	if(checkPointParams[interationCount-1][1]==0)		//Check if initial simplification complete
+	{
+		overlapGraph->graphPathFindInitial();
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"InitialSimplify=1");
+	}
+	else
+		FILE_LOG(logINFO) <<"Skipping initial simplification..."<<endl;
 	//ClipBranches and remove similar edges
-	overlapGraph->simplifyGraph();
+	if(checkPointParams[interationCount-1][2]==0)		//Check if aggressive simplification complete
+	{
+		overlapGraph->simplifyGraph();
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"AggressiveSimplify=1");
+	}
+	else
+		FILE_LOG(logINFO) <<"Skipping aggressive simplification..."<<endl;
 	// Flow analysis
-	overlapGraph->calculateFlowStream();
-	overlapGraph->removeAllEdgesWithoutFlow();
-	overlapGraph->simplifyGraph();
+	if(checkPointParams[interationCount-1][3]==0)		//Check if flow analysis complete
+	{
+		overlapGraph->calculateFlowStream();
+		overlapGraph->removeAllEdgesWithoutFlow();
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"FlowAnalysis=1");
+	}
+	else
+		FILE_LOG(logINFO) <<"Skipping flow analysis simplification..."<<endl;
+	if(checkPointParams[interationCount-1][4]==0)		//Check if post-flow analysis simplification complete
+	{
+		overlapGraph->simplifyGraph();
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"PostFlowAnalysis=1");
+	}
+	else
+		FILE_LOG(logINFO) <<"Skipping post flow analysis simplification..."<<endl;
 
 	//Print contig files before scaffolding
-	if(printContigs)
+	if(printContigs && checkPointParams[interationCount-1][5]==0)
 	{
 		string edge_file = outputFilenamePrefix+"_contigEdgesFinal_"+SSTR(interationCount)+".txt";
 		string edge_cov_file = outputFilenamePrefix+"_contigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"PrintCtg=1");
 	}
+	else
+		FILE_LOG(logINFO) <<"Skipping contig printing..."<<endl;
 	//Print GFA file
 	if(printGFA)
 	{
@@ -156,43 +213,50 @@ bool SimplifyGraph(const vector<std::string> &edgeFilenameList,
 		gfaFilePointer.close();
 	}
 	//Start scaffolding
-	overlapGraph->calculateMeanAndSdOfInnerDistance();
-	UINT64 iteration=0, counter = 0;
-	do
+	if(checkPointParams[interationCount-1][6]==0)		//Check if scaffolding is complete
 	{
-		// Mate pair paths are used to simplify the graph in this step
-		FILE_LOG(logINFO) << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		FILE_LOG(logINFO) << "FIRST LOOP ITERATION " << ++iteration << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		counter = overlapGraph->findSupportByMatepairsAndMerge();
-		overlapGraph->simplifyScaffoldGraph();
-	} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
+		overlapGraph->calculateMeanAndSdOfInnerDistance();
+		UINT64 iteration=0, counter = 0;
+		do
+		{
+			// Mate pair paths are used to simplify the graph in this step
+			FILE_LOG(logINFO) << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			FILE_LOG(logINFO) << "FIRST LOOP ITERATION " << ++iteration << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			counter = overlapGraph->findSupportByMatepairsAndMerge();
+			overlapGraph->simplifyScaffoldGraph();
+		} while (counter > 0 && iteration < loopLimit); // To avoid infinite loops
 
-	iteration = 0;
-	do
-	{
-		// Scaffolder
-		FILE_LOG(logINFO) << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
-		FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
-		counter = overlapGraph->scaffolder();
-		overlapGraph->simplifyScaffoldGraph();
+		iteration = 0;
+		do
+		{
+			// Scaffolder
+			FILE_LOG(logINFO) << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			FILE_LOG(logINFO) << "SECOND LOOP ITERATION " << ++iteration << endl;
+			FILE_LOG(logINFO) << "===============================================================================================================================================" <<endl;
+			counter = overlapGraph->scaffolder();
+			overlapGraph->simplifyScaffoldGraph();
 
-	} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
+		} while (counter > 0 && iteration < loopLimit);// To avoid infinite loops
 
-	if(printScaffolds)
-	{
-		string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
-		string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
-		string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
-		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
+		if(printScaffolds)
+		{
+			string edge_file = outputFilenamePrefix+"_scaffoldEdgesFinal_"+SSTR(interationCount)+".txt";
+			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
+			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
+			overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
+		}
+		//Write checkpoint graph
+		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"Scaffold=1");
 	}
-
+	else
+		FILE_LOG(logINFO) <<"Skipping scaffolding printing..."<<endl;
 	//Print the total used read count
-	UINT64 usedReads = 0;
+	usedReads = 0;
 	#pragma omp parallel for schedule(guided) reduction(+:usedReads) num_threads(threadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->size() ; i++) // For each read.
 	{
@@ -229,3 +293,59 @@ void SetParameters(int interationCount)
 	FILE_LOG(logINFO) << "Minimum overlap length difference for branches to clip: " << minOvlDiffToClip << endl;
 	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
 }
+
+UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams)
+{
+	//Initialize checkpoint vector
+	for(int i=1;i < FINAL_ITER; i++)
+	{
+		vector<int> paramValues = {0,0,0,0,0,0,0};
+		checkPointParams.push_back(paramValues);
+	}
+	ifstream filePointer;
+	string fileName = outputFilenamePrefix+"_SimplificationCheckpointInfo.txt";
+	filePointer.open(fileName.c_str());
+	int iterCtr=1;
+	if(!filePointer.is_open()) {
+		return 1;
+	}
+	else {
+		string par_text="";
+		while(getline(filePointer,par_text)) {
+			if(par_text.find("=") != std::string::npos)
+			{
+				vector<string> tok = Utils::split(par_text,'=');
+				string parName = Utils::trimmed(tok[0]);
+				string parVal = Utils::trimmed(tok[1]);
+				if(parName=="Iteration")
+				{
+					iterCtr=atoi(parVal.c_str());
+				}
+				if(parName=="ParSimplify" && parVal=="1")
+					checkPointParams[iterCtr-1][0]=1;
+				if(parName=="InitialSimplify" && parVal=="1")
+					checkPointParams[iterCtr-1][1]=1;
+				if(parName=="AggressiveSimplify" && parVal=="1")
+					checkPointParams[iterCtr-1][2]=1;
+				if(parName=="FlowAnalysis" && parVal=="1")
+					checkPointParams[iterCtr-1][3]=1;
+				if(parName=="PostFlowAnalysis" && parVal=="1")
+					checkPointParams[iterCtr-1][4]=1;
+				if(parName=="PrintCtg" && parVal=="1")
+					checkPointParams[iterCtr-1][5]=1;
+				if(parName=="Scaffold" && parVal=="1")
+					checkPointParams[iterCtr-1][6]=1;
+			}
+		}
+	}
+	UINT64 startIter=1;
+	for(;startIter < FINAL_ITER; startIter++)
+	{
+		for(int j=0;j < 7; j++)
+			if(checkPointParams[startIter-1][j]==0)
+				return startIter;
+	}
+	return 1;
+}
+
+

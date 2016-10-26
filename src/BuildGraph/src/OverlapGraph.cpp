@@ -56,13 +56,14 @@ bool isOverlappintInterval(UINT64 mean1, UINT64 sd1, UINT64 mean2, UINT64 sd2)
 BNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNMM
 
 **********************************************************************************************************************/
-OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix)
+OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix, bool containedReadComplete)
 {
 	// Initialize the variables.
 	numberOfNodes = 0;
 	numberOfEdges = 0;
 	parallelThreadPoolSize=maxThreads;
-
+	hashTable = ht;
+	dataSet = ht->getDataset();
 	UINT64 mem_used = checkMemoryUsage();
 	UINT64 maxMemSizeMB = maxMemSizeGB*1024;
 	INT64 memPerThdMB = (maxMemSizeMB-mem_used)/parallelThreadPoolSize;
@@ -79,7 +80,8 @@ OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,U
 	else
 		writeParGraphSize=MIN_PAR_GRAPH_SIZE;		// (0,5)GB per thread available
 
-	buildOverlapGraphFromHashTable(ht,fnamePrefix);
+
+	buildOverlapGraphFromHashTable(fnamePrefix,containedReadComplete);
 }
 
 /**********************************************************************************************************************
@@ -95,24 +97,22 @@ OverlapGraph::~OverlapGraph()
 /**********************************************************************************************************************
 	Build the overlap graph from hash table
 **********************************************************************************************************************/
-bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePrefix)
+bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool containedReadComplete)
 {
 	CLOCKSTART;
 	numberOfNodes = 0;
 	numberOfEdges = 0;
-	hashTable = ht;
-	dataSet = ht->getDataset();
 
-	markContainedReads(fnamePrefix, dataSet->getFRMap());
 
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
-	bool * allMarked = new bool[numNodes];
+	bool * allMarked = new bool[numNodes]();
 	allMarked[0]=0;
+	markContainedReads(fnamePrefix, dataSet->getFRMap(),allMarked, containedReadComplete);
 	// Initialization; Marked contained reads are considered processed...
 	#pragma omp parallel for schedule(dynamic) num_threads(parallelThreadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++)
 	{
-		if(dataSet->getReadFromID(i)->superReadID==0)
+		if(dataSet->getReadFromID(i)->getSuperReadID()==0)
 			allMarked[i]=0;
 		else
 			allMarked[i]=1;
@@ -292,13 +292,14 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 /**********************************************************************************************************************
 	This function check if a read contains other small reads. If a read is contained in more than one super read
 	then it is assigned to the longest such super read. Also duplicate reads are marked
+	Maintain list of previously computed contained reads in prevMarked
 **********************************************************************************************************************/
-void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap)
+void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, bool *prevMarked, bool containedReadComplete)
 {
 	CLOCKSTART;
 	UINT64 nonContainedReads = 0;
 	string testContainedReadFile = fnamePrefix+ "_" + SSTR(0) +"_containedReads.txt";
-	if(ifstream(testContainedReadFile.c_str()))
+	if(ifstream(testContainedReadFile.c_str()))		//Load contained reads computed previously
 	{
 		#pragma omp parallel num_threads(parallelThreadPoolSize)
 		{
@@ -317,39 +318,41 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				vector<string> toks = splitTok(text,'\t');
 				UINT64 containedReadFindex = atoi(toks[0].c_str());
 				UINT64 containingReadFindex = atoi(toks[1].c_str());
-				auto it = fIndxReadIDMap->find(containedReadFindex);
-				if(it != fIndxReadIDMap->end())
+				auto itContained = fIndxReadIDMap->find(containedReadFindex);
+				auto itContaining = fIndxReadIDMap->find(containingReadFindex);
+				if(itContained != fIndxReadIDMap->end() && itContaining != fIndxReadIDMap->end())		//Check the file indices are correct
 				{
-					Read *r = dataSet->getReadFromID(it->second); // Get the read
-					r->superReadID=containingReadFindex;
+					Read *rContained = dataSet->getReadFromID(itContained->second); // Get the contained  read
+					prevMarked[itContained->second]=1;				//Mark already processed reads
+					prevMarked[itContaining->second]=1;				//Mark already processed reads
+					rContained->setSuperReadID(containingReadFindex);
 					if(procCtr%1000000==0)
 						cout<<procCtr<<" contained reads processed..."<<endl;
 				}
 			}
 			filePointer.close();
 		}
+		if(!containedReadComplete)
+			cout<<"Contained read computation not complete. The remaining will be processed next."<<endl;
 	}
-	else
+	if(!containedReadComplete)		//Process reads not yet checked for containment
 	{
-		//Initialize file pointers
-
+		//Initialize file pointers for each thread
 		vector< shared_ptr<ofstream> > filePointerList;
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread
 		{
 			string containedReadFile = fnamePrefix+ "_" + SSTR(i) +"_containedReads.txt";
-			shared_ptr<ofstream> filePointer = make_shared<ofstream>(containedReadFile);
-			//filePointer.open(containedReadFile.c_str());
+			shared_ptr<ofstream> filePointer = make_shared<ofstream>(containedReadFile, std::ios_base::app);
 			if(!*(filePointer))
 				MYEXIT("Unable to open contained read file: +"+containedReadFile);
 			filePointerList.push_back(filePointer);
 		}
-
 		#pragma omp parallel for schedule(dynamic,10) num_threads(parallelThreadPoolSize)
 		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 		{
 			int threadID = omp_get_thread_num();
 			Read *read1 = dataSet->getReadFromID(i); // Get the read
-			if(read1->superReadID!=0)		//If read is already marked as contained, there is no need to look for contained reads within it
+			if(read1->getSuperReadID()!=0 || prevMarked[i]==1)		//If read is already marked as contained, there is no need to look for contained reads within it
 				continue;
 			string readString = hashTable->getStringForward(read1->getReadHashOffset()); // Get the forward of the read
 			string subString;
@@ -370,7 +373,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 																		// Orientation 1 means suffix of forward of the read
 																		// Orientation 2 means prefix of reverse of the read
 																		// Orientation 3 means prefix of reverse of the read
-						if(read2->superReadID!=0)		//If read is already marked as contained, there is no need to check if its contained again
+						if(read2->getSuperReadID()!=0 || prevMarked[read2ID]==1)		//If read is already marked as contained, there is no need to check if its contained again
 							continue;
 						UINT64 read2Len = hashTable->getReadLength(read2->getReadHashOffset());
 
@@ -388,8 +391,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 									case 2: orientation = 2; overlapLen = read1Len - j; break; 				// 2 = r1>-------<r2
 									case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 								}
-								if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
-									read2->superReadID = i;
+								if(read2->getSuperReadID() == 0) // This is the first super read found. we store the ID of the super read.
+									read2->setSuperReadID(i);
 								//Write contained read information regardless as it is a super read has been identified
 								*(filePointerList[threadID]) <<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 										<<read2Len<<","
@@ -413,8 +416,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 									case 2: orientation = 2; overlapLen = read1Len - j; break; 				// 2 = r1>-------<r2
 									case 3: orientation = 1; overlapLen = hashTable->getHashStringLength() + j; break; 		// 1 = r2<------->r2
 								}
-								if(read2->superReadID==0)
-										read2->superReadID = i;
+								if(read2->getSuperReadID()==0)
+										read2->setSuperReadID(i);
 								//Write duplicate read information regardless as it is a super read has been identified
 								*(filePointerList[threadID]) <<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 										<<read2Len<<","
@@ -437,12 +440,20 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		{
 			filePointerList[i]->close();
 		}
+		//Write checkpoint file and set contained read removal complete
+		ofstream filePointer;
+		string fileName = fnamePrefix+"_CheckpointInfo.txt";
+		filePointer.open(fileName.c_str());
+		if(!filePointer)
+			MYEXIT("Unable to open file: "+fileName);
+		filePointer<<"CCR=Complete"<<endl;
+		filePointer.close();
 	}
 	#pragma omp parallel for schedule(guided) reduction(+:nonContainedReads) num_threads(parallelThreadPoolSize)
 	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 	{
 		Read *read1 = dataSet->getReadFromID(i); // Get the read
-		if(read1->superReadID==0)		//If read is already marked as contained, there is no need to look for contained reads within it
+		if(read1->getSuperReadID()==0)		//If read is already marked as contained, there is no need to look for contained reads within it
 			nonContainedReads = nonContainedReads + 1;
 	}
 	cout<< endl << setw(10) << nonContainedReads << " Non-contained reads. (Keep as is)" << endl;
@@ -600,7 +611,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 
 				if(readNumber != read2ID 											//Must not be a loop
 						&& find(insertedEdgeList.begin(), insertedEdgeList.end(), read2ID)==insertedEdgeList.end()     //Must not have already added an edge with greater overlap
-						&& read1->superReadID == 0 && read2->superReadID == 0		// Both read need to be non contained.
+						&& read1->getSuperReadID() == 0 && read2->getSuperReadID() == 0		// Both read need to be non contained.
 						&& checkOverlap(readString,read2,(data >> 62),j)) 				// Must overlap
 				{
 					switch (data >> 62) // Most significant 2 bit represents  00 - prefix forward, 01 - suffix forward, 10 -  prefix reverse, 11 -  suffix reverse.

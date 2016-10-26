@@ -31,10 +31,10 @@ Edge::Edge(void)
 
 // Constructor for a (composite) edge, given
 Edge::Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset,
-		UINT64 *listOfReads, UINT32 listSize)
+		UINT64 *listOfReads, UINT32 listSize, UINT64 flowValue=0)
 :m_source(source), m_destination(destination),m_reverseEdge(nullptr),m_listOfReads(listOfReads),
  m_coverageDepth(0.0), m_SD(0),m_string(std::string()),  m_listSize(listSize), m_overlapOffset(overlapOffset), m_orient(orient),
-	m_flag(0), m_invalid(false), m_flow(0)
+	m_flag(0), m_invalid(false), m_flow(flowValue)
 {
 	if(m_listOfReads != nullptr &&
 		getInnerOverlapOffset(0) > m_source->getReadLength()){
@@ -47,10 +47,10 @@ Edge::Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset,
 		m_flag |= (1 << 1);
 }
 
-Edge::Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset)
+Edge::Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset, UINT64 flowValue=0)
 :m_source(source), m_destination(destination), m_reverseEdge(nullptr), m_listOfReads(nullptr),
  m_coverageDepth(0.0), m_SD(0), m_string(std::string()),  m_listSize(0), m_overlapOffset(overlapOffset), m_orient(orient),
-	m_flag(0), m_invalid(false), m_flow(0)
+	m_flag(0), m_invalid(false), m_flow(flowValue)
 {
 	if(m_overlapOffset >= m_source->getReadLength()){
 		FILE_LOG(logERROR) << "ERROR: overlap offset " << m_overlapOffset 

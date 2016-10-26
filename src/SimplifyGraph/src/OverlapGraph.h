@@ -151,6 +151,9 @@ class OverlapGraph
 		OverlapGraph(const vector<std::string> &edge_files, string simplifyPartialPath, DataSet *dataSet,
 				const UINT64 minOvl, const UINT64 parallelThreadPoolSize);
 
+		OverlapGraph(const string parGlobalGraph, string simplifyPartialPath, DataSet *dataSet,
+				UINT64 minOvl, UINT64 parallelThreadPoolSize);
+
 		~OverlapGraph();
 
 		/* ====================  ACCESSORS     ======================================= */
@@ -248,7 +251,6 @@ class OverlapGraph
 
 		void generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UINT64 source, string sOri,
 				UINT64 destination,string dOri, UINT64 offset);
-
 };
 
 void createRevList(Edge *fwdEdge, UINT64 **returnListReads, UINT64 &lSize);
