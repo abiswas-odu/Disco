@@ -151,13 +151,21 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 				// 1: Only destination is marked
 				// 2: Both source and destination are marked
 				if(markFlag==0)
-					allMarked[sourceIt->second]=1;
+				{
+					#pragma omp atomic write
+						allMarked[sourceIt->second]=1;
+				}
 				else if (markFlag==1)
-					allMarked[destIt->second]=1;
+				{
+					#pragma omp atomic write
+						allMarked[destIt->second]=1;
+				}
 				else
 				{
-					allMarked[sourceIt->second]=1;
-					allMarked[destIt->second]=1;
+					#pragma omp atomic write
+						allMarked[sourceIt->second]=1;
+					#pragma omp atomic write
+						allMarked[destIt->second]=1;
 				}
 				if(procCtr%1000000==0)
 					cout<< "Thread:" << threadID << " " <<procCtr<<" marked reads loaded ..."<<endl;
@@ -197,9 +205,15 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 			{
 				UINT64 read1 = nodeQ->front();										//Pop from queue...
 				nodeQ->pop();
+				bool usedFlag=0;
+				#pragma omp atomic read
+					usedFlag=allMarked[read1];
 				bool isPrevMarked=false;
-				if(allMarked[read1]==0)
-					allMarked[read1]=1;
+				if(usedFlag==0)
+				{
+					#pragma omp atomic write
+						allMarked[read1]=1;
+				}
 				else
 					isPrevMarked=true;
 				if(!isPrevMarked || read1==startReadID)
@@ -254,9 +268,11 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 					}
 				}
 			}
-			INT64 mem_used = checkMemoryUsage();
-			if(writtenMakedNodes>5)
+			if(writtenMakedNodes>10)
+			{
+				INT64 mem_used = checkMemoryUsage();
 				cout<<"Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
+			}
 			saveParGraphToFile(fnamePrefix + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 			for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
 			{
@@ -273,9 +289,13 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 			startReadID=0;
 			for(UINT64 i=prevReadID;i<numNodes;i++)
 			{
-				if(allMarked[i]==0){
+				bool usedFlag=0;
+				#pragma omp atomic read
+					usedFlag=allMarked[i];
+				if(usedFlag==0) {
 					startReadID=prevReadID=i;
-					allMarked[i]=1;
+					#pragma omp atomic write
+						allMarked[i]=1;
 					break;
 				}
 			}

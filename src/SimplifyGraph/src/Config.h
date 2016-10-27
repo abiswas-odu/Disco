@@ -50,7 +50,7 @@
 #include "logcpp/log.h"
 using namespace std;
 
-#define DISK_GRAPH_UPDATE 18000.0
+#define DISK_GRAPH_UPDATE 10800.0
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE 100
