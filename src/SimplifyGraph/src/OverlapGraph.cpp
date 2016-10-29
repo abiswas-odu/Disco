@@ -1151,7 +1151,7 @@ void OverlapGraph::graphPathFindInitial()
 			printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
 			prev = omp_get_wtime();
 		}
-	} while (counter > 0);
+	} while (counter > 1000);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
