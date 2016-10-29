@@ -1144,7 +1144,7 @@ void OverlapGraph::graphPathFindInitial()
 		removeDeadEndNodes();
 		counter = contractCompositeEdgesPar();
 		double curr = omp_get_wtime();
-		double lapsed =prev - curr;
+		double lapsed = curr - prev;
 		if(lapsed>=DISK_GRAPH_UPDATE)
 		{
 			//Update checkpoint graph
@@ -1256,7 +1256,7 @@ void OverlapGraph::simplifyGraph(void)
 		counter += reduceLoops();	// Reduce loops
 
 		double curr = omp_get_wtime();
-		double lapsed = prev - curr;
+		double lapsed = curr - prev;
 		if(lapsed>=DISK_GRAPH_UPDATE)
 		{
 			//Update checkpoint graph
