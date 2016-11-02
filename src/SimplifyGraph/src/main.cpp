@@ -24,7 +24,7 @@ bool SimplifyGraph(vector<vector<int>> &checkPointParams, const vector<std::stri
 
 void SetParameters(int interationCount);
 
-UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams);
+UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams, UINT64 &ctgCount,UINT64 &scfCount);
 
 int main(int argc, char **argv) {
 
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 		<< dataSet->size() << "\n";
 	//Read checkpoint file and set checkpoint parameters
 	vector< vector<int> > checkPointParams;
-	int startItr=readCheckpointInfo(checkPointParams);
+	int startItr=readCheckpointInfo(checkPointParams,ctgCount, scfCount);
 
 	//Do simplification iterations
 	bool continueSimplification= true;
@@ -186,7 +186,7 @@ bool SimplifyGraph(vector<vector<int>> &checkPointParams,const vector<std::strin
 		overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
-		Utils::writeCheckPointFile(outputFilenamePrefix,"PrintCtg=1");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"PrintCtg="+SSTR(ctgCount));
 	}
 	else
 		FILE_LOG(logINFO) <<"Skipping contig printing..."<<endl;
@@ -251,7 +251,7 @@ bool SimplifyGraph(vector<vector<int>> &checkPointParams,const vector<std::strin
 		}
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
-		Utils::writeCheckPointFile(outputFilenamePrefix,"Scaffold=1");
+		Utils::writeCheckPointFile(outputFilenamePrefix,"Scaffold="+SSTR(scfCount));
 	}
 	else
 		FILE_LOG(logINFO) <<"Skipping scaffolding printing..."<<endl;
@@ -294,7 +294,7 @@ void SetParameters(int interationCount)
 	FILE_LOG(logINFO) << "Minimum fold difference to consider branches to be short: " << minFoldToBeShortBranch << endl;
 }
 
-UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams)
+UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams, UINT64 &ctgCount,UINT64 &scfCount)
 {
 	//Initialize checkpoint vector
 	for(int i=1;i < FINAL_ITER; i++)
@@ -331,10 +331,16 @@ UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams)
 					checkPointParams[iterCtr-1][3]=1;
 				if(parName=="PostFlowAnalysis" && parVal=="1")
 					checkPointParams[iterCtr-1][4]=1;
-				if(parName=="PrintCtg" && parVal=="1")
+				if(parName=="PrintCtg")
+				{
 					checkPointParams[iterCtr-1][5]=1;
-				if(parName=="Scaffold" && parVal=="1")
+					ctgCount=atoi(parVal.c_str());
+				}
+				if(parName=="Scaffold")
+				{
 					checkPointParams[iterCtr-1][6]=1;
+					scfCount=atoi(parVal.c_str());
+				}
 			}
 		}
 	}

@@ -117,12 +117,16 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 		else
 			allMarked[i]=1;
 	}
+	//Initialize start IDs for each thread
+	vector<UINT64> startIDPerThread(parallelThreadPoolSize);
+	for(UINT64 i = 0; i <parallelThreadPoolSize; i++)
+		startIDPerThread[i]=i+1;
 	//Check if partial previous run data exists... Load partial graph data and mark reads.
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		int threadID = omp_get_thread_num();
+		//Load the marked reads from this thread
 		string parFileName = fnamePrefix + "_" + SSTR(threadID) + "_parGraph.txt";
-
 		if(ifstream(parFileName.c_str()))
 		{
 			cout << "Thread:" << threadID << " Partial graph file exists. Loading marked reads." <<endl;
@@ -171,28 +175,40 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 					cout<< "Thread:" << threadID << " " <<procCtr<<" marked reads loaded ..."<<endl;
 			}
 		}
+		//Load the the next start read ID
+		string startReadFile = fnamePrefix+ "_" + SSTR(threadID) +"_startRead.txt";
+		if(ifstream(startReadFile.c_str()))
+		{
+			ifstream filePointer;
+			filePointer.open(startReadFile.c_str());
+			string text, lastLine;
+			while(getline(filePointer,text))
+			{
+				lastLine=text;
+			}
+			startIDPerThread[threadID]=stoi(lastLine);
+			cout<<"Thread:"<<threadID<<" restarting from read ID:"<<startIDPerThread[threadID]<<endl;
+		}
 	}
-
 	//Restart operations complete. Delete file index to read ID map
 	dataSet->freeFindexReadIDMAP();
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		UINT64 startReadID=0,prevReadID=0;
-		#pragma omp critical(assignRandomStart)    //Set initial start points...
-		{
-			for(UINT64 i=1;i<numNodes;i++)
-			{
-				if(allMarked[i]==0)
-				{
-					startReadID=prevReadID=i;
-					allMarked[i]=1;
-					break;
-				}
-			}
-		}
 		int threadID = omp_get_thread_num();
+
+		//Create start read ID maintaining file
+		string startReadFile = fnamePrefix+ "_" + SSTR(threadID) +"_startRead.txt";
+		ofstream startReadFilePointer;
+		startReadFilePointer.open(startReadFile.c_str());
+		if(!startReadFilePointer)
+			MYEXIT("Unable to open file: "+startReadFile);
+
+		startReadID=prevReadID=startIDPerThread[threadID];   //Set initial start points...
 		while(startReadID!=0) // Loop till all nodes marked
 		{
+			//Write current start ID to file for checkpointing
+			startReadFilePointer<<startReadID<<endl;
 			map<UINT64,nodeType> *exploredReads = new map<UINT64,nodeType>;							//Record of nodes processed
 			queue<UINT64> *nodeQ = new queue<UINT64>;												//Queue
 			map<UINT64, vector<Edge*> * > *parGraph = new map<UINT64, vector<Edge*> * >;			//Partial graph
@@ -300,9 +316,9 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 				}
 			}
 		}
+		startReadFilePointer.close();
 	}
 	delete[] allMarked;
-	delete hashTable;	// Do not need the hash table any more.
 	cout<<endl<<"Graph construction complete."<<endl;
 	CLOCKSTOP;
 	return true;
@@ -317,11 +333,12 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, bool *prevMarked, bool containedReadComplete)
 {
 	CLOCKSTART;
-	UINT64 nonContainedReads = 0;
+	UINT64 nonContainedReads = 0, minCompletedID=1;
 	string testContainedReadFile = fnamePrefix+ "_" + SSTR(0) +"_containedReads.txt";
 	if(ifstream(testContainedReadFile.c_str()))		//Load contained reads computed previously
 	{
-		#pragma omp parallel num_threads(parallelThreadPoolSize)
+		vector<UINT64> maxIDReached(parallelThreadPoolSize,1);
+		#pragma omp parallel num_threads(parallelThreadPoolSize) reduction(max:minCompletedID)
 		{
 			int threadID = omp_get_thread_num();
 			cout << "Contained read file already exists. Using this file." <<endl;
@@ -345,6 +362,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 					Read *rContained = dataSet->getReadFromID(itContained->second); // Get the contained  read
 					prevMarked[itContained->second]=1;				//Mark already processed reads
 					prevMarked[itContaining->second]=1;				//Mark already processed reads
+					if(maxIDReached[threadID]<itContaining->second)
+						maxIDReached[threadID]=itContaining->second;
 					rContained->setSuperReadID(containingReadFindex);
 					if(procCtr%1000000==0)
 						cout<<procCtr<<" contained reads processed..."<<endl;
@@ -352,8 +371,9 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			}
 			filePointer.close();
 		}
+		minCompletedID = *std::min_element(maxIDReached.begin(), maxIDReached.end());
 		if(!containedReadComplete)
-			cout<<"Contained read computation not complete. The remaining will be processed next."<<endl;
+			cout<<"Contained read computation not complete. The remaining will be processed next starting from:"<<minCompletedID<<endl;
 	}
 	if(!containedReadComplete)		//Process reads not yet checked for containment
 	{
@@ -368,7 +388,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			filePointerList.push_back(filePointer);
 		}
 		#pragma omp parallel for schedule(dynamic,10) num_threads(parallelThreadPoolSize)
-		for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
+		for(UINT64 i = minCompletedID; i <= dataSet->getNumberOfUniqueReads(); i++) // For each read
 		{
 			int threadID = omp_get_thread_num();
 			Read *read1 = dataSet->getReadFromID(i); // Get the read

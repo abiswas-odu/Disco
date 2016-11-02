@@ -55,6 +55,7 @@ int main(int argc, char **argv)
 		HashTable *hashTable=new HashTable();
 		hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads,allFileNamePrefix);
 		overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,allFileNamePrefix, containedReadComplete); //hashTable deleted by this function after building the graph also writes graph
+		delete hashTable;	// Do not need the hash table any more.
 		delete dataSet;
 		delete overlapGraph;
 		//Write checkpoint file and set graph construction complete
