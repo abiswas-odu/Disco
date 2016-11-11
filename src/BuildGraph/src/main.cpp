@@ -23,10 +23,12 @@ void readCheckpointInfo(string allFileNamePrefix, bool &containedReadComplete, b
 
 int main(int argc, char **argv)
 {
-	CLOCKSTART;
+	cout<<"Software: Disco Assembler [November 2016]"<<endl;
+	cout<<"Version : 3.0.3"<<endl;
+	cout<<"Developed by: Biswas, Abhishek; Pan, Chongle et.al."<<endl;
+	cout<<"Affiliation: Oak Ridge National Lab / University of Tennessee"<<endl;
 
-	cout<<"Software: Omega Assembler"<<endl;
-	cout<<"Version : 3.0.1"<<endl;
+	CLOCKSTART;
 
 	vector<string> pairedEndFileNames, singleEndFileNames;
 	string allFileNamePrefix;
