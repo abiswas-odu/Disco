@@ -19,31 +19,56 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 
 UINT64 readOverlapParameter(string parameterFile);
 
+void readCheckpointInfo(string allFileNamePrefix, bool &containedReadComplete, bool &buildGraphComplete);
+
 int main(int argc, char **argv)
 {
+	cout<<"Software: Disco Assembler [November 2016]"<<endl;
+	cout<<"Version : 3.0.3"<<endl;
+	cout<<"Developed by: Biswas, Abhishek; Pan, Chongle et.al."<<endl;
+	cout<<"Affiliation: Oak Ridge National Lab / University of Tennessee"<<endl;
+
 	CLOCKSTART;
 
-	cout<<"Software: Omega Assembler"<<endl;
-	cout<<"Version : 3.0.1"<<endl;
-
 	vector<string> pairedEndFileNames, singleEndFileNames;
-	string allFileName;
+	string allFileNamePrefix;
 	string parameterFile;
 	UINT64 maxThreads = omp_get_max_threads();
 	UINT64 writeGraphSize = MID_PAR_GRAPH_SIZE;
 	UINT64 maxMemSizeGB = getMaxMemory();
 	cout<<"Max available memory: "<<maxMemSizeGB<< " GB"<<endl;
-	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, allFileName,
+	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, allFileNamePrefix,
 			maxThreads, writeGraphSize,maxMemSizeGB,parameterFile);
 	UINT64 minimumOverlapLength = readOverlapParameter(parameterFile);
 	cout<<"Max usable memory: "<<maxMemSizeGB<< " GB"<<endl;
-	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength, maxThreads);
-	OverlapGraph *overlapGraph;
-	HashTable *hashTable=new HashTable();
-	hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads,allFileName);
-	overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,allFileName); //hashTable deleted by this function after building the graph also writes graph
-	delete dataSet;
-	delete overlapGraph;
+
+	bool containedReadComplete=false, buildGraphComplete=false;
+	readCheckpointInfo(allFileNamePrefix,containedReadComplete,buildGraphComplete);
+
+	if(buildGraphComplete)
+	{
+		cout<< "Graph already exists. Using previously built graph..."<<endl;
+		cout<< "Exiting graph construction."<<endl;
+	}
+	else
+	{
+		Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileNamePrefix, minimumOverlapLength, maxThreads);
+		OverlapGraph *overlapGraph;
+		HashTable *hashTable=new HashTable();
+		hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads,allFileNamePrefix);
+		overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,allFileNamePrefix, containedReadComplete); //hashTable deleted by this function after building the graph also writes graph
+		delete hashTable;	// Do not need the hash table any more.
+		delete dataSet;
+		delete overlapGraph;
+		//Write checkpoint file and set graph construction complete
+		ofstream filePointer;
+		string fileName = allFileNamePrefix+"_CheckpointInfo.txt";
+		filePointer.open(fileName.c_str(), std::ios_base::app);
+		if(!filePointer)
+			MYEXIT("Unable to open file: "+fileName);
+		filePointer<<"GC=Complete"<<endl;
+		filePointer.close();
+	}
 	CLOCKSTOP;
 }
 
@@ -148,4 +173,32 @@ UINT64 readOverlapParameter(string parameterFile)
 		}
 	}
 	return minimumOverlapLength;
+}
+
+void readCheckpointInfo(string allFileNamePrefix, bool &containedReadComplete, bool &buildGraphComplete)
+{
+	ifstream filePointer;
+	string fileName = allFileNamePrefix+"_CheckpointInfo.txt";
+	filePointer.open(fileName.c_str());
+	if(!filePointer.is_open()) {
+		containedReadComplete=false;
+		buildGraphComplete=false;
+		return;
+	}
+	else {
+		string par_text="";
+		while(getline(filePointer,par_text)) {
+			if(par_text.find("=") != std::string::npos)
+			{
+				vector<string> tok = splitTok(par_text,'=');
+				string parName = trimmed(tok[0]);
+				string parVal = trimmed(tok[1]);
+				if(parName=="CCR" && parVal=="Complete")
+					containedReadComplete=true;
+				if(parName=="GC" && parVal=="Complete")
+					buildGraphComplete=true;
+			}
+		}
+	}
+	return;
 }

@@ -93,10 +93,10 @@ class Edge{
 		Edge(void);								
 
 		// constructor for a non-empty edge
-		Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset);
+		Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset, UINT64 flowValue=0);
 
 		Edge(Read *source, Read *destination, UINT8 orient, UINT32 overlapOffset,
-				UINT64 *listOfReads, UINT32 listSize);
+				UINT64 *listOfReads, UINT32 listSize, UINT64 flowValue=0);
 
 		Edge(const Edge &edge);
 		// Destructor.

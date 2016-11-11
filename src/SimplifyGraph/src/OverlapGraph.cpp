@@ -4,7 +4,7 @@
  * Author      : Tae-Hyuk (Ted) Ahn, JJ Crosskey, Abhishek Biswas
  * Version     : v1.2
  * Copyright   : 2015 Oak Ridge National Lab (ORNL). All rights reserved.
- * Description : OverlapGraph cpp file
+ * Description : OverlapGraph C++ file
  *============================================================================
  */
 
@@ -972,7 +972,9 @@ t_edge_vec OverlapGraph::findEdges(const UINT64 & source, const UINT64 & destina
 		sort(edges.begin(),edges.end(),compareEdgesByReads);
 	return edges;
 }
-
+/***
+ * Constructor to load simple edges and perform partial simplification
+ */
 OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplifyPartialPath, DataSet *dataSet,
 		UINT64 minOvl = 40, UINT64 parallelThreadPoolSize = 1)
 	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
@@ -1085,16 +1087,44 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 		MYEXIT("No edge files provided. Therefore there is no graph to simplify. So we are done!!!");
 
 	sortEdgesByDestID();
-	FILE_LOG(logDEBUG1) << "graph has " << m_graph->size() << " unique number of nodes.\n";
-	FILE_LOG(logERROR) << "numberOfEdges loaded from edge file(s): " << m_numberOfEdges << "\n";
+	FILE_LOG(logINFO) << "graph has " << m_graph->size() << " unique number of nodes.\n";
+	FILE_LOG(logINFO) << "numberOfEdges loaded from edge file(s): " << m_numberOfEdges << "\n";
 
 	UINT64 counter(0);
 	do {
 		counter = contractCompositeEdgesPar();
 	} while (counter > 0);
-	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
+	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
+
 	CLOCKSTOP;
 }
+
+/*
+ * Constructor to load composite edge graph that has been simplified
+ */
+OverlapGraph::OverlapGraph(const string parGlobalGraph, string simplifyPartialPath, DataSet *dataSet,
+		UINT64 minOvl = 40, UINT64 parallelThreadPoolSize = 1)
+	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
+{
+	CLOCKSTART;
+	m_numberOfNodes	= 0;
+	m_numberOfEdges	= 0;
+	m_flowComputed 	= false;
+	m_dataset=dataSet;
+	m_graph = new map<UINT64, t_edge_vec* >;
+	// loop partial global graph and load it
+	FILE_LOG(logINFO) << "Loading partially simplified graph...\n";
+	readParEdges(parGlobalGraph);
+	FILE_LOG(logINFO) << "graph has " << m_graph->size() << " unique number of nodes.\n";
+	FILE_LOG(logINFO) << "numberOfEdges loaded from edge file(s): " << m_numberOfEdges << "\n";
+	UINT64 counter(0);
+	do {
+		counter = contractCompositeEdgesPar();
+	} while (counter > 0);
+	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
+	CLOCKSTOP;
+}
+
 
 /*
  * ===  FUNCTION  ======================================================================
@@ -1107,11 +1137,21 @@ void OverlapGraph::graphPathFindInitial()
 	FILE_LOG(logINFO) << "Initial simplification: contract composite edges, remove dead end nodes,"
 		<< " and clip branches with very short overlap length.\n";
 	// Composite edge contraction with remove dead end nodes
+	CLOCKSTART;
+	double prev = omp_get_wtime();
 	UINT64 counter(0);
 	do {
 		removeDeadEndNodes();
 		counter = contractCompositeEdgesPar();
-	} while (counter > 0);
+		double curr = omp_get_wtime();
+		double lapsed = curr - prev;
+		if(lapsed>=DISK_GRAPH_UPDATE)
+		{
+			//Update checkpoint graph
+			printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+			prev = omp_get_wtime();
+		}
+	} while (counter > 1000);
 	FILE_LOG(logERROR) << "numberOfEdges = " << m_numberOfEdges << "\n";
 	/* disconnect the edges incident to nodes and have small overlap lengths */
 	removeSimilarEdges();
@@ -1119,6 +1159,7 @@ void OverlapGraph::graphPathFindInitial()
 	//calculateMeanAndSdOfInnerDistance();
 	//findSupportByMatepairsAndMerge();
 	FILE_LOG(logINFO) << "Initial simplification done.\n";
+	CLOCKSTOP;
 }
 
 //=============================================================================
@@ -1201,6 +1242,8 @@ void OverlapGraph::simplifyScaffoldGraph(void)
  */
 void OverlapGraph::simplifyGraph(void)
 {
+	CLOCKSTART;
+	double prev = omp_get_wtime();
 	UINT64 counter = 0;
 	do
 	{
@@ -1212,7 +1255,16 @@ void OverlapGraph::simplifyGraph(void)
 		counter += removeShortBranches();	// Remove short branches
 		counter += reduceLoops();	// Reduce loops
 
+		double curr = omp_get_wtime();
+		double lapsed = curr - prev;
+		if(lapsed>=DISK_GRAPH_UPDATE)
+		{
+			//Update checkpoint graph
+			printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
+			prev = omp_get_wtime();
+		}
 	} while (counter > 0);
+	CLOCKSTOP;
 }
 
 /* 
@@ -1623,13 +1675,20 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & filePointer) const
 	UINT64 orientation=contigEdge->getOrientation();
 	if(source < destination || (source == destination && contigEdge < contigEdge->getReverseEdge()))
 	{
+		UINT64 offsetSum = 0;
+		if(contigEdge->isListofReads())
+		{
+			for(size_t j=0;j<contigEdge->getListofReadsSize();j++)
+				offsetSum+=contigEdge->getInnerOverlapOffset(j);
+		}
 		filePointer<<source<<"\t";	// store the edge information first
 		filePointer<<destination<<"\t";
 		filePointer<<orientation<<",";
 		filePointer<<contigEdge->getOverlapOffset()<<",";  //total overlap offset
 		filePointer<<contigEdge->getEdgeLength()<<",";  //edge length
 		filePointer<<0<<",";					//no substitutions
-		filePointer<<0<<"\t";					//no edits
+		filePointer<<0<<",";					//no edits
+		filePointer<<contigEdge->m_flow<<"\t";					//flow value
 		if(contigEdge->isListofReads())
 		{
 			for(size_t j=0;j<contigEdge->getListofReadsSize();j++)
@@ -1858,8 +1917,6 @@ ostream& operator<< (ostream &out, const OverlapGraph & graph)
 	return out;
 }
 
-
-
 /*
  * ===  FUNCTION  ======================================================================
  *         Name:  printContigs
@@ -1919,6 +1976,10 @@ void OverlapGraph::readParEdges(string edge_file)
 		vector<string> infoTok = Utils::split(tok[2],',');
 		UINT64 orientationForward =  atoi(infoTok[0].c_str());
 		UINT64 overlapOffsetForward =   atoi(infoTok[1].c_str());
+		UINT64 flowValue=0;
+		//If there is flow information; load it
+		if(infoTok.size()>5)
+			flowValue=atoi(infoTok[5].c_str());
 
 		// Make the forward edge list
 		UINT64 *listReadsForward = nullptr;
@@ -1937,7 +1998,7 @@ void OverlapGraph::readParEdges(string edge_file)
 		else
 		{
 			Edge *edgeForward = new Edge(source,destination,orientationForward,
-					overlapOffsetForward, listReadsForward, innerReadCount);
+					overlapOffsetForward, listReadsForward, innerReadCount, flowValue);
 
 			// Make the reverse edge
 			UINT64 *listReadsReverse = nullptr;
@@ -1946,7 +2007,7 @@ void OverlapGraph::readParEdges(string edge_file)
 				createRevList(edgeForward, &listReadsReverse, lRSize, m_dataset);
 			UINT64 overlapOffsetReverse = edgeForward->getEdgeLength()-source->getReadLength();
 			Edge *edgeReverse = new Edge(destination,source,twinEdgeOrientation(orientationForward),
-					overlapOffsetReverse, listReadsReverse, lRSize);
+					overlapOffsetReverse, listReadsReverse, lRSize, flowValue);
 
 			edgeForward->setReverseEdge(edgeReverse);
 			edgeReverse->setReverseEdge(edgeForward);
@@ -2052,10 +2113,14 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 				++printed_contigs;
 				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
 				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
+				//contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
+				//<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", "
+				//<< (*it)->getDestinationRead()->getReadID()
+				//<< ") String Length: " << contigString.length() << "\n";
+				(*it)->updateBaseByBaseCoverageStat(m_dataset);
 				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
-				<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", " 
-				<< (*it)->getDestinationRead()->getReadID() 
-				<< ") String Length: " << contigString.length() << "\n";
+				<<" Coverage: " << (*it)->getCovDepth()
+				<<" Length: " << contigString.length() << "\n";
 
 				UINT32 start=0;
 				do
@@ -3422,12 +3487,4 @@ void OverlapGraph::generateGFA2Output(ostream & gfaFilePointer)
 		}
 	}
 }
-
-
-
-
-
-
-
-
 

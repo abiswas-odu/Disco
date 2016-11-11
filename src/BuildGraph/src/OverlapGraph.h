@@ -41,12 +41,13 @@ class OverlapGraph
 		UINT64 parallelThreadPoolSize;								//No. of OMP threads to spawn
 		UINT64 writeParGraphSize;									//No. of vertices to mark before writing graph to memory
 		UINT64 maxMemMB;
+		bool containedReadComplete;
 		UINT8 twinEdgeOrientation(UINT8 orientation);				// Orientation of the reverse edge.
 	public:
-		OverlapGraph(HashTable *ht,UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix);								// Another constructor.
+		OverlapGraph(HashTable *ht,UINT64 maxThreads,UINT64 maxParGraph,UINT64 maxMemSizeGB, string fnamePrefix, bool containedReadComplete);								// Another constructor.
 		~OverlapGraph();											// Destructor.
 		bool markTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph); // Mark transitive edges of a read.
-		bool buildOverlapGraphFromHashTable(HashTable *ht, string fnamePrefix);			// Build the overlap graph using hashtable.
+		bool buildOverlapGraphFromHashTable(string fnamePrefix, bool containedReadComplete);			// Build the overlap graph using hashtable.
 		bool insertEdge(Edge * edge, map<UINT64, vector<Edge*> * > *parGraph); 								// Insert an edge in the partial overlap graph.
 		bool insertEdge(Read *read1, Read *read2,  UINT8 orient, UINT16 overlapOffset, map<UINT64, vector<Edge*> * > *parGraph); // Insert an edge in the overlap graph.
 
@@ -58,7 +59,7 @@ class OverlapGraph
 		bool insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);	// Insert into the overlap graph all edges of a read.
 		bool removeTransitiveEdges(UINT64 readNumber, map<UINT64, vector<Edge*> * > *parGraph);				// Remove all transitive edges from the overlap graph incident to a given read.
 		bool saveParGraphToFile(string fileName, map<UINT64,nodeType> * exploredReads, map<UINT64, vector<Edge*> * > *parGraph);   //Save partial graph to file and reduce memory footprint
-		void markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap);								// Find superReads for each read and mark them as contained read.
+		void markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, bool *prevMarked, bool containedReadComplete);								// Find superReads for each read and mark them as contained read.
 };
 
 

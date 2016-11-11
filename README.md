@@ -1,9 +1,9 @@
-# Omega3
+# DISCO
 
-Omega3 is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **Omega3**. 
+DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **DISCO**. 
 
 ### Current Version
-* v3.0.2
+* v3.0.4
 
 ### Setup and Installation
 
@@ -122,7 +122,7 @@ tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=31
 
 #### Assembly on a Single Node
 
-The omega3 assembler is invoked through the run script `./runOmega3.sh`. The basic quick start commands with default parameters are as follows. The default parameters are based on empherical tests on real metagenomic datasets.     
+The Disco assembler is invoked through the run script `./runOmega3.sh`. The basic quick start commands with default parameters are as follows. The default parameters are based on empherical tests on real metagenomic datasets.     
 
 ```
 #!/bin/bash
@@ -136,9 +136,55 @@ runOmega3.sh -d ${output_directory} -inP {read_P.fastq} -n ${num_threads} -m {ma
 # Single end reads
 runOmega3.sh -d ${output_directory} -inS {read.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
 ```
-For all the options of omega3, use `./runOmega3.sh -h`
+For all the options of Disco, use `./runOmega3.sh -h`
 
 In case the program crashes due to exceeding wall clock time, the assembler can be restarted with the same command. 
+
+#### Assembly on a Distributed Nodes
+
+The assembler can be run on a distributed machine using the three distributed assembly scripts. 
+
+#### Assembly Run Script Options
+
+Usage:
+
+   runOmega3.sh [OPTION]...<PARAM>...
+
+
+<PARAMS>
+
+   -inS	 single read filenames (comma seperated fasta/fastq/fastq.gz file).
+
+   -in1	 forward paired read filename (single fasta/fastq/fastq.gz file).
+
+   -in2	 reverse paired read filename (single fasta/fastq/fastq.gz file).
+
+   -inP	 interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).
+
+   -d	 output directory path (DEFAULT: current directory).
+
+   -o	 output filename prefix (DEFAULT: omega3).
+
+<OPTIONS>
+
+   -h	 help.
+
+   -m	 maximum memory to be used (DEFAULT: 125 GB).
+
+   -n	 number of threads (DEFAULT: 32).
+
+   -obg	 only build overlap graph (DEFAULT: False).
+
+   -osg	 only simplify existing overlap graph (DEFAULT: False).
+   
+   -p	 assembly parameter file for 1st assembly iteration.
+
+   -p2	 assembly parameter file for 2nd assembly iteration.
+
+   -p3	 assembly parameter file for 3rd assembly iteration.
+
+
+The assembly script has basic options to specify required parameters. 
 
 #### Controlling memory usage
 
@@ -149,11 +195,11 @@ Min Required Memory (GB) = (Disk Space of Reads) + (1GB * num_threads)
 ``` 
 The program will run faster if more memory is made available.
 
-#### Restarting Omega3 for repeat assembly and handling assembly crashes
+#### Restarting Disco for repeat assembly and handling assembly crashes
 
-Omega3 assembler can be restarted with changed assembly and scaffolding parameters using the `-osg` option. Setting this option while invoking `runOmega3.sh` will reuse the overlap graph constructed earlier and only perform the graph simplification step. This will significantly reduce executime time of assemblies on the same dataset with different parameters.    
+Disco assembler can be restarted with changed assembly and scaffolding parameters using the `-osg` option. Setting this option while invoking `runOmega3.sh` will reuse the overlap graph constructed earlier and only perform the graph simplification step. This will significantly reduce executime time of assemblies on the same dataset with different parameters.    
 
-Omega3 assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Omega3 will attempt to continue the assembly. Do not set the `-osg` option in this case.   
+Disco assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Disco will attempt to continue the assembly. Do not set the `-osg` option in this case.   
 
 #### Setting assembly parameters
 
@@ -163,7 +209,7 @@ The configurable parameters include the following:
 
 ```
 ##############################################################
-###   Assembly and scaffolding configurations for Omega3   ###
+###   Assembly and scaffolding configurations for Disco   ###
 ##############################################################
 
 #### Parameters for building an overlap graph ####
@@ -180,9 +226,14 @@ MinOverlap4BuildGraph = 40
 # Parameters for Omega output
 
 # Print contigs or not. Options are "false" (default) or "true". Printing takes a non-trivial amount of wall-clock time.
-PrintContigs = false
+PrintContigs = true
 # Print scaffolds or not. Options are "true" (default) or "false"
 PrintScaffolds = true
+# Print unused reads or not. Options are "true" or "false" (default)
+PrintUnused = true
+# Print GFA/GFA2 graph format. Options are "true" or "false" (default)
+PrintGFA = false
+PrintGFA2 = false
 # Minimum length of contigs or scaffolds to be printed (default: 1000 bp)
 minSequenceLengthTobePrinted = 1000
 
@@ -229,7 +280,7 @@ minReadsCountInEdgeToBe1MinFlow = 20
 minEdgeLengthToBe1MinFlow = 2000
 
 ```
-#### Omega3 Assembler Output
+#### Disco Assembler Output
 
 Please see the OUTPUT.md file for description of the output files.  
 

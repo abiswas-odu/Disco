@@ -59,6 +59,9 @@ unsigned int minNonUniqSupport=0;
 unsigned int minContigLengthTobeReported = 500;
 
 unsigned int minNumberofReadsTobePrinted = 5;
+
+double maxReadsUsed = 0.7;
+
 bool printContigs=false;
 bool printScaffolds=true;
 bool printUnused=true;
@@ -151,6 +154,9 @@ void Config::setParameters(string pFile)
 				}
 				else if(parName== "PrintScaffolds") {
 					if(parVal=="false") printScaffolds = false;
+				}
+				else if(parName== "maxReadsUsed") {
+					maxReadsUsed=stod(parVal);
 				}
 				else
 					MYEXIT("Unknown parameter in parameter file: "+parName);

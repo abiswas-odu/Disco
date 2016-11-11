@@ -11,6 +11,7 @@
 #include "Common.h"
 #include "Read.h"
 
+#define READ_TASK_BLOCK 10000
 
 /**********************************************************************************************************************
 	Class to store the dataset

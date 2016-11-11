@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string>
+#include "Config.h"
 // for getting current working directory
 #ifdef WINDOWS
 	#include <direct.h>
@@ -151,6 +152,7 @@ namespace Utils
     // trim from both ends (copying)
     std::string trimmed(std::string s);
 
+    void writeCheckPointFile(std::string allFileNamePrefix, std::string message);
 }
 
 

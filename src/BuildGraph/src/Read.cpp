@@ -64,7 +64,13 @@ void Read::setReadHashOffset(UINT64 offset)
 {
 	readHashOffset=offset;
 }
-
+/**********************************************************************************************************************
+	This function assigns the super read ID to the read.
+**********************************************************************************************************************/
+void Read::setSuperReadID(UINT64 id)
+{
+	superReadID=id;
+}
 
 
 
