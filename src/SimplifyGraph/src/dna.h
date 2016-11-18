@@ -47,6 +47,14 @@ public:
 		m_data=NULL;
 	}
 	/**
+	 * @brief constructor for initializing only length
+	 */
+	dna_bitset (UINT64 seqLen)
+	{
+		m_len=seqLen;
+		m_data=NULL;
+	}
+	/**
 	 * @brief constructor
 	 * @param dna_str a string containing a DNA sequence (e.g. "ATGCA...")
 	 * @param dna_len length of the DNA sequence

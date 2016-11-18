@@ -2066,14 +2066,151 @@ bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMat
 
 /* 
  * ===  FUNCTION  ======================================================================
+ *         Name:  loadStringFromReadsFile
+ *  Description:  Fill the bases for all the edges in the graph, by streaming the reads in the
+ *  		  reads file. Whenever a read is read from the reads file, its nucleotide sequence
+ *  		  is streamed in, and the edges where this read resides will have the corresponding
+ *  		  bases populated(determined). In the meantime, the positions with mismatches will
+ *  		  have a count of each base option.
+ * =====================================================================================
+ */
+void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 & readID)
+{
+	CLOCKSTART;
+	FILE_LOG(logINFO) << "load read strings and fill the bases for the edges: " << read_file << "\n";
+	// To count of reads in this file
+	UINT64 readCount = 0;
+	// Open file
+	ifstream filePointer;
+	filePointer.open(read_file.c_str());
+	if(!filePointer.is_open()){
+		FILE_LOG(logERROR) << "Unable to open file: " << read_file << "\n";
+		return;
+	}
+	// Variables
+	vector<std::string> line;
+	std::string line0,line1, text;
+	enum FileType {FASTA, FASTQ, UNDEFINED};
+	FileType fileType = UNDEFINED;
+
+	while(!filePointer.eof())
+	{
+		// Check FASTA and FASTQ
+		if(fileType == UNDEFINED) {
+			getline (filePointer,text);
+			if (text.length() > 0){
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else{
+					FILE_LOG(logERROR) << "Unknown input file format."<<"\n";
+					break;
+				}
+				filePointer.seekg(0, ios::beg);
+			}
+		}
+
+		line.clear();
+
+		// FASTA file read
+		if(fileType == FASTA) {
+			getline (filePointer,line0);	// get ID line
+			getline (filePointer,line1,'>');	// get string line
+
+			line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
+					line1.end());
+		}
+		// FASTQ file read
+		else if(fileType == FASTQ) {
+			getline(filePointer, line0);	// ID
+			getline(filePointer, line1);	// String
+			// Ignore the next two lines
+			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+
+		// Get ReadID after removing the > or @ identifier and convert string to UINT64
+		std::string readName="";
+		if(line0[0] == '>' || line0[0] == '@')
+			readName = line0.substr(1);
+		else
+			readName = line0;
+		populate_read(readID, line1);
+		++readID;
+		++readCount;
+		if(readID % 1000000 == 0 && readID > 0){
+			FILE_LOG(logINFO) << setw(10) << (readID / 1000000) << ",000,000"
+				<< " reads streamed, "
+				<< setw(7) << checkMemoryUsage() << " MB\n";
+		}
+	}
+
+	filePointer.close();
+	FILE_LOG(logINFO) << setw(10) << readCount << " reads streamed from this read file\n";
+	CLOCKSTOP;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  populate_read
+ *  Description:  Given a read in the dataset, and its sequence, populate the strings for
+ *   		  the edges.
+ * =====================================================================================
+ */
+void OverlapGraph::populate_read(const UINT64 &readID, const std::string & read_str)
+{
+	Read *read = m_dataset->at(readID);
+	std::string read_str_reverse = Utils::reverseComplement(read_str);
+	// Edges with read as source or destination
+	auto srcIt = m_graph->find(readID);
+	if(srcIt != m_graph->end() && !srcIt->second->empty()) // if this read has some edge(s).
+	{
+		for (auto it = srcIt->second->begin(); it != srcIt->second->end(); ++it){
+			if((*it)->isSmallerEdge()){
+				Edge *edge = *it;
+				if (((edge->getOrientation() >> 1) & 1))
+					edge->loadReadString(read_str, -1);
+				else
+					edge->loadReadString(read_str_reverse, -1);
+			}
+			else{
+				Edge *edge = (*it)->getReverseEdge();
+				if ((edge->getOrientation() & 1))
+					edge->loadReadString(read_str, -2);
+				else
+					edge->loadReadString(read_str_reverse, -2);
+			}
+		}
+	}
+	// Edges with read on it
+	vector< t_edge_loc_pair > fwd_edges = read->getFwdEdges();
+	vector< t_edge_loc_pair > bwd_edges = read->getBwdEdges();
+
+	for(auto it = fwd_edges.cbegin(); it != fwd_edges.cend(); ++it){
+		it->first->loadReadString(read_str, it->second);
+	}
+	for(auto it = bwd_edges.cbegin(); it != bwd_edges.cend(); ++it){
+		it->first->loadReadString(read_str_reverse, it->second);
+	}
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
  *         Name:  printContigs
  *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
  * =====================================================================================
  */
-void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
+void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+		vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
 		string usedReadFileName, string namePrefix, UINT64 &printed_contigs)
 {
 	CLOCKSTART;
+	//streaming reads
+	UINT64 readID = 1;
+	for(auto it = read_PairFiles.cbegin(); it != read_PairFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
 
 	t_edge_vec contigEdges; 
 	getEdges(contigEdges);
@@ -2139,6 +2276,81 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 	CLOCKSTOP;
 }
 
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  printContigs
+ *  Description:  Print contigs/scaffolds for all the edges in the graph, from already loaded read files.
+ * =====================================================================================
+ */
+void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
+		string usedReadFileName, string namePrefix, UINT64 &printed_contigs)
+{
+	CLOCKSTART;
+
+	t_edge_vec contigEdges;
+	getEdges(contigEdges);
+
+	//Open contig file
+	ofstream contigFilePointer;
+	contigFilePointer.open(contig_file.c_str());
+	if(!contigFilePointer)
+		MYEXIT("Unable to open file: "+contig_file);
+
+	//Open edge file
+	ofstream edgeFilePointer;
+	edgeFilePointer.open(edge_file.c_str());
+	if(!edgeFilePointer)
+		MYEXIT("Unable to open file: "+edge_file);
+
+	//Open coverage file
+	ofstream fileCoveragePointer;
+	fileCoveragePointer.open(edge_cov_file.c_str());
+	if(!fileCoveragePointer)
+			MYEXIT("Unable to open file: "+edge_cov_file);
+
+	//Open used read file
+	ofstream fileUsedReadPointer;
+	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
+	if(!fileUsedReadPointer)
+			MYEXIT("Unable to open file: "+usedReadFileName);
+
+	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
+	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
+	{
+		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
+			populate_edge(*it);
+			string contigString = (*it)->getEdgeString();
+			#pragma omp critical
+			{
+				++printed_contigs;
+				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
+				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
+				//contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
+				//<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", "
+				//<< (*it)->getDestinationRead()->getReadID()
+				//<< ") String Length: " << contigString.length() << "\n";
+				(*it)->updateBaseByBaseCoverageStat(m_dataset);
+				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
+				<<" Coverage: " << (*it)->getCovDepth()
+				<<" Length: " << contigString.length() << "\n";
+
+				UINT32 start=0;
+				do
+				{
+					contigFilePointer << contigString.substr(start, 100) << "\n";  // save 100 BP in each line.
+					start+=100;
+				} while (start < contigString.length());
+			}
+		}
+	}
+	edgeFilePointer.close();
+	fileCoveragePointer.close();
+	contigFilePointer.close();
+	fileUsedReadPointer.close();
+	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
+	CLOCKSTOP;
+}
 /**********************************************************************************************************************
 	Returns true if the read contains only {A,C,G,T} and does not contain more than 80% of the same nucleotide
 **********************************************************************************************************************/

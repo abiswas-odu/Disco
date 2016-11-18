@@ -52,7 +52,7 @@ class Read
 		/* ====================  LIFECYCLE     ======================================= */
 		Read();
 
-		Read(const UINT32 length);
+		Read(const UINT64 length);
 
 		Read(const std::string & seq);
 

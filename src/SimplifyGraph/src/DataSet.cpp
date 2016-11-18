@@ -34,7 +34,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
 			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
 				std::replace( line1.begin(), line1.end(), 'N', 'A');
-			Read *r = new Read(line1);
+			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
 			addRead(r);
@@ -106,7 +106,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
 			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
 				std::replace( line1.begin(), line1.end(), 'N', 'A');
-			Read *r = new Read(line1);
+			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
 			addRead(r);
@@ -459,4 +459,3 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 		}
 	}
 }
-

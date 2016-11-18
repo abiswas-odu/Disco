@@ -25,6 +25,20 @@ Read::Read(const std::string &seq)
 	usedRead=false;
 }
 
+Read::Read(const UINT64 seqLen)
+{
+	m_seq = new dna_bitset(seqLen);
+	m_readID	= 0;
+	edgeP = nullptr;
+	edgeOriIndex = nullptr;
+	noOfEdges=0;
+	noOfAllocEdgeMemAvail=0;
+	containedReads = nullptr;
+	noOfConReads=0;
+	containedReadFlag=false;
+	usedRead=false;
+}
+
 /* 
  * ===  FUNCTION  ======================================================================
  *         Name:  Destructor
