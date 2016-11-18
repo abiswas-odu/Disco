@@ -187,7 +187,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
-		overlapGraph->streamContigs(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList,
+		overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 				contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
@@ -252,7 +252,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-			overlapGraph->streamContigs(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList,
+			overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 					contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 			//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 		}
