@@ -10,6 +10,10 @@
 
 #include "OverlapGraph.h"
 #include "CS2_stream/cs2.h"
+#ifdef INCLUDE_READGZ
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
+#endif
 extern TLogLevel loglevel;                      /* verbosity level of logging */
 extern std::string outputFilenamePrefix;
 
@@ -2080,73 +2084,101 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 	FILE_LOG(logINFO) << "load read strings and fill the bases for the edges: " << read_file << "\n";
 	// To count of reads in this file
 	UINT64 readCount = 0;
-	// Open file
-	ifstream filePointer;
-	filePointer.open(read_file.c_str());
-	if(!filePointer.is_open()){
-		FILE_LOG(logERROR) << "Unable to open file: " << read_file << "\n";
-		return;
-	}
-	// Variables
-	vector<std::string> line;
-	std::string line0,line1, text;
-	enum FileType {FASTA, FASTQ, UNDEFINED};
-	FileType fileType = UNDEFINED;
 
-	while(!filePointer.eof())
+	if(read_file.substr(read_file.length() - 3 )==".gz")
 	{
-		// Check FASTA and FASTQ
-		if(fileType == UNDEFINED) {
-			getline (filePointer,text);
-			if (text.length() > 0){
-				if(text[0] == '>')
-					fileType = FASTA;
-				else if(text[0] == '@')
-					fileType = FASTQ;
-				else{
-					FILE_LOG(logERROR) << "Unknown input file format."<<"\n";
-					break;
+#ifdef INCLUDE_READGZ
+			gzFile fp;
+			kseq_t *seq;
+			int l;
+			fp = gzopen(read_file.c_str(), "r");
+			seq = kseq_init(fp);
+			while ((l = kseq_read(seq)) >= 0) {
+				string line1=seq->seq.s;
+				transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
+				if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
+					std::replace( line1.begin(), line1.end(), 'N', 'A');
+
+				populate_read(readID, line1);
+				++readID;
+				++readCount;
+				if(readCount % 1000000 == 0){
+					FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
+						<< " reads loaded to memory, "
+						<< setw(7) << checkMemoryUsage() << " MB\n";
 				}
-				filePointer.seekg(0, ios::beg);
+			}
+			kseq_destroy(seq);
+			gzclose(fp);
+#else
+			MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
+					"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+					"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
+	}
+	else
+	{
+		// Open file
+		ifstream filePointer;
+		filePointer.open(read_file.c_str());
+		if(!filePointer.is_open()){
+			FILE_LOG(logERROR) << "Unable to open file: " << read_file << "\n";
+			return;
+		}
+		vector<std::string> line;
+		std::string line0,line1, text;
+		enum FileType {FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+
+		while(!filePointer.eof())
+		{
+			// Check FASTA and FASTQ
+			if(fileType == UNDEFINED) {
+				getline (filePointer,text);
+				if (text.length() > 0){
+					if(text[0] == '>')
+						fileType = FASTA;
+					else if(text[0] == '@')
+						fileType = FASTQ;
+					else{
+						FILE_LOG(logERROR) << "Unknown input file format."<<"\n";
+						break;
+					}
+					filePointer.seekg(0, ios::beg);
+				}
+			}
+
+			line.clear();
+
+			// FASTA file read
+			if(fileType == FASTA) {
+				getline (filePointer,line0);	// get ID line
+				getline (filePointer,line1,'>');	// get string line
+
+				line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
+						line1.end());
+			}
+			// FASTQ file read
+			else if(fileType == FASTQ) {
+				getline(filePointer, line0);	// ID
+				getline(filePointer, line1);	// String
+				// Ignore the next two lines
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+
+			// Get ReadID after removing the > or @ identifier and convert string to UINT64
+			populate_read(readID, line1);
+			++readID;
+			++readCount;
+			if(readID % 1000000 == 0 && readID > 0){
+				FILE_LOG(logINFO) << setw(10) << (readID / 1000000) << ",000,000"
+					<< " reads streamed, "
+					<< setw(7) << checkMemoryUsage() << " MB\n";
 			}
 		}
-
-		line.clear();
-
-		// FASTA file read
-		if(fileType == FASTA) {
-			getline (filePointer,line0);	// get ID line
-			getline (filePointer,line1,'>');	// get string line
-
-			line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
-					line1.end());
-		}
-		// FASTQ file read
-		else if(fileType == FASTQ) {
-			getline(filePointer, line0);	// ID
-			getline(filePointer, line1);	// String
-			// Ignore the next two lines
-			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-
-		// Get ReadID after removing the > or @ identifier and convert string to UINT64
-		std::string readName="";
-		if(line0[0] == '>' || line0[0] == '@')
-			readName = line0.substr(1);
-		else
-			readName = line0;
-		populate_read(readID, line1);
-		++readID;
-		++readCount;
-		if(readID % 1000000 == 0 && readID > 0){
-			FILE_LOG(logINFO) << setw(10) << (readID / 1000000) << ",000,000"
-				<< " reads streamed, "
-				<< setw(7) << checkMemoryUsage() << " MB\n";
-		}
+		filePointer.close();
 	}
-
-	filePointer.close();
 	FILE_LOG(logINFO) << setw(10) << readCount << " reads streamed from this read file\n";
 	CLOCKSTOP;
 }
@@ -2211,6 +2243,12 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	for(auto it = read_PairFiles.cbegin(); it != read_PairFiles.cend(); ++it){
 		loadStringFromReadsFile(*it, readID);
 	}
+	for(auto it = read_PairInterFiles.cbegin(); it != read_PairInterFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+	for(auto it = read_SingleFiles.cbegin(); it != read_SingleFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
 
 	t_edge_vec contigEdges; 
 	getEdges(contigEdges);
@@ -2243,7 +2281,6 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
 		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
-			populate_edge(*it);
 			string contigString = (*it)->getEdgeString();
 			#pragma omp critical
 			{
@@ -3289,14 +3326,15 @@ bool OverlapGraph::mergeEdgesDisconnected(Edge *edge1, Edge *edge2, INT64 gapLen
 	}
 
 	// A------>B and C------>D. We need to check if the nodes B and C overlaps or not
-	string string1, string2;
-	string1 = ( edge1->getOrientation() == 1 || edge1->getOrientation() == 3 )
-			? edge1->getDestinationRead()->getStringForward() : edge1->getDestinationRead()->getStringReverse(); // We will check if the two nodes overlap or not
-	string2 = ( edge2->getOrientation() == 2 || edge2->getOrientation() == 3 )
-			? edge2->getSourceRead()->getStringForward() : edge2->getSourceRead()->getStringReverse();
+	//string string1, string2;
+	//string1 = ( edge1->getOrientation() == 1 || edge1->getOrientation() == 3 )
+	//		? edge1->getDestinationRead()->getStringForward() : edge1->getDestinationRead()->getStringReverse(); // We will check if the two nodes overlap or not
+	//string2 = ( edge2->getOrientation() == 2 || edge2->getOrientation() == 3 )
+	//		? edge2->getSourceRead()->getStringForward() : edge2->getSourceRead()->getStringReverse();
 
 	// Find the overlap between B and C. If they do not overlap then the return will be zero. We check for at least 10 bp overlap
-	UINT64 overlapLength = findOverlap(string1,string2);
+	//UINT64 overlapLength = findOverlap(string1,string2);
+	UINT64 overlapLength = 0;
 
 	UINT64 overlapOffset1, overlapOffset2;
 	Read *read1 = edge1->getSourceRead(), *read2 = edge2->getDestinationRead(); // Get the reads.
@@ -3539,7 +3577,9 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
 	{
 		//Write segments
-		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t"<<m_dataset->at(i)->getStringForward() << std::endl;
+		//gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t"<<m_dataset->at(i)->getStringForward() << std::endl;
+		//No read sequence in GFA file
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*" << std::endl;
 		auto it = m_graph->find(i);
 		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
 		{
@@ -3647,7 +3687,7 @@ void OverlapGraph::generateGFA2Output(ostream & gfaFilePointer)
 	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
 	{
 		//Write segments
-		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t*" << std::endl;
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*" << std::endl;
 		auto it = m_graph->find(i);
 		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
 		{
