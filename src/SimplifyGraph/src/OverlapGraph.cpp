@@ -2104,7 +2104,7 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 				++readCount;
 				if(readCount % 1000000 == 0){
 					FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
-						<< " reads loaded to memory, "
+						<< " reads streamed, "
 						<< setw(7) << checkMemoryUsage() << " MB\n";
 				}
 			}
@@ -2287,10 +2287,6 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 				++printed_contigs;
 				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
 				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
-				//contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
-				//<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", "
-				//<< (*it)->getDestinationRead()->getReadID()
-				//<< ") String Length: " << contigString.length() << "\n";
 				(*it)->updateBaseByBaseCoverageStat(m_dataset);
 				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
 				<<" Coverage: " << (*it)->getCovDepth()
@@ -2320,7 +2316,7 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
  *  Description:  Print contigs/scaffolds for all the edges in the graph, from already loaded read files.
  * =====================================================================================
  */
-void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
+/*void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
 		string usedReadFileName, string namePrefix, UINT64 &printed_contigs)
 {
 	CLOCKSTART;
@@ -2388,6 +2384,7 @@ void OverlapGraph::printContigs(string contig_file, string edge_file,string edge
 	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
 	CLOCKSTOP;
 }
+*/
 /**********************************************************************************************************************
 	Returns true if the read contains only {A,C,G,T} and does not contain more than 80% of the same nucleotide
 **********************************************************************************************************************/
@@ -2410,7 +2407,7 @@ bool OverlapGraph::testRead(const string & read)
  *   		  the edge.
  * =====================================================================================
  */
-void OverlapGraph::populate_edge(Edge *edge)
+/*void OverlapGraph::populate_edge(Edge *edge)
 {
 	string srcReadStr = edge->getSourceRead()->getStringForward();
 	if (((edge->getOrientation() >> 1) & 1))
@@ -2439,7 +2436,7 @@ void OverlapGraph::populate_edge(Edge *edge)
 		edge->loadReadString(read_str, i);
 	}
 }
-
+*/
 
 /**********************************************************************************************************************
 	Merge two edges in the overlap graph.

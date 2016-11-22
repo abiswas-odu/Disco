@@ -109,6 +109,8 @@ class DataSet
 		void writeUsedReads(string usedReadfileName);
 
 		void writeUnUsedReads(string outputFilenamePrefix);
+
+		void printUnusedReads(const std::string &read_file,UINT64 readID, ostream & unusedReadFilePointer);
 };
 
 bool compareEdgesByReads (const Edge *edge1, const Edge* edge2);

@@ -21,7 +21,8 @@ class Read
 	private:
 		/* ====================  DATA MEMBERS  ======================================= */
 
-		dna_bitset *m_seq;                   // String representation of the read.
+		//dna_bitset *m_seq;                   // String representation of the read.
+
 
 		/* array of pairs, with each pair storing
 		 * first: pointer to an edge that includes this read
@@ -33,6 +34,10 @@ class Read
 		UINT64 *containedReads;				//Array of contained reads(2MSB:Read Orientation, next 30 MSB: overlap start, 32LSB: contained read ID, )
 
 		UINT64 m_readID;         // Unique Identification of the read.
+
+		UINT32 readLen;          //We store only length of the read in the read class to save memory.
+		                         //Actual read sequence can be stored using the dna_bitset above that is commented out
+								 //Right now all read sequence is streamed
 
 		UINT16 noOfEdges;					//Number of edges this read belongs to
 		UINT16 noOfAllocEdgeMemAvail;		//Number of allocated edge locations available that have been deleted
@@ -54,7 +59,8 @@ class Read
 
 		Read(const UINT64 length);
 
-		Read(const std::string & seq);
+		//Expose only is read sequence is being stored
+		//Read(const std::string & seq);
 
 		~Read(void);
 
@@ -84,11 +90,13 @@ class Read
 		}
 
 		/* ====================  ACCESSORS     ======================================= */ 
-		std::string getStringForward(void) const {return m_seq->toString();}
 
-		std::string getStringReverse(void) const {return m_seq->toRevComplement();}
+		//If you are going to store the read sequence then use these 3 functions
+		//std::string getStringForward(void) const {return m_seq->toString();}
+		//std::string getStringReverse(void) const {return m_seq->toRevComplement();}
+		//UINT32 getReadLength(void) const {return m_seq->getLength();}
 
-		UINT32 getReadLength(void) const {return m_seq->getLength();}
+		UINT32 getReadLength(void) const {return readLen;}
 
 		UINT64 getReadID(void) const {return m_readID;}
 

@@ -10,8 +10,8 @@
 #include "Config.h"
 #include "Read.h"
 
-
-Read::Read(const std::string &seq)
+//Expose only is read sequence is being stored
+/*Read::Read(const std::string &seq)
 {
 	m_seq = new dna_bitset(seq);
 	m_readID	= 0;
@@ -23,11 +23,12 @@ Read::Read(const std::string &seq)
 	noOfConReads=0;
 	containedReadFlag=false;
 	usedRead=false;
-}
+}*/
 
 Read::Read(const UINT64 seqLen)
 {
-	m_seq = new dna_bitset(seqLen);
+	//m_seq = new dna_bitset(seqLen);
+	readLen=seqLen;
 	m_readID	= 0;
 	edgeP = nullptr;
 	edgeOriIndex = nullptr;
@@ -47,7 +48,8 @@ Read::Read(const UINT64 seqLen)
  */
 Read::~Read(void)
 {
-	delete m_seq;
+
+	//delete m_seq;   //expose only id read sequence is being stored
 	delete[] edgeP;
 	delete[] edgeOriIndex;
 	delete[] containedReads;
@@ -97,12 +99,12 @@ void Read::ClearEdgeInfo()
 {
 	noOfEdges=0;
 }
-std::ostream &operator<<(std::ostream & out, const Read & read)
+/*std::ostream &operator<<(std::ostream & out, const Read & read)
 {
 	out << "ID: " << setw(10) << setfill(' ') << read.getReadID()
 		<< ", String: \n" << read.getStringForward();
 	return out;
-}
+}*/
 
 vector<t_edge_loc_pair> Read::getFwdEdges() const
 {
