@@ -683,7 +683,7 @@ void OverlapGraphSimple::printEdge(EdgeSimple *contigEdge, ostream & filePointer
 
 			}
 		}
-		filePointer<<endl;
+		filePointer<<'\n';
 	}
 }
 

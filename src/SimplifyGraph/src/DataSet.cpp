@@ -83,7 +83,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 						fileType = FASTQ;
 					}
 					else{
-						FILE_LOG(logERROR) << "Unknown input file format."<<endl;
+						FILE_LOG(logERROR) << "Unknown input file format.\n";
 						break;
 					}
 				}
@@ -214,7 +214,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 				usedReadCtr+=containedReads;
 			}
 		}
-		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
+		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded.\n";
 	}
 	return usedReadCtr;
 }
@@ -290,7 +290,7 @@ bool DataSet::testRead(const string & read)
 UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
-	FILE_LOG(logINFO)<< "Store contained read information..."<< endl;
+	FILE_LOG(logINFO)<< "Store contained read information...\n";
 	UINT64 containedReadCtr=0;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
@@ -444,12 +444,12 @@ void DataSet::printUnusedReads(const std::string &read_file,UINT64 readID, ostre
 			if(mateID!=0)
 			{
 				if((!at(readID)->isUsedRead() || !at(mateID)->isUsedRead()))
-					unusedReadFilePointer<<">"<<line0<<endl<<line1<<endl;
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
 			}
 			else
 			{
 				if((!at(readID)->isUsedRead()))
-					unusedReadFilePointer<<">"<<line0<<endl<<line1<<endl;
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
 			}
 			++readID;
 			++readCount;
@@ -496,7 +496,7 @@ void DataSet::printUnusedReads(const std::string &read_file,UINT64 readID, ostre
 						fileType = FASTQ;
 					}
 					else{
-						FILE_LOG(logERROR) << "Unknown input file format."<<endl;
+						FILE_LOG(logERROR) << "Unknown input file format.\n";
 						break;
 					}
 				}
@@ -521,12 +521,12 @@ void DataSet::printUnusedReads(const std::string &read_file,UINT64 readID, ostre
 			if(mateID!=0)
 			{
 				if((!at(readID)->isUsedRead() || !at(mateID)->isUsedRead()))
-					unusedReadFilePointer<<">"<<line0<<endl<<line1<<endl;
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
 			}
 			else
 			{
 				if((!at(readID)->isUsedRead()))
-					unusedReadFilePointer<<">"<<line0<<endl<<line1<<endl;
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
 			}
 			++readID;
 			++readCount;
@@ -555,7 +555,7 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 				unUsedReadsFilePointer.open(unusedReads.c_str());
 				if(!unUsedReadsFilePointer)
 					MYEXIT("Unable to open file: "+unusedReads);
-				FILE_LOG(logINFO) << "Writing unused paired reads from dataset : " << d << endl;
+				FILE_LOG(logINFO) << "Writing unused paired reads from dataset : " << d << '\n';
 				printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
 				unUsedReadsFilePointer.close();
 			}
@@ -567,7 +567,7 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 				unUsedReadsFilePointer.open(unusedReads.c_str());
 				if(!unUsedReadsFilePointer)
 					MYEXIT("Unable to open file: "+unusedReads);
-				FILE_LOG(logINFO) << "Writing unused paired reads 1 from dataset : " << d << endl;
+				FILE_LOG(logINFO) << "Writing unused paired reads 1 from dataset : " << d << '\n';
 				printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
 				unUsedReadsFilePointer.close();
 
@@ -577,7 +577,7 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 				unUsedReadsFilePointer.open(unusedReads.c_str());
 				if(!unUsedReadsFilePointer)
 					MYEXIT("Unable to open file: "+unusedReads);
-				FILE_LOG(logINFO) << "Writing unused paired reads 2 from dataset : " << d << endl;
+				FILE_LOG(logINFO) << "Writing unused paired reads 2 from dataset : " << d << '\n';
 				printUnusedReads(getDataSetInfo()->at(d).r2FileName,getDataSetInfo()->at(d).r2Start,unUsedReadsFilePointer);
 				unUsedReadsFilePointer.close();
 			}
@@ -589,7 +589,7 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 			unUsedReadsFilePointer.open(unusedReads.c_str());
 			if(!unUsedReadsFilePointer)
 				MYEXIT("Unable to open file: "+unusedReads);
-			FILE_LOG(logINFO) << "Writing unused singleton reads from dataset : " << d << endl;
+			FILE_LOG(logINFO) << "Writing unused singleton reads from dataset : " << d << '\n';
 			printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
 			unUsedReadsFilePointer.close();
 		}

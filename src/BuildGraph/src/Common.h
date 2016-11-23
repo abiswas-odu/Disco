@@ -59,7 +59,7 @@ typedef long long INT64;
 #define MIN_THD_MEMORY_SIZE 1000
 
 //Defines the number of edges allowed for a kmer
-#define MAX_EDGE_PER_KMER 1
+#define MAX_EDGE_PER_KMER 4
 //	Exit code that displays the place of exit and message.
 #define MYEXIT(a) { cout << endl << "Exit from File: " << __FILE__ << " Line: " << __LINE__ << " Function: " << __FUNCTION__ << "()" << endl << "Message: " << a << endl; exit(0);}
 // Print which function is currently executing. Only for functions that take long time

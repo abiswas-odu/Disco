@@ -97,7 +97,10 @@ void Read::delEdge(Edge *edge, UINT64 readIndx, UINT64 orient)
  */
 void Read::ClearEdgeInfo()
 {
+	delete[] edgeP;
+	delete[] edgeOriIndex;
 	noOfEdges=0;
+	noOfAllocEdgeMemAvail=0;
 }
 /*std::ostream &operator<<(std::ostream & out, const Read & read)
 {

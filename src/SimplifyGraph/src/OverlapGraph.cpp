@@ -311,7 +311,7 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 	}//end of multi-threading
 	delete allMarked;
 	double endPSec = omp_get_wtime();
-	FILE_LOG(logINFO)<<"Composite edge parallel section end: Time "<<double(endPSec - beginPSec)<<endl;
+	FILE_LOG(logINFO)<<"Composite edge parallel section end: Time "<<double(endPSec - beginPSec)<<'\n';
 	//Delete all edges marked as invalid
 	for (map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++)
 	{
@@ -1703,7 +1703,7 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & filePointer) const
 
 			}
 		}
-		filePointer<<endl;
+		filePointer<<'\n';
 	}
 }
 
@@ -1732,9 +1732,9 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 		edgeFilePointer<< "contig_" << setfill('0') << setw(10) << edgeNameID<< "\t";
 		edgeFilePointer<<source<<"\t";		// store the source read information
 		edgeFilePointer<<destination<<"\t";	// store the destination read information
-		fileUsedReadPointer<<source<<endl;		//Write the source read as used up
+		fileUsedReadPointer<<source<<'\n';		//Write the source read as used up
 		m_dataset->at(source)->setUsedRead(true);	//set as used
-		fileUsedReadPointer<<destination<<endl;		//Write the destination read as used up
+		fileUsedReadPointer<<destination<<'\n';		//Write the destination read as used up
 		m_dataset->at(destination)->setUsedRead(true);	//set as used
 		edgeFilePointer<<orientation<<",";
 		edgeFilePointer<<contigEdge->getOverlapOffset()-offsetSum<<",";  //first overlap offset
@@ -1748,11 +1748,11 @@ void OverlapGraph::printEdge(Edge *contigEdge, ostream & edgeFilePointer,ostream
 				orientation=contigEdge->getInnerOrientation(j);
 				edgeFilePointer<<"("<<contigEdge->getInnerReadID(j)<<","<<orientation<<","
 						<<contigEdge->getInnerOverlapOffset(j)<<")";
-				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<endl;		//Write the read as used up
+				fileUsedReadPointer<<contigEdge->getInnerReadID(j)<<'\n';		//Write the read as used up
 				m_dataset->at(contigEdge->getInnerReadID(j))->setUsedRead(true);
 			}
 		}
-		edgeFilePointer<<endl;
+		edgeFilePointer<<'\n';
 	}
 }
 
@@ -1776,7 +1776,7 @@ void OverlapGraph::printEdgeCoverage(Edge *contigEdge, ostream & filePointer, UI
 			filePointer<<coverageVals[j]<<",";
 
 		}
-		filePointer<<endl;
+		filePointer<<'\n';
 	}
 }
 
@@ -2269,13 +2269,13 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	ofstream fileCoveragePointer;
 	fileCoveragePointer.open(edge_cov_file.c_str());
 	if(!fileCoveragePointer)
-			MYEXIT("Unable to open file: "+edge_cov_file);
+		MYEXIT("Unable to open file: "+edge_cov_file);
 
 	//Open used read file
 	ofstream fileUsedReadPointer;
 	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
 	if(!fileUsedReadPointer)
-			MYEXIT("Unable to open file: "+usedReadFileName);
+		MYEXIT("Unable to open file: "+usedReadFileName);
 
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
@@ -2620,11 +2620,11 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 		delete listOfPairedEdges_localList[i];
 	}
 
-	FILE_LOG(logINFO) << "No paths found between " << noPathsFound << " matepairs that are on different edge." << endl;
-	FILE_LOG(logINFO) << "Paths found between " << pathsFound << " matepairs that are on different edge." << endl;
-	FILE_LOG(logINFO) << "Total matepairs on different edges " << pathsFound+ noPathsFound << endl;
-	FILE_LOG(logINFO) << "Total matepairs on same edge " << mpOnSameEdge << endl;
-	FILE_LOG(logINFO) << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << endl;
+	FILE_LOG(logINFO) << "No paths found between " << noPathsFound << " matepairs that are on different edge.\n";
+	FILE_LOG(logINFO) << "Paths found between " << pathsFound << " matepairs that are on different edge.\n";
+	FILE_LOG(logINFO) << "Total matepairs on different edges " << pathsFound+ noPathsFound << '\n';
+	FILE_LOG(logINFO) << "Total matepairs on same edge " << mpOnSameEdge << '\n';
+	FILE_LOG(logINFO) << "Total matepairs " << pathsFound+noPathsFound+mpOnSameEdge << '\n';
 
 	FILE_LOG(logINFO)<<"List of pair edges:"<<listOfPairedEdges.size()<<endl;
 
@@ -2646,7 +2646,7 @@ UINT64 OverlapGraph::findSupportByMatepairsAndMerge(void)
 					<< listOfPairedEdges.at(i).edge1->m_flow << " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID()
 					<< "," << setw(10) << listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadID() << ") Length: "
 					<< setw(8) << listOfPairedEdges.at(i).edge2->getOverlapOffset() + listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadLength() << " Flow: " << setw(3) << listOfPairedEdges.at(i).edge2->m_flow
-					<< " are supported " << setw(4) << listOfPairedEdges.at(i).uniqSupport<<" times"<< endl;
+					<< " are supported " << setw(4) << listOfPairedEdges.at(i).uniqSupport<<" times"<< '\n';
 
 			Edge * e1f = listOfPairedEdges.at(i).edge1, *e1r = listOfPairedEdges.at(i).edge1->getReverseEdge();
 			Edge * e2f = listOfPairedEdges.at(i).edge2, *e2r = listOfPairedEdges.at(i).edge2->getReverseEdge();
@@ -2989,7 +2989,7 @@ UINT64 OverlapGraph::scaffolder(void)
 					<< " and (" << setw(10) << listOfPairedEdges.at(i).edge2->getSourceRead()->getReadID() << "," << setw(10)
 					<< listOfPairedEdges.at(i).edge2->getDestinationRead()->getReadID() << ") Length: " << setw(8)
 					<< listOfPairedEdges.at(i).edge2->getOverlapOffset() << " Flow: " << setw(3) << listOfPairedEdges.at(i).edge2->m_flow << " are supported "
-					<< setw(4) << listOfPairedEdges.at(i).uniqSupport << " times. Average distance: "<< setw(4) << listOfPairedEdges.at(i).distance << endl;
+					<< setw(4) << listOfPairedEdges.at(i).uniqSupport << " times. Average distance: "<< setw(4) << listOfPairedEdges.at(i).distance << '\n';
 			Edge * e1f = listOfPairedEdges.at(i).edge1, *e1r = listOfPairedEdges.at(i).edge1->getReverseEdge();
 			Edge * e2f = listOfPairedEdges.at(i).edge2, *e2r = listOfPairedEdges.at(i).edge2->getReverseEdge();
 			mergeEdgesDisconnected(listOfPairedEdges.at(i).edge1, listOfPairedEdges.at(i).edge2,listOfPairedEdges.at(i).distance);		// Merge the edges.
@@ -3191,8 +3191,8 @@ bool OverlapGraph::calculateMeanAndSdOfInnerDistance(void)
 		m_dataset->getDataSetInfo()->at(d).avgInnerDistanceSD=sdiv;  // Calculate and insert the standard deviation.
 
 		// Print the values of the current dataset.
-		FILE_LOG(logINFO) << "Mean set to: " << mean << endl;
-		FILE_LOG(logINFO) << "SD set to: " << sdiv << endl;
+		FILE_LOG(logINFO) << "Mean set to: " << mean << '\n';
+		FILE_LOG(logINFO) << "SD set to: " << sdiv << '\n';
 		FILE_LOG(logINFO) << "Reads on same edge: " << innerDistSizes->size() << endl;
 
 		if((INT64)longestMeanOfInsertDistance < mean)
@@ -3569,14 +3569,14 @@ void OverlapGraph::updateEdgeInfo(Read * updateRead, Edge *edge, UINT32 read_ind
 
 void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 {
-	gfaFilePointer << "H\tVN:Z:2.0" << std::endl;
+	gfaFilePointer << "H\tVN:Z:2.0\n";
 	UINT64 path_id=0;
 	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
 	{
 		//Write segments
 		//gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getStringForward().length()<< "\t"<<m_dataset->at(i)->getStringForward() << std::endl;
 		//No read sequence in GFA file
-		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*" << std::endl;
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*\n";
 		auto it = m_graph->find(i);
 		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
 		{
@@ -3597,7 +3597,7 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 						gfaFilePointer << "L\t" << source << "\t"<<fOrientation<<"\t";
 						string orientation=(e->getInnerOrientation(0)==0)?"-":"+";
 						gfaFilePointer << e->getInnerReadID(0) << "\t"<<orientation<<"\t"<<
-							e->getSourceRead()->getReadLength() - e->getInnerOverlapOffset(0)<<"M"<< std::endl;
+							e->getSourceRead()->getReadLength() - e->getInnerOverlapOffset(0)<<"M\n";
 						string pathStr=SSTR(source)+fOrientation+",";
 						string pathStrOverlap=SSTR(e->getSourceRead()->getReadLength()-e->getInnerOverlapOffset(0))+"M"+",";
 						//Add middle links
@@ -3609,7 +3609,7 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 
 							orientation=(e->getInnerOrientation(j)==0)?"-":"+";
 							gfaFilePointer << e->getInnerReadID(j) << "\t"<<orientation<<"\t"<<
-									m_dataset->at(e->getInnerReadID(j-1))->getReadLength() - e->getInnerOverlapOffset(j)<<"M"<< std::endl;
+									m_dataset->at(e->getInnerReadID(j-1))->getReadLength() - e->getInnerOverlapOffset(j)<<"M\n";
 							pathStrOverlap=pathStrOverlap+SSTR(m_dataset->at(e->getInnerReadID(j-1))->getReadLength() - e->getInnerOverlapOffset(j))+"M"+",";
 						}
 						//Add last link
@@ -3617,17 +3617,17 @@ void OverlapGraph::generateGFAOutput(ostream & gfaFilePointer)
 						orientation=(e->getInnerOrientation(e->getListofReadsSize()-1)==0)?"-":"+";			//Get the orientation
 						gfaFilePointer << "L\t" << lastInnerReadID << "\t"<<orientation<<"\t";
 						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<
-								m_dataset->at(lastInnerReadID)->getReadLength() - (e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize()))<<"M" << std::endl;
+								m_dataset->at(lastInnerReadID)->getReadLength() - (e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize()))<<"M\n";
 						pathStr=pathStr+SSTR(destination)+lOrientation;
 						pathStrOverlap=pathStrOverlap.substr(0,pathStrOverlap.length()-1);
 						path_id++;
-						gfaFilePointer << "P\t" << path_id << "\t"<< pathStr <<"\t" << pathStrOverlap <<std::endl;
+						gfaFilePointer << "P\t" << path_id << "\t"<< pathStr <<"\t" << pathStrOverlap <<'\n';
 					}
 					else
 					{
 						//Add first link with source-destination (simple edge)
 						gfaFilePointer << "L\t" << source << "\t"<<fOrientation<<"\t";
-						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<e->getOverlapOffset() << std::endl;
+						gfaFilePointer << destination << "\t"<<lOrientation<<"\t"<<e->getOverlapOffset() << '\n';
 					}
 
 				}
@@ -3645,7 +3645,7 @@ void OverlapGraph::generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UI
 
 		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
 		gfaFilePointer << offset <<"\t"<< m_dataset->at(source)->getReadLength() <<"$\t0\t"<<
-				ovlLength<<"\t"<<ovlLength<<"M"<<std::endl;
+				ovlLength<<"\t"<<ovlLength<<"M\n";
 	}
 	if(sOri=="+" && dOri=="-")
 	{
@@ -3654,7 +3654,7 @@ void OverlapGraph::generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UI
 		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
 		gfaFilePointer << offset <<"\t"<< m_dataset->at(source)->getReadLength() <<"$\t"
 				<<m_dataset->at(source)->getReadLength()-ovlLength<<"\t"
-				<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M"<<std::endl;
+				<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M\n";
 	}
 	else if(sOri=="-" && dOri=="+")
 	{
@@ -3663,7 +3663,7 @@ void OverlapGraph::generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UI
 		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
 		gfaFilePointer << "0\t"<< ovlLength <<"$\t"
 						<<m_dataset->at(source)->getReadLength()-ovlLength<<"\t"
-						<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M"<<std::endl;
+						<< m_dataset->at(source)->getReadLength()<<"$\t"<<ovlLength<<"M\n";
 	}
 	else if(sOri=="-" && dOri=="-")
 	{
@@ -3672,19 +3672,19 @@ void OverlapGraph::generateGFA2Edge(ostream & gfaFilePointer, UINT64 edge_id, UI
 		UINT64 ovlLength = m_dataset->at(source)->getReadLength()-offset;
 		gfaFilePointer << "0\t"<< ovlLength <<"$\t"
 						<<m_dataset->at(destination)->getReadLength()<<"$\t"
-						<< m_dataset->at(destination)->getReadLength()-ovlLength<<"$\t"<<ovlLength<<"M"<<std::endl;
+						<< m_dataset->at(destination)->getReadLength()-ovlLength<<"$\t"<<ovlLength<<"M\n";
 	}
 }
 
 void OverlapGraph::generateGFA2Output(ostream & gfaFilePointer)
 {
-	gfaFilePointer << "H\tVN:Z:2.0" << std::endl;
+	gfaFilePointer << "H\tVN:Z:2.0\n";
 	UINT64 path_id=0, edge_id=0;
 
 	for(UINT64 i = 1; i<= m_dataset->size(); i++) //For each read
 	{
 		//Write segments
-		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*" << std::endl;
+		gfaFilePointer << "S\t" << i <<"\t"<<m_dataset->at(i)->getReadLength()<< "\t*\n";
 		auto it = m_graph->find(i);
 		if(it != m_graph->end() && !it->second->empty()) // if this read has some edge(s) going out of it (since now the graph is directed)
 		{
@@ -3723,7 +3723,7 @@ void OverlapGraph::generateGFA2Output(ostream & gfaFilePointer)
 								(e->getOverlapOffset()-e->getInnerOverlapSum(0,e->getListofReadsSize())));
 						pathStr=pathStr+SSTR(edge_id);
 						path_id++;
-						gfaFilePointer << "PO\t" << path_id << "\t"<< pathStr <<std::endl;
+						gfaFilePointer << "PO\t" << path_id << "\t"<< pathStr <<'\n';
 					}
 					else
 					{
