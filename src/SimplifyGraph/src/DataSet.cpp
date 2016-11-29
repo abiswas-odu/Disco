@@ -34,7 +34,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
 			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
 				std::replace( line1.begin(), line1.end(), 'N', 'A');
-			Read *r = new Read(line1);
+			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
 			addRead(r);
@@ -42,7 +42,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			++readCount;
 			if(readCount % 1000000 == 0){
 				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
-					<< " reads loaded to memory, "
+					<< " read lengths loaded to memory, "
 					<< setw(7) << checkMemoryUsage() << " MB\n";
 			}
 		}
@@ -83,7 +83,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 						fileType = FASTQ;
 					}
 					else{
-						FILE_LOG(logERROR) << "Unknown input file format."<<endl;
+						FILE_LOG(logERROR) << "Unknown input file format.\n";
 						break;
 					}
 				}
@@ -106,7 +106,7 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
 			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
 				std::replace( line1.begin(), line1.end(), 'N', 'A');
-			Read *r = new Read(line1);
+			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
 			addRead(r);
@@ -114,13 +114,13 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 			++readCount;
 			if(readCount % 1000000 == 0){
 				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
-					<< " reads loaded to memory, "
+					<< " read lengths loaded to memory, "
 					<< setw(7) << checkMemoryUsage() << " MB\n";
 			}
 		}
 		filePointer.close();
 	}
-	FILE_LOG(logDEBUG) << setw(10) << readCount << " reads loaded from this read file\n";
+	FILE_LOG(logDEBUG) << setw(10) << readCount << " read lengths loaded from this read file\n";
 	CLOCKSTOP;
 }
 DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
@@ -177,9 +177,11 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 		newDataSet.r1Start = m_vec_reads->size()+1;
 		loadReadsFromReadFile(*it);
 		newDataSet.r1End = m_vec_reads->size();
-		dataSetInfo->push_back(newDataSet);
+		newDataSet.r1FileName = *it;
 		newDataSet.r2Start = 0;
 		newDataSet.r2End = 0;
+		newDataSet.r2FileName = "";
+		dataSetInfo->push_back(newDataSet);
 	}
 	m_vec_reads->shrink_to_fit();
 	CLOCKSTOP;
@@ -204,11 +206,15 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 			UINT64 readID = stoi(text);
 			if(!at(readID)->isUsedRead())
 			{
+				//count reads as used and mark it used
 				at(readID)->setUsedRead(true);
 				usedReadCtr++;
+				//count contained reads as used as well
+				UINT32 containedReads=at(readID)->getContainedReadCount();
+				usedReadCtr+=containedReads;
 			}
 		}
-		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded."<<endl;
+		FILE_LOG(logINFO)<< SSTR(usedReadCtr) << " used reads loaded.\n";
 	}
 	return usedReadCtr;
 }
@@ -284,7 +290,7 @@ bool DataSet::testRead(const string & read)
 UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 {
 	CLOCKSTART;
-	FILE_LOG(logINFO)<< "Store contained read information..."<< endl;
+	FILE_LOG(logINFO)<< "Store contained read information...\n";
 	UINT64 containedReadCtr=0;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
@@ -415,32 +421,166 @@ vector<UINT64> DataSet::getMatePairList(Read *read)
 	}
 	return mpList;
 }
+void DataSet::printUnusedReads(const std::string &read_file,UINT64 readID, ostream & unusedReadFilePointer)
+{
+	CLOCKSTART;
+	FILE_LOG(logINFO) << "load reads from read file: " << read_file << "\n";
+	// To count of reads in this file
+	UINT64 readCount = 0;
 
+	if(read_file.substr( read_file.length() - 3 )==".gz")
+	{
+#ifdef INCLUDE_READGZ
+		gzFile fp;
+		kseq_t *seq;
+		int l;
+		fp = gzopen(read_file.c_str(), "r");
+		seq = kseq_init(fp);
+		while ((l = kseq_read(seq)) >= 0) {
+			string line0=seq->name.s;
+			string line1=seq->seq.s;
+
+			UINT64 mateID = getMatePair(readID);
+			if(mateID!=0)
+			{
+				if((!at(readID)->isUsedRead() || !at(mateID)->isUsedRead()))
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
+			}
+			else
+			{
+				if((!at(readID)->isUsedRead()))
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
+			}
+			++readID;
+			++readCount;
+			if(readCount % 1000000 == 0){
+				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
+					<< " reads streamed to memory, "
+					<< setw(7) << checkMemoryUsage() << " MB\n";
+			}
+		}
+		kseq_destroy(seq);
+		gzclose(fp);
+#else
+		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
+				"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+				"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+#endif
+	}
+	else
+	{
+		// Open file
+		ifstream filePointer;
+		filePointer.open(read_file.c_str());
+		if(!filePointer.is_open()){
+			FILE_LOG(logWARNING) << "Unable to open file: " << read_file << "\n";
+			return;
+		}
+		// Variables
+		string text;
+		enum FileType {FASTA, FASTQ, UNDEFINED};
+		FileType fileType = UNDEFINED;
+
+		while(getline(filePointer,text))
+		{
+			string line0="",line1="";
+			// Check FASTA and FASTQ
+			if(fileType == UNDEFINED) {
+				if (text.length() > 0){
+					if(text[0] == '>'){
+						FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
+						fileType = FASTA;
+					}
+					else if(text[0] == '@'){
+						FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
+						fileType = FASTQ;
+					}
+					else{
+						FILE_LOG(logERROR) << "Unknown input file format.\n";
+						break;
+					}
+				}
+			}
+			line0=text;	// get ID line
+			// FASTA file read
+			if(fileType == FASTA) {
+				getline (filePointer,line1,'>');	// get string line
+				line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
+						line1.end());
+				//std::transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
+			}
+			// FASTQ file read
+			else if(fileType == FASTQ) {
+				getline(filePointer, line1);	// String
+				// Ignore the next two lines
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+
+			UINT64 mateID = getMatePair(readID);
+			if(mateID!=0)
+			{
+				if((!at(readID)->isUsedRead() || !at(mateID)->isUsedRead()))
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
+			}
+			else
+			{
+				if((!at(readID)->isUsedRead()))
+					unusedReadFilePointer<<">"<<line0<<'\n'<<line1<<'\n';
+			}
+			++readID;
+			++readCount;
+			if(readCount % 1000000 == 0){
+				FILE_LOG(logDEBUG) << setw(10) << (readCount/1000000)  << ",000,000"
+					<< " reads streamed to memory, "
+					<< setw(7) << checkMemoryUsage() << " MB\n";
+			}
+		}
+		filePointer.close();
+	}
+	FILE_LOG(logDEBUG) << setw(10) << readCount << " reads streamed from this read file\n";
+	CLOCKSTOP;
+
+}
 void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 {
 	for(UINT64 d = 0; d < getDataSetInfo()->size(); d++)	// For each dataset.
 	{
-		if(getDataSetInfo()->at(d).isPaired)
+		if(getDataSetInfo()->at(d).isPaired)  // Check if they are paired
 		{
-			string unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedPairedReads.fasta";
-			ofstream unUsedReadsFilePointer;
-			unUsedReadsFilePointer.open(unusedReads.c_str());
-			if(!unUsedReadsFilePointer)
-				MYEXIT("Unable to open file: "+unusedReads);
-			FILE_LOG(logINFO) << "Writing unused paired reads from dataset : " << d << endl;
-			for(UINT64 i = getDataSetInfo()->at(d).r1Start; i <= getDataSetInfo()->at(d).r1End; i++)	// for each read in the dataset
+			if(getDataSetInfo()->at(d).isReadInterleaved) //check if the reads are interleaved
 			{
-				UINT64 mateID = getMatePair(i);
-				if(mateID!=0)
-				{
-					if((!at(i)->isUsedRead() || !at(mateID)->isUsedRead()) && i<mateID)
-					{
-						unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<at(i)->getStringForward()<<endl;
-						unUsedReadsFilePointer<<">"<<mateID<<".2"<<endl<<at(mateID)->getStringForward()<<endl;
-					}
-				}
+				string unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedPairedReads.fasta";
+				ofstream unUsedReadsFilePointer;
+				unUsedReadsFilePointer.open(unusedReads.c_str());
+				if(!unUsedReadsFilePointer)
+					MYEXIT("Unable to open file: "+unusedReads);
+				FILE_LOG(logINFO) << "Writing unused paired reads from dataset : " << d << '\n';
+				printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
+				unUsedReadsFilePointer.close();
 			}
-			unUsedReadsFilePointer.close();
+			else
+			{
+				//Write R1 reads
+				string unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedPairedReads1.fasta";
+				ofstream unUsedReadsFilePointer;
+				unUsedReadsFilePointer.open(unusedReads.c_str());
+				if(!unUsedReadsFilePointer)
+					MYEXIT("Unable to open file: "+unusedReads);
+				FILE_LOG(logINFO) << "Writing unused paired reads 1 from dataset : " << d << '\n';
+				printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
+				unUsedReadsFilePointer.close();
+
+				//Write R2 reads
+
+				unusedReads = outputFilenamePrefix+"_"+SSTR(d)+"_UnusedPairedReads2.fasta";
+				unUsedReadsFilePointer.open(unusedReads.c_str());
+				if(!unUsedReadsFilePointer)
+					MYEXIT("Unable to open file: "+unusedReads);
+				FILE_LOG(logINFO) << "Writing unused paired reads 2 from dataset : " << d << '\n';
+				printUnusedReads(getDataSetInfo()->at(d).r2FileName,getDataSetInfo()->at(d).r2Start,unUsedReadsFilePointer);
+				unUsedReadsFilePointer.close();
+			}
 		}
 		else
 		{
@@ -449,14 +589,9 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 			unUsedReadsFilePointer.open(unusedReads.c_str());
 			if(!unUsedReadsFilePointer)
 				MYEXIT("Unable to open file: "+unusedReads);
-			FILE_LOG(logINFO) << "Writing unused singleton reads from dataset : " << d << endl;
-			for(UINT64 i = getDataSetInfo()->at(d).r1Start; i <= getDataSetInfo()->at(d).r1End; i++)	// for each read in the dataset
-			{
-				if(!at(i)->isUsedRead())
-					unUsedReadsFilePointer<<">"<<i<<".1"<<endl<<at(i)->getStringForward()<<endl;
-			}
+			FILE_LOG(logINFO) << "Writing unused singleton reads from dataset : " << d << '\n';
+			printUnusedReads(getDataSetInfo()->at(d).r1FileName,getDataSetInfo()->at(d).r1Start,unUsedReadsFilePointer);
 			unUsedReadsFilePointer.close();
 		}
 	}
 }
-

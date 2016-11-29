@@ -64,7 +64,7 @@ double maxReadsUsed = 0.7;
 
 bool printContigs=false;
 bool printScaffolds=true;
-bool printUnused=true;
+bool printUnused=false;
 bool printGFA = false;
 bool printGFA2 =false;
 //=============================================================================
