@@ -51,7 +51,7 @@ class DataSet
 
 		/* ====================  METHODS      ======================================= */
 		// Load reads from a read file
-		void loadReadsFromReadFile(const std::string &read_file);
+		void loadReadLenghtsFromReadFile(const std::string &read_file);
 		//
 		// Load reads from an edge file, in this case, only the length is available
 		void loadReadsFromEdgeFile(const std::string &edge_file);
