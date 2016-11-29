@@ -288,6 +288,7 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 	UINT64 containedReadCtr=0;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
+		FILE_LOG(logINFO) << "Processing:"<<containedReadFile[i].c_str()<<'\n';
 		ifstream myFile;
 		myFile.open(containedReadFile[i].c_str());
 		if(!myFile)
@@ -298,11 +299,12 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 		{
 			vector<string> toks = Utils::split(text,'\t');
 			UINT64 containedReadID = atoi(toks[0].c_str());
-			if(containedReadID < 1 || containedReadID > m_vec_reads->size())
-				FILE_LOG(logINFO) << "READID:"<<containedReadID<<'\n';
 			UINT64 containingReadID = atoi(toks[1].c_str());
+			if(containedReadID < 1 || containedReadID > m_vec_reads->size())
+				FILE_LOG(logINFO) << "READID:"<<containedReadID<<","<<text<<'\n';
+
 			if(containingReadID < 1 || containingReadID > m_vec_reads->size())
-			   FILE_LOG(logINFO) << "READID:"<<containingReadID<<'\n';
+			   FILE_LOG(logINFO) << "READID:"<<containingReadID<<","<<text<<'\n';
 
 			vector<string> info = Utils::split(toks[2],',');
 			UINT64 containedReadOri = atoi(info[0].c_str());
