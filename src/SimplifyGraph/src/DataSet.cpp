@@ -298,8 +298,8 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 		while(getline (myFile,text))
 		{
 			vector<string> toks = Utils::split(text,'\t');
-			UINT64 containedReadID = atoi(toks[0].c_str());
-			UINT64 containingReadID = atoi(toks[1].c_str());
+			UINT64 containedReadID = std::stoull(toks[0],nullptr,0);
+			UINT64 containingReadID = std::stoull(toks[0],nullptr,0);
 			if(containedReadID < 1 || containedReadID > m_vec_reads->size())
 				FILE_LOG(logINFO) << "READID:"<<containedReadID<<","<<text<<'\n';
 
@@ -307,8 +307,8 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 			   FILE_LOG(logINFO) << "READID:"<<containingReadID<<","<<text<<'\n';
 
 			vector<string> info = Utils::split(toks[2],',');
-			UINT64 containedReadOri = atoi(info[0].c_str());
-			UINT64 containedReadOverlapStart = atoi(info[8].c_str());
+			UINT64 containedReadOri = std::stoull(info[0],nullptr,0);
+			UINT64 containedReadOverlapStart = std::stoull(info[8],nullptr,0);
 
 			if(!at(containedReadID)->isContainedRead())
 			{
