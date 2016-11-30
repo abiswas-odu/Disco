@@ -139,8 +139,8 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 				procCtr++;
 				vector<string> toks = splitTok(text,'\t');
 				//Get source destination IDs
-				UINT64 sourceReadFindex = atoi(toks[0].c_str());
-				UINT64 destReadFindex = atoi(toks[1].c_str());
+				UINT64 sourceReadFindex = std::stoull(toks[0],nullptr,0);
+				UINT64 destReadFindex = std::stoull(toks[1],nullptr,0);
 				auto sourceIt = dataSet->getFRMap()->find(sourceReadFindex);
 				auto destIt = dataSet->getFRMap()->find(destReadFindex);
 				if(sourceIt == dataSet->getFRMap()->end() || destIt == dataSet->getFRMap()->end() ) // If the reads do not exist go to the next record
@@ -148,7 +148,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 
 				//Check if both marked or not
 				vector<string> toks2 = splitTok(toks[2],',');
-				UINT64 markFlag = atoi(toks2[toks2.size()-1].c_str());
+				UINT64 markFlag = std::stoull(toks2[toks2.size()-1],nullptr,0);
 
 				//Check if destination is also marked by this thread.
 				// 0: Only source is marked
@@ -186,7 +186,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 			{
 				lastLine=text;
 			}
-			startIDPerThread[threadID]=stoi(lastLine);
+			startIDPerThread[threadID]=std::stoull(lastLine,nullptr,0);
 			cout<<"Thread:"<<threadID<<" restarting from read ID:"<<startIDPerThread[threadID]<<endl;
 		}
 	}
@@ -353,8 +353,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			{
 				procCtr++;
 				vector<string> toks = splitTok(text,'\t');
-				UINT64 containedReadFindex = atoi(toks[0].c_str());
-				UINT64 containingReadFindex = atoi(toks[1].c_str());
+				UINT64 containedReadFindex = std::stoull(toks[0],nullptr,0);
+				UINT64 containingReadFindex = std::stoull(toks[1],nullptr,0);
 				auto itContained = fIndxReadIDMap->find(containedReadFindex);
 				auto itContaining = fIndxReadIDMap->find(containingReadFindex);
 				if(itContained != fIndxReadIDMap->end() && itContaining != fIndxReadIDMap->end())		//Check the file indices are correct

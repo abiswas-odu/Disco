@@ -331,7 +331,7 @@ UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams, UINT64 &ctgCo
 				string parVal = Utils::trimmed(tok[1]);
 				if(parName=="Iteration")
 				{
-					iterCtr=atoi(parVal.c_str());
+					iterCtr=std::stoull(parVal,nullptr,0);
 				}
 				if(parName=="ParSimplify" && parVal=="1")
 					checkPointParams[iterCtr-1][0]=1;
@@ -346,12 +346,12 @@ UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams, UINT64 &ctgCo
 				if(parName=="PrintCtg")
 				{
 					checkPointParams[iterCtr-1][5]=1;
-					ctgCount=atoi(parVal.c_str());
+					ctgCount=std::stoull(parVal,nullptr,0);
 				}
 				if(parName=="Scaffold")
 				{
 					checkPointParams[iterCtr-1][6]=1;
-					scfCount=atoi(parVal.c_str());
+					scfCount=std::stoull(parVal,nullptr,0);
 				}
 			}
 		}

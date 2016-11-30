@@ -1974,16 +1974,16 @@ void OverlapGraph::readParEdges(string edge_file)
 	while(getline(filePointer,edge_text)) {
 
 		vector<string> tok = Utils::split(edge_text,'\t');
-		Read *source = m_dataset->at(atoi(tok[0].c_str()));
-		Read *destination = m_dataset->at(atoi(tok[1].c_str()));
+		Read *source = m_dataset->at(std::stoull(tok[0],nullptr,0));
+		Read *destination = m_dataset->at(std::stoull(tok[1],nullptr,0));
 
 		vector<string> infoTok = Utils::split(tok[2],',');
-		UINT64 orientationForward =  atoi(infoTok[0].c_str());
-		UINT64 overlapOffsetForward =   atoi(infoTok[1].c_str());
+		UINT64 orientationForward = std::stoull(infoTok[0],nullptr,0);
+		UINT64 overlapOffsetForward = std::stoull(infoTok[1],nullptr,0);
 		UINT64 flowValue=0;
 		//If there is flow information; load it
 		if(infoTok.size()>5)
-			flowValue=atoi(infoTok[5].c_str());
+			flowValue=std::stoull(infoTok[5],nullptr,0);
 
 		// Make the forward edge list
 		UINT64 *listReadsForward = nullptr;
