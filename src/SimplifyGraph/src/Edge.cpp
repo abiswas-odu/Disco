@@ -425,10 +425,10 @@ UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize,UIN
 		for(size_t i=0;i<readTok.size();i++)
 		{
 			vector<string> processStr = Utils::split(readTok[i].substr(1),','); //Get rid of the '(' at the beginning and split on ','
-			UINT64 readID = atoi(processStr[0].c_str());
-			UINT64 orient = atoi(processStr[1].c_str());
+			UINT64 readID = std::stoull(processStr[0],nullptr,0);
+			UINT64 orient = std::stoull(processStr[1],nullptr,0);
 			orient = orient << 63;
-			UINT64 overlapOff = atoi(processStr[2].c_str());
+			UINT64 overlapOff = std::stoull(processStr[2],nullptr,0);
 			overlapOff = overlapOff << 32;
 			UINT64 packedReadInfo =  readID | overlapOff | orient;
 			listReads[lCtr++] = packedReadInfo;

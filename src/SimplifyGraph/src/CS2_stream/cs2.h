@@ -345,7 +345,7 @@ fprintf ( stderr, "\nError %d\n", cc );
 
 /*
 2 - problem is unfeasible
-5 - allocation fault
+5 - alloqqcation fault
 6 - price overflow
 */
 

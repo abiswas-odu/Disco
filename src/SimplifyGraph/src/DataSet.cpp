@@ -12,7 +12,7 @@
 KSEQ_INIT(gzFile, gzread)
 #endif
 
-void DataSet::loadReadsFromReadFile(const std::string &read_file)
+void DataSet::loadReadLenghtsFromReadFile(const std::string &read_file)
 {
 	CLOCKSTART;
 	FILE_LOG(logINFO) << "load reads from read file: " << read_file << "\n";
@@ -31,9 +31,6 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 		seq = kseq_init(fp);
 		while ((l = kseq_read(seq)) >= 0) {
 			string line1=seq->seq.s;
-			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
-			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
-				std::replace( line1.begin(), line1.end(), 'N', 'A');
 			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
@@ -103,9 +100,6 @@ void DataSet::loadReadsFromReadFile(const std::string &read_file)
 				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			}
-			transform(line1.begin(), line1.end(), line1.begin(), ::toupper);
-			if(!testRead(line1)) // Test the read is of good quality. If not replace all N's
-				std::replace( line1.begin(), line1.end(), 'N', 'A');
 			Read *r = new Read(line1.length());
 			r->setReadID(readID);
 			// add read to the dataset
@@ -140,13 +134,13 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 		newDataSet.matePairOrientation=0;
 		newDataSet.r1Start = m_vec_reads->size()+1;
 		//Load read information
-		loadReadsFromReadFile(*it);
+		loadReadLenghtsFromReadFile(*it);
 		newDataSet.r1End = m_vec_reads->size();
 		newDataSet.r2Start = m_vec_reads->size() + 1;
 		newDataSet.r1FileName = *it;
 		it++;
 		//Load read information
-		loadReadsFromReadFile(*it);
+		loadReadLenghtsFromReadFile(*it);
 		newDataSet.r2End = m_vec_reads->size();
 		newDataSet.r2FileName = *it;
 		dataSetInfo->push_back(newDataSet);
@@ -160,7 +154,7 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 			newDataSet.matePairOrientation=0;
 			newDataSet.r1Start = m_vec_reads->size()+1;
 			//Load read information
-			loadReadsFromReadFile(*it);
+			loadReadLenghtsFromReadFile(*it);
 			newDataSet.r1End = m_vec_reads->size();
 			newDataSet.r1FileName = *it;
 			newDataSet.r2FileName = "";
@@ -175,7 +169,7 @@ DataSet::DataSet(const vector<std::string> &read_SingleFiles,const vector<std::s
 		newDataSet.isPaired=0;
 		newDataSet.matePairOrientation=0;
 		newDataSet.r1Start = m_vec_reads->size()+1;
-		loadReadsFromReadFile(*it);
+		loadReadLenghtsFromReadFile(*it);
 		newDataSet.r1End = m_vec_reads->size();
 		newDataSet.r1FileName = *it;
 		newDataSet.r2Start = 0;
@@ -294,6 +288,7 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 	UINT64 containedReadCtr=0;
 	for(UINT64 i=0;i<containedReadFile.size();i++)
 	{
+		FILE_LOG(logINFO) << "Processing:"<<containedReadFile[i].c_str()<<'\n';
 		ifstream myFile;
 		myFile.open(containedReadFile[i].c_str());
 		if(!myFile)
@@ -303,12 +298,11 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 		while(getline (myFile,text))
 		{
 			vector<string> toks = Utils::split(text,'\t');
-			UINT64 containedReadID = atoi(toks[0].c_str());
-			UINT64 containingReadID = atoi(toks[1].c_str());
-
+			UINT64 containedReadID = std::stoull(toks[0],nullptr,0);
+			UINT64 containingReadID = std::stoull(toks[0],nullptr,0);
 			vector<string> info = Utils::split(toks[2],',');
-			UINT64 containedReadOri = atoi(info[0].c_str());
-			UINT64 containedReadOverlapStart = atoi(info[8].c_str());
+			UINT64 containedReadOri = std::stoull(info[0],nullptr,0);
+			UINT64 containedReadOverlapStart = std::stoull(info[8],nullptr,0);
 
 			if(!at(containedReadID)->isContainedRead())
 			{
