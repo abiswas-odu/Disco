@@ -270,9 +270,8 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		{
 			//count reads as used and mark it used
 			//count contained reads as used as well
-			//UINT32 containedReads=dataSet->at(i)->getContainedReadCount();
-			//usedReads+=(containedReads + 1);
-			usedReads++;
+			UINT32 containedReads=dataSet->at(i)->getContainedReadCount();
+			usedReads+=(containedReads + 1);
 		}
 	}
 	FILE_LOG(logINFO) <<"Iteration:"<<interationCount<<" Graph simplification has used a total of "<<usedReads<<" reads."<<endl;
