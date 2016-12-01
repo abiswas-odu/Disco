@@ -197,7 +197,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 		string text;
 		while(getline(usedReadFilePointer,text))
 		{
-			UINT64 readID = stoi(text);
+			UINT64 readID = std::stoull(text,nullptr,0);
 			if(!at(readID)->isUsedRead())
 			{
 				//count reads as used and mark it used

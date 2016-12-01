@@ -102,7 +102,7 @@ class Read
 
 		bool isContainedRead() const { return containedReadFlag; }
 
-		UINT32 getContainedReadCount() const { return noOfConReads; }
+		UINT16 getContainedReadCount() const { return noOfConReads; }
 
 		UINT64 getContainedReadID(UINT64 indx) const
 		{
