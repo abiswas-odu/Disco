@@ -99,6 +99,8 @@ void Read::ClearEdgeInfo()
 {
 	delete[] edgeP;
 	delete[] edgeOriIndex;
+	edgeP=nullptr;
+	edgeOriIndex=nullptr;
 	noOfEdges=0;
 	noOfAllocEdgeMemAvail=0;
 }
