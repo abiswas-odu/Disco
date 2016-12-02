@@ -612,3 +612,18 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 		}
 	}
 }
+
+
+UINT64 DataSet::getRecursiveContainedReadCount(UINT64 readID)
+{
+	Read read* = at(readID);
+	UINT64 retCtr=read->getContainedReadCount();
+	for(UINT64 i=0;i<read->getContainedReadCount();i++)
+	{
+		UINT64 rID = read->getContainedReadID(i);
+		retCtr+=getRecursiveContainedReadCount(rID);
+
+	}
+	return retCtr;
+
+}

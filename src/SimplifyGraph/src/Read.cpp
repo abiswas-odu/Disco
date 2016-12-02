@@ -59,15 +59,15 @@ Read::~Read(void)
  */
 void Read::setConRead(vector<UINT64> conReadIDList, vector<UINT64> conOvlStartList, vector<UINT64> orientList)
 {
-	UINT16 oldConReads=noOfConReads;
+	UINT32 oldConReads=noOfConReads;
 	noOfConReads+=conReadIDList.size();
 	UINT64 *newConReadArray = new UINT64[noOfConReads];
-	UINT16 i;
+	UINT32 i;
 	for(i=0;i<oldConReads;i++)
 	{
 		newConReadArray[i]=containedReads[i];
 	}
-	for(UINT16 j=0;i<noOfConReads;i++,j++)
+	for(UINT32 j=0;i<noOfConReads;i++,j++)
 	{
 		UINT64 overlapStart = (conOvlStartList[j] << 32);
 		UINT64 orient = orientList[j] << 62;

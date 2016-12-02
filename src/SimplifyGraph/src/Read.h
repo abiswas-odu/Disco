@@ -39,12 +39,13 @@ class Read
 		                         //Actual read sequence can be stored using the dna_bitset above that is commented out
 								 //Right now all read sequence is streamed
 
+		UINT32 noOfConReads;				//Number of contained reads
+
+
 		UINT16 noOfEdges;					//Number of edges this read belongs to
 		UINT16 noOfAllocEdgeMemAvail;		//Number of allocated edge locations available that have been deleted
 											//This is used to avoid allocation and deallocation when the edges are to be updated...
 
-
-		UINT16 noOfConReads;				//Number of contained reads
 
 		bool containedReadFlag;				// True if read is contained...
 
@@ -102,7 +103,7 @@ class Read
 
 		bool isContainedRead() const { return containedReadFlag; }
 
-		UINT16 getContainedReadCount() const { return noOfConReads; }
+		UINT32 getContainedReadCount() const { return noOfConReads; }
 
 		UINT64 getContainedReadID(UINT64 indx) const
 		{
