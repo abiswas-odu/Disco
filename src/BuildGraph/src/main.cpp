@@ -168,7 +168,7 @@ UINT64 readOverlapParameter(string parameterFile)
 				string parName = trimmed(tok[0]);
 				string parVal = trimmed(tok[1]);
 				if(parName=="MinOverlap4BuildGraph")
-					minimumOverlapLength=stoi(parVal);
+					minimumOverlapLength=std::stoull(parVal,nullptr,0);
 			}
 		}
 	}

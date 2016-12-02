@@ -197,7 +197,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 		string text;
 		while(getline(usedReadFilePointer,text))
 		{
-			UINT64 readID = stoi(text);
+			UINT64 readID = std::stoull(text,nullptr,0);
 			if(!at(readID)->isUsedRead())
 			{
 				//count reads as used and mark it used
@@ -299,7 +299,7 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 		{
 			vector<string> toks = Utils::split(text,'\t');
 			UINT64 containedReadID = std::stoull(toks[0],nullptr,0);
-			UINT64 containingReadID = std::stoull(toks[0],nullptr,0);
+			UINT64 containingReadID = std::stoull(toks[1],nullptr,0);
 			vector<string> info = Utils::split(toks[2],',');
 			UINT64 containedReadOri = std::stoull(info[0],nullptr,0);
 			UINT64 containedReadOverlapStart = std::stoull(info[8],nullptr,0);
