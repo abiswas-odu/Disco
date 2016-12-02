@@ -295,6 +295,10 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 			MYEXIT("Unable to open file: "+containedReadFile[i]);
 
 		string text;
+		UINT64 thisContainingReadID=0;
+		vector<UINT64> containedReadIDList;
+		vector<UINT64> containedReadOriList;
+		vector<UINT64> containedReadOverlapStartList;
 		while(getline (myFile,text))
 		{
 			vector<string> toks = Utils::split(text,'\t');
@@ -309,7 +313,26 @@ UINT64 DataSet::storeContainedReadInformation(vector<string> containedReadFile)
 				at(containedReadID)->setIsContained(true);
 				containedReadCtr++;
 			}
-			at(containingReadID)->setConRead(containedReadID, containedReadOverlapStart, containedReadOri);
+			if(thisContainingReadID==containingReadID)
+			{
+				//push into vectors
+				containedReadIDList.push_back(containedReadID);
+				containedReadOriList.push_back(containedReadOri);
+				containedReadOverlapStartList.push_back(containedReadOverlapStart);
+			}
+			else
+			{
+				if(containedReadIDList.size()>0)
+					at(containingReadID)->setConRead(containedReadIDList, containedReadOverlapStartList, containedReadOriList);
+				thisContainingReadID=containingReadID;
+				//clear vectors and push
+				containedReadIDList.clear();
+				containedReadOriList.clear();
+				containedReadOverlapStartList.clear();
+				containedReadIDList.push_back(containedReadID);
+				containedReadOriList.push_back(containedReadOri);
+				containedReadOverlapStartList.push_back(containedReadOverlapStart);
+			}
 		}
 		myFile.close();
 	}

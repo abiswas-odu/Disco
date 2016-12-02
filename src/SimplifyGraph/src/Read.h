@@ -77,7 +77,7 @@ class Read
 
 		void setIsContained(bool isCon) { containedReadFlag=isCon; }
 
-		void setConRead(UINT64 conReadID, UINT32 conOvlStart, UINT64 orient);
+		void setConRead(vector<UINT64> conReadIDList, vector<UINT64> conOvlStartList, vector<UINT64> orientList);
 
 		void setEdge(Edge *edge, UINT32 readIndx, UINT32 orient);
 

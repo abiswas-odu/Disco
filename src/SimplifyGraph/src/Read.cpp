@@ -57,19 +57,23 @@ Read::~Read(void)
 /*
  * Add a contained read to the contained read list...
  */
-void Read::setConRead(UINT64 conReadID, UINT32 conOvlStart, UINT64 orient)
+void Read::setConRead(vector<UINT64> conReadIDList, vector<UINT64> conOvlStartList, vector<UINT64> orientList)
 {
-	noOfConReads++;
+	UINT16 oldConReads=noOfConReads;
+	noOfConReads+=conReadIDList.size();
 	UINT64 *newConReadArray = new UINT64[noOfConReads];
-	for(UINT16 i=0;i<(noOfConReads-1);i++)
+	UINT16 i;
+	for(i=0;i<oldConReads;i++)
 	{
 		newConReadArray[i]=containedReads[i];
 	}
-
-	UINT64 overlapStart = (conOvlStart << 32);
-	orient = orient << 62;
-	UINT64 newConRead =  conReadID | overlapStart | orient;
-	newConReadArray[noOfConReads-1] = newConRead;
+	for(UINT16 j=0;i<noOfConReads;i++,j++)
+	{
+		UINT64 overlapStart = (conOvlStartList[j] << 32);
+		UINT64 orient = orientList[j] << 62;
+		UINT64 newConRead =  conReadIDList[j] | overlapStart | orient;
+		newConReadArray[i] = newConRead;
+	}
 	delete[] containedReads;
 	containedReads = newConReadArray;
 }
