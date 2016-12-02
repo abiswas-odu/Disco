@@ -270,7 +270,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		{
 			//count reads as used and mark it used
 			//count contained reads as used as well
-			UINT32 containedReads=dataSet->at(i)->getContainedReadCount();
+			UINT32 containedReads=dataSet->getRecursiveContainedReadCount(i);
 			usedReads+=(containedReads + 1);
 		}
 	}

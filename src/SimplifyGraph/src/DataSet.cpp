@@ -204,7 +204,7 @@ UINT64 DataSet::LoadUsedReads(string usedReadFileName)
 				at(readID)->setUsedRead(true);
 				usedReadCtr++;
 				//count contained reads as used as well
-				UINT32 containedReads=at(readID)->getContainedReadCount();
+				UINT32 containedReads=getRecursiveContainedReadCount(readID);
 				usedReadCtr+=containedReads;
 			}
 		}
@@ -616,14 +616,12 @@ void DataSet::writeUnUsedReads(string outputFilenamePrefix)
 
 UINT64 DataSet::getRecursiveContainedReadCount(UINT64 readID)
 {
-	Read read* = at(readID);
+	Read *read = at(readID);
 	UINT64 retCtr=read->getContainedReadCount();
 	for(UINT64 i=0;i<read->getContainedReadCount();i++)
 	{
 		UINT64 rID = read->getContainedReadID(i);
 		retCtr+=getRecursiveContainedReadCount(rID);
-
 	}
 	return retCtr;
-
 }
