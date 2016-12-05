@@ -364,5 +364,3 @@ UINT64 readCheckpointInfo(vector< vector<int> > &checkPointParams, UINT64 &ctgCo
 	}
 	return 1;
 }
-
-
