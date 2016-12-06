@@ -398,13 +398,13 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			string readString = hashTable->getStringForward(read1->getReadHashOffset()); // Get the forward of the read
 			string subString;
 			UINT64 read1Len = hashTable->getReadLength(read1->getReadHashOffset());
+			ostringstream strstream;
 			for(UINT64 j = 0; j < read1Len - hashTable->getHashStringLength(); j++) // fGr each substring of read1 of length getHashStringLength
 			{
 				subString = readString.substr(j,hashTable->getHashStringLength()); // Get the substring from read1
 				vector<UINT64> * listOfReads=hashTable->getListOfReads(subString); // Search the substring in the hash table
 				if(listOfReads) // If other reads contain the substring as prefix or suffix
 				{
-					ostringstream strstream;
 					for(UINT64 k = 0; k < listOfReads->size(); k++) // For each read in the list.
 					{
 						UINT64 data = listOfReads->at(k); // We used bit operation in the hash table to store read ID and orientation
@@ -474,11 +474,11 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 							}
 						}
 					}
-					*(filePointerList[threadID])<<strstream.str();
-					filePointerList[threadID]->flush();
 					delete listOfReads;
 				}
 			}//End of inner for
+			*(filePointerList[threadID])<<strstream.str();
+			filePointerList[threadID]->flush();
 		}//End of outer for
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread
 		{
