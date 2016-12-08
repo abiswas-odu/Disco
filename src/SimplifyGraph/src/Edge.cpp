@@ -440,7 +440,7 @@ UINT64 createFwdList(string readList,UINT64 **returnListReads, UINT64 &lSize,UIN
 
 			if(readIDMate > 0)		//Mate exists
 			{
-				if(!d->at(readIDMate)->isUsedRead()) //Check if mate has been used
+				if(!d->at(readIDMate)->isUsedRead()) //Check if mate has not been used
 					unUsedMate++;
 			}
 
