@@ -39,12 +39,13 @@ class Read
 		                         //Actual read sequence can be stored using the dna_bitset above that is commented out
 								 //Right now all read sequence is streamed
 
+		UINT32 noOfConReads;				//Number of contained reads
+
+
 		UINT16 noOfEdges;					//Number of edges this read belongs to
 		UINT16 noOfAllocEdgeMemAvail;		//Number of allocated edge locations available that have been deleted
 											//This is used to avoid allocation and deallocation when the edges are to be updated...
 
-
-		UINT16 noOfConReads;				//Number of contained reads
 
 		bool containedReadFlag;				// True if read is contained...
 
@@ -77,7 +78,7 @@ class Read
 
 		void setIsContained(bool isCon) { containedReadFlag=isCon; }
 
-		void setConRead(UINT64 conReadID, UINT32 conOvlStart, UINT64 orient);
+		void setConRead(vector<UINT64> conReadIDList, vector<UINT64> conOvlStartList, vector<UINT64> orientList);
 
 		void setEdge(Edge *edge, UINT32 readIndx, UINT32 orient);
 
