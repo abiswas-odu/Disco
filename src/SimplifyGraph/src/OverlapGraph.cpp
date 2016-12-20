@@ -2031,7 +2031,7 @@ void OverlapGraph::readParEdges(string edge_file)
 bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMate, Read *source, Read *destination)
 {
 	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
-	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr == lFSize && unUsedMate < 10)	//Composite edge
+	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize*0.5) && unUsedMate < (usedReadCtr*0.5))	//Composite edge
 	{
 		return true;
 	}
