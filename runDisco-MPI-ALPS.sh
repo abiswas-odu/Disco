@@ -9,14 +9,15 @@ fi;
 
 #Basic parameters defaults
 numThreads=`nproc`
-numProcs=${SLURM_NTASKS}
+numProcs=$PBS_NUM_NODES
 readFile1=""
 readFile2=""
 readFileS=""
 readFileP=""
-asmParaFileP="${exePath}/omega3.cfg"
-asmParaFileP2="${exePath}/omega3_2.cfg"
-asmParaFileP3="${exePath}/omega3_3.cfg"
+outPrefix="disco"
+asmParaFileP="${exePath}/disco.cfg"
+asmParaFileP2="${exePath}/disco_2.cfg"
+asmParaFileP3="${exePath}/disco_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
 useMPIRMA=""
@@ -28,8 +29,8 @@ do
 key="$1"
 case $key in
     -h|--help)              # help output
-    echo -e "Usage: For clusters using Simple Linux Utility for Resource Management (Slurm)\n"
-    echo -e "   runOmega3.sh [OPTION]...<PARAM>...\n\n"
+    echo -e "Usage: For clusters using Application Level Placement Scheduler (ALPS) \n"
+    echo -e "   runDisco.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
     echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
     echo -e "   -in1\t forward paired read filename (single fasta/fastq/fastq.gz file).\n"
@@ -210,7 +211,7 @@ if [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] && [ -z "$r
    exit 1
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then 
    if [ "$constructGraph" = "Y" ] ; then
-      srun -n ${numProcs} -c ${numThreads} $BUILDGEXE -pe ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
+      aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -221,7 +222,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       srun -n ${numProcs} -c ${numThreads} $BUILDGEXE -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -232,7 +233,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       srun -n ${numProcs} -c ${numThreads} $BUILDGEXE -pe ${readFile1},${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFile1},${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -243,7 +244,7 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       srun -n ${numProcs} -c ${numThreads} $BUILDGEXE -pe ${readFileP} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFileP} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -254,7 +255,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    fi
 elif [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       srun -n ${numProcs} -c ${numThreads} $BUILDGEXE -pe ${readFile1},${readFile2} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFile1},${readFile2} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -264,7 +265,7 @@ elif [ -z "$readFileP" ] ; then
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 else
-   echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired file or two separate paired files not both. Any number of comma seperated single end files can be provided. Exiting..."
+   echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired end files or two separate paired end files not both. Any number of comma seperated single end files can be provided. Exiting..."
    exit 1
 fi
 

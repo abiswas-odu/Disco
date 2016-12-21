@@ -9,7 +9,7 @@
 #include "OverlapGraphSimple.h"
 
 TLogLevel loglevel = logDEBUG4;                   /* verbosity level of logging */
-string outputFilenamePrefix = "omega3";
+string outputFilenamePrefix = "disco";
 
 int main(int argc, char **argv) {
 

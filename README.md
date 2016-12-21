@@ -14,38 +14,38 @@ DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multip
 3. zlib/1.2.8 is optional for reading gzipped fasta/fastq files.
  
 ### Installation Steps
-1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Omega3](https://github.com/abiswas-odu/Omega3). The code has been tested on Linux a, but not under Windows or MacOSX.
+1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Disco](https://github.com/abiswas-odu/Disco). The code has been tested on Linux a, but not under Windows or MacOSX.
 2. If you decide to download the source code, use the following commands to build:
   1. OpenMP version "make openmp". This is also the default make option.  
   2. MPI distributed computing version "make mpi-dist-comp" 
   3. MPI distributed memory version "make mpi-dist-mem"
   4. All the versions can be built with "make all"
 3. The assembler can be built with the make option "READGZ=1". 
-If compiled successfully, the required executables will be built anf the runOmega3 scripts can be used to run the assembler. 
+If compiled successfully, the required executables will be built anf the runDisco scripts can be used to run the assembler. 
 
 ### Quickly Running The Assembler
 
 There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster.  
 
-* __Single Machine Version:__ This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runOmega3.sh`. Make sure the RAM on the machine is more than the disk space size of the reads. The quick start command as shown below will be used in a batch job submission script or directly typed on the commandline terminal.   
+* __Single Machine Version:__ This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runDisco.sh`. Make sure the RAM on the machine is more than the disk space size of the reads. The quick start command as shown below will be used in a batch job submission script or directly typed on the commandline terminal.   
 
 ```
 #!/bin/bash
 
 # Seperated mate pair reads
-runOmega3.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_DIR} 
 
 # Interleaved mate pair reads
-runOmega3.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_DIR} 
 
 ```
-Use `./runOmega3.sh -h` for help information.
+Use `./runDisco.sh -h` for help information.
 
 * __MPI Version:__ This version of the assembler should be used if you are going to run the assembler with MPI support on a cluster. The run script to invoke the assembler depends on the cluster management and job scheduling system.
 
-	1. If you have ORTE i.e. __mpirun__ is avilable, invoke the assembler using the run script `runOmega3-MPI.sh`. 
-	2. If you have SLRUM i.e. __srun__ is available, invoke the assembler using the run script `runOmega3-MPI-SLRUM.sh`.
-	3. If you have ALPS i.e. __aprun__ is available, invoke the assembler using the run script `runOmega3-MPI-ALPS.sh`.
+	1. If you have ORTE i.e. __mpirun__ is avilable, invoke the assembler using the run script `runDisco-MPI.sh`. 
+	2. If you have SLRUM i.e. __srun__ is available, invoke the assembler using the run script `runDisco-MPI-SLRUM.sh`.
+	3. If you have ALPS i.e. __aprun__ is available, invoke the assembler using the run script `runDisco-MPI-ALPS.sh`.
  
 For the basic MPI version make sure the RAM on the nodes is more than the disk space size of the reads. If you have a large dataset, then use the Remote Memory Access (RMA) version. The RMA version of the assembler will equally distribute about 70% of the memory usage across all the MPI nodes. The quick start commands are:
 ```
@@ -53,19 +53,19 @@ For the basic MPI version make sure the RAM on the nodes is more than the disk s
 
 ### MPI Verion 
 ### Seperated paired end reads
-runOmega3-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
 
 ### MPI Remote Memory Access(RMA) Verion 
 ### Seperated paired end reads
-runOmega3-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} -rma 
+runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} -rma 
 
 ```
-Use `runOmega3-MPI.sh -h` for help information.
+Use `runDisco-MPI.sh -h` for help information.
 
 ### Features
 
 * Quick summary
-**omega3** is a massively improved multi-threaded, multi-process distributed memory version of [omega](http://bioinformatics.oxfordjournals.org/content/early/2014/07/06/bioinformatics.btu395.short), its unique capabilities include:
+**Disco** is a massively improved multi-threaded, multi-process distributed memory version of [Omega](http://bioinformatics.oxfordjournals.org/content/early/2014/07/06/bioinformatics.btu395.short), its unique capabilities include:
 
     1. Modularization of contained and duplicate reads removal, and initial graph construction after transitive edge reduction step: Big data set can be processed in chunks so that memory limitation problem is solved.
 
@@ -77,7 +77,7 @@ Use `runOmega3-MPI.sh -h` for help information.
 
 #### Preprocessing of the Illumina data
 
-Since Omega3 works best with reads without errors, preprocessing plays an important role in deciding the quality of the assembly results. The 3 basc pre-processing steps are trimming, filtering and eror correction.
+Since Disco works best with reads without errors, preprocessing plays an important role in deciding the quality of the assembly results. The 3 basc pre-processing steps are trimming, filtering and eror correction.
 
 ##### Trimming, filtering, (merging), and eror correction
 
@@ -122,21 +122,21 @@ tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=31
 
 #### Assembly on a Single Node
 
-The Disco assembler is invoked through the run script `./runOmega3.sh`. The basic quick start commands with default parameters are as follows. The default parameters are based on empherical tests on real metagenomic datasets.     
+The Disco assembler is invoked through the run script `./runDisco.sh`. The basic quick start commands with default parameters are as follows. The default parameters are based on empherical tests on real metagenomic datasets.     
 
 ```
 #!/bin/bash
 
 # Seperated paired end reads
-runOmega3.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
+runDisco.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
 
 # Interleaved paired end reads
-runOmega3.sh -d ${output_directory} -inP {read_P.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen}
+runDisco.sh -d ${output_directory} -inP {read_P.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen}
 
 # Single end reads
-runOmega3.sh -d ${output_directory} -inS {read.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
+runDisco.sh -d ${output_directory} -inS {read.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
 ```
-For all the options of Disco, use `./runOmega3.sh -h`
+For all the options of Disco, use `./runDisco.sh -h`
 
 In case the program crashes due to exceeding wall clock time, the assembler can be restarted with the same command. 
 
@@ -148,7 +148,7 @@ The assembler can be run on a distributed machine using the three distributed as
 
 Usage:
 
-   runOmega3.sh [OPTION]...<PARAM>...
+   runDisco.sh [OPTION]...<PARAM>...
 
 
 <PARAMS>
@@ -163,7 +163,7 @@ Usage:
 
    -d	 output directory path (DEFAULT: current directory).
 
-   -o	 output filename prefix (DEFAULT: omega3).
+   -o	 output filename prefix (DEFAULT: disco).
 
 <OPTIONS>
 
@@ -188,7 +188,7 @@ The assembly script has basic options to specify required parameters.
 
 #### Controlling memory usage
 
-The memory usage of Omega can be controlled using the `-m` option to the run script as shown above. The default memory usage is to take all the system resources. In case that has to be avoided or the program crashes ot is too slow due to memory page swapping, the user can set a ubber bound on the memory. The minumum memory to assemble a dataset is:
+The memory usage of Disco can be controlled using the `-m` option to the run script as shown above. The default memory usage is to take all the system resources. In case that has to be avoided or the program crashes ot is too slow due to memory page swapping, the user can set a ubber bound on the memory. The minumum memory to assemble a dataset is:
 
 ```
 Min Required Memory (GB) = (Disk Space of Reads) + (1GB * num_threads)
@@ -197,7 +197,7 @@ The program will run faster if more memory is made available.
 
 #### Restarting Disco for repeat assembly and handling assembly crashes
 
-Disco assembler can be restarted with changed assembly and scaffolding parameters using the `-osg` option. Setting this option while invoking `runOmega3.sh` will reuse the overlap graph constructed earlier and only perform the graph simplification step. This will significantly reduce executime time of assemblies on the same dataset with different parameters.    
+Disco assembler can be restarted with changed assembly and scaffolding parameters using the `-osg` option. Setting this option while invoking `runDisco.sh` will reuse the overlap graph constructed earlier and only perform the graph simplification step. This will significantly reduce executime time of assemblies on the same dataset with different parameters.    
 
 Disco assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Disco will attempt to continue the assembly. Do not set the `-osg` option in this case.   
 
@@ -223,7 +223,7 @@ MinOverlap4BuildGraph = 40
 #### Parameters for simplifying an overlap graph ####
 # You can run graph simplification using different settings below on the same assembly graph without re-doing graph construction.
 
-# Parameters for Omega output
+# Parameters for Disco output
 
 # Print contigs or not. Options are "false" (default) or "true". Printing takes a non-trivial amount of wall-clock time.
 PrintContigs = true
@@ -246,7 +246,7 @@ minSequenceLengthTobePrinted = 1000
 MinOverlap4SimplifyGraph = 40
 
 # Minimum overlap length difference (bp) to clip branches (default: 25 bp)
-# If a read has multiple edges, Omega clips the branches with overlap lengths less than the largest overlap of this read by this difference or more.
+# If a read has multiple edges, Disco clips the branches with overlap lengths less than the largest overlap of this read by this difference or more.
 # Increase this to reduce N50 and mis-assemblies
 minOverlapDifference4ClipBranches = 25 
 

@@ -29,13 +29,13 @@ vector<string> Config::readSingleFilenamesList;
 vector<string> Config::readPairedFilenamesList;
 vector<string> Config::readInterPairedFilenamesList;
 vector<string> Config::edgeFilenamesList;
-string Config::outFilenamePrefix = "new_omega_out";
+string Config::outFilenamePrefix = "disco";
 vector<string> Config::containedReadsFile;
 string Config::simplifyGraphPath ="";
 UINT64 Config::parallelThreadPoolSize(4);
-string Config::paramFileName="omega3.cfg";
-string Config::paramFileName2="omega3_2.cfg";
-string Config::paramFileName3="omega3_3.cfg";
+string Config::paramFileName="disco.cfg";
+string Config::paramFileName2="disco_2.cfg";
+string Config::paramFileName3="disco_3.cfg";
 
 // global variables with default value
 unsigned int minOvl=40;
@@ -74,7 +74,7 @@ void Config::printHelp()
 {
 	cout << endl
 		<< "  Usage:" << endl
-		<< "    omega2 [OPTION]...<PARAM>..." << endl
+		<< "    fullsimplify [OPTION]...<PARAM>..." << endl
 		<< endl
 		<< "  <PARAM>" << std::endl
 		<< "    -fs\t contained single read reduction read filename(s) (comma separated fasta/fastq)" << endl
@@ -273,7 +273,7 @@ bool Config::setConfig(int argc, char **argv)
 		{
 			Config::simplifyGraphPath = argumentsList[++i];
 		}
-		// -o: all output filename prefix (default: new_omega_out)
+		// -o: all output filename prefix (default: disco)
 		else if (argumentsList[i] == "-o") {
 			Config::outFilenamePrefix = argumentsList[++i];
 		}

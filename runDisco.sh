@@ -9,17 +9,16 @@ fi;
 
 #Basic parameters defaults
 numThreads=`nproc`
-numProcs=$PBS_NUM_NODES
 readFile1=""
 readFile2=""
 readFileS=""
 readFileP=""
-asmParaFileP="${exePath}/omega3.cfg"
-asmParaFileP2="${exePath}/omega3_2.cfg"
-asmParaFileP3="${exePath}/omega3_3.cfg"
+outPrefix="disco"
+asmParaFileP="${exePath}/disco.cfg"
+asmParaFileP2="${exePath}/disco_2.cfg"
+asmParaFileP3="${exePath}/disco_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
-useMPIRMA=""
 dataOutPath="."
 phymem=`grep MemTotal /proc/meminfo | awk '{print $2}'`
 maxMem=$((phymem/1048576))
@@ -28,37 +27,35 @@ do
 key="$1"
 case $key in
     -h|--help)              # help output
-    echo -e "Usage: For clusters using Application Level Placement Scheduler (ALPS) \n"
-    echo -e "   runOmega3.sh [OPTION]...<PARAM>...\n\n"
+    echo -e "Usage:\n"
+    echo -e "   runDisco.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
     echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
     echo -e "   -in1\t forward paired read filename (single fasta/fastq/fastq.gz file).\n"
     echo -e "   -in2\t reverse paired read filename (single fasta/fastq/fastq.gz file).\n"
     echo -e "   -inP\t interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
-    echo -e "   -d\t output directory path.\n"
-    echo -e "   -o\t output filename prefix.\n"
+    echo -e "   -d\t output directory path.(DEFAULT: current directory)\n"
+    echo -e "   -o\t output filename prefix.(DEFAULT: disco)\n"
     echo -e "<OPTIONS>\n"
     echo -e "   -h\t help.\n"
     echo -e "   -m\t maximum memory to be used (DEFAULT: $maxMem GB).\n"
-    echo -e "   -np\t number of MPI processes (DEFAULT: $numProcs).\n"
     echo -e "   -n\t number of threads (DEFAULT: $numThreads).\n"
     echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
-    echo -e "   -rma\t enable distributed memory with remote memory acess (DEFAULT: False).\n"
     echo -e "   -p\t assembly parameter file for 1st assembly iteration.\n"
     echo -e "   -p2\t assembly parameter file for 2nd assembly iteration.\n"
     echo -e "   -p3\t assembly parameter file for 3rd assembly iteration.\n"
     exit 1
     ;;
-    -p|--parameterFile)     # overlap length to consider
+    -p|--parameterFile)     # parameter file for first interation of assembly
     asmParaFileP="$2"
     shift # past argument
     ;;
-    -p2|--parameterFile2)     # overlap length to consider
+    -p2|--parameterFile2)     # parameter file for second interation of assembly
     asmParaFileP2="$2"
     shift # past argument
     ;;
-    -p3|--parameterFile3)     # overlap length to consider
+    -p3|--parameterFile3)     # parameter file for subsequebt interation of assembly
     asmParaFileP3="$2"
     shift # past argument
     ;;
@@ -66,19 +63,19 @@ case $key in
     dataOutPath="$2"
     shift # past argument
     ;;
-    -in1)					# Forward paired end read file
+    -in1)					# Forward paired end read file -- single file
     readFile1="$2"
     shift # past argument
     ;;
-    -in2)					# Reverse paired end read file
+    -in2)					# Reverse paired end read file -- single file
     readFile2="$2"
     shift # past argument
     ;;
-    -inS)					# Single read file
+    -inS)					# Single read file  -- multiple files
     readFileS="$2"
     shift # past argument
     ;;
-    -inP)					# Interleaved paired end read file
+    -inP)					# Interleaved paired end read file -- multiple files
     readFileP="$2"
     shift # past argument
     ;;
@@ -90,19 +87,12 @@ case $key in
     numThreads="$2"
     shift # past argument
     ;;
-    -np|--numprocs)		# Threads to use
-    numProcs="$2"
-    shift # past argument
-    ;;
     -m|--maxmem)			# Maximum memory limit
     maxMem="$2"
     shift # past argument
     ;;
     -obg|--OnlyBuildGraph)                        # Maximum memory limit
     simplifyGraph=""
-    ;;
-    -rma|--MPIRMA)                        # Maximum memory limit
-    useMPIRMA="Y"
     ;;
     -osg|--OnlySimplifyGraph)                        # Maximum memory limit
     constructGraph=""
@@ -121,12 +111,7 @@ if [ -z "$dataOutPath" ] && [ -z "$outPrefix" ] && [ -z "$readFile1" ] && [ -z "
 fi
 
 #Check required exe files are in the same directory as the script
-if [ "$useMPIRMA" = "Y" ] ; then
-   BUILDGEXE="${exePath}/buildG-MPIRMA"
-else
-   BUILDGEXE="${exePath}/buildG-MPI"
-fi
-
+BUILDGEXE="${exePath}/buildG"
 if [ -f $BUILDGEXE ] ; then
    echo "Graph construction module $BUILDGEXE exists."
 else
@@ -163,31 +148,22 @@ outSimplifyPrefix="${dataOutPath}/assembly/${outPrefix}"
 logFile="${dataOutPath}/${outPrefix}.log"
 #Create edge file list
 i=0
-j=0
-while [ $j -lt $numProcs ]
+while [ $i -lt $numThreads ]
 do
-   while [ $i -lt $numThreads ]
-   do
-      edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${j}_${i}_parGraph.txt,"
-      i=$(( $i+1 ))
-   done
-   j=$(( $j+1 ))
+   edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${i}_parGraph.txt,"
+   i=$(( $i+1 ))
 done
 edgeFiles=${edgeFiles%?}
 
 #Create contained read file list
 i=0
-j=0
-while [ $j -lt $numProcs ]
+while [ $i -lt $numThreads ]
 do
-   while [ $i -lt $numThreads ]
-   do
-      containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${j}_${i}_containedReads.txt,"
-      i=$(( $i+1 ))
-   done
-   j=$(( $j+1 ))
+   containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${i}_containedReads.txt,"
+   i=$(( $i+1 ))
 done
 containedReads=${containedReads%?}
+
 
 echo Starting Time is $(date)
 
@@ -210,7 +186,7 @@ if [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] && [ -z "$r
    exit 1
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then 
    if [ "$constructGraph" = "Y" ] ; then
-      aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
+      ${exePath}/buildG -pe ${readFileP} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -221,7 +197,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+      ${exePath}/buildG -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -232,7 +208,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFile1},${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+      ${exePath}/buildG -pe ${readFile1},${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -243,7 +219,7 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFileP} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+      ${exePath}/buildG -pe ${readFileP} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${readFileP} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -254,7 +230,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then
    fi
 elif [ -z "$readFileP" ] ; then
    if [ "$constructGraph" = "Y" ] ; then
-       aprun -n${numProcs} -d${numThreads} -N1 $BUILDGEXE -pe ${readFile1},${readFile2} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+      
+      ${exePath}/buildG -pe ${readFile1},${readFile2} -se ${readFileS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fp ${readFile1},${readFile2} -fs ${readFileS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
@@ -264,7 +241,7 @@ elif [ -z "$readFileP" ] ; then
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 else
-   echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired end files or two separate paired end files not both. Any number of comma seperated single end files can be provided. Exiting..."
+   echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired file or two separate paired files not both. Any number of comma seperated single end files can be provided. Exiting..."
    exit 1
 fi
 
