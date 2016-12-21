@@ -52,7 +52,7 @@ mpi-dist-comp:
 		cp disco_3.cfg Disco
 		cp runDisco-MPI.sh Disco
 		cp runDisco-MPI-ALPS.sh Disco
-		cp runDisco-MPI-SLRUM.sh Disco
+		cp runDisco-MPI-SLURM.sh Disco
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
@@ -73,7 +73,7 @@ mpi-dist-mem:
 		cp disco_3.cfg Disco
 		cp runDisco-MPI.sh Disco
 		cp runDisco-MPI-ALPS.sh Disco
-		cp runDisco-MPI-SLRUM.sh Disco
+		cp runDisco-MPI-SLURM.sh Disco
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
