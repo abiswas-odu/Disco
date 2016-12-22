@@ -76,7 +76,7 @@ void DataSet::loadReadLenghtsFromReadFile(const std::string &read_file)
 						fileType = FASTA;
 					}
 					else if(text[0] == '@'){
-						FILE_LOG(logINFO) << "Input reads file format: FASTA\n";
+						FILE_LOG(logINFO) << "Input reads file format: FASTQ\n";
 						fileType = FASTQ;
 					}
 					else{

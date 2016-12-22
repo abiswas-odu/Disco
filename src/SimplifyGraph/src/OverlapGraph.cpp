@@ -2130,11 +2130,10 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 		enum FileType {FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
 
-		while(!filePointer.eof())
+		while(getline(filePointer,text))
 		{
 			// Check FASTA and FASTQ
 			if(fileType == UNDEFINED) {
-				getline (filePointer,text);
 				if (text.length() > 0){
 					if(text[0] == '>')
 						fileType = FASTA;
@@ -2149,10 +2148,8 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 			}
 
 			line.clear();
-
 			// FASTA file read
 			if(fileType == FASTA) {
-				getline (filePointer,line0);	// get ID line
 				getline (filePointer,line1,'>');	// get string line
 
 				line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
@@ -2160,13 +2157,11 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 			}
 			// FASTQ file read
 			else if(fileType == FASTQ) {
-				getline(filePointer, line0);	// ID
 				getline(filePointer, line1);	// String
 				// Ignore the next two lines
 				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				filePointer.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			}
-
 			// Get ReadID after removing the > or @ identifier and convert string to UINT64
 			populate_read(readID, line1);
 			++readID;
