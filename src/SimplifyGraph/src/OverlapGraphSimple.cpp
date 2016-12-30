@@ -585,8 +585,6 @@ void OverlapGraphSimple::loadParEdgesFromEdgeFile(const std::string &edgeFilenam
 
 		// If the edge has overlap that satisfies the requirements
 		if (overlapLength >= m_minOvl){
-			if(propertiesList.size()<7)
-				cout<<line_text<<'\n';
 			UINT32 length1;	// Property Col5: read1 length
 			std::istringstream p5(propertiesList.at(4)); p5 >> length1;
 
