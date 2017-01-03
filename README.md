@@ -33,10 +33,10 @@ There are two basic versions of the assembler one for running on a single machin
 #!/bin/bash
 
 # Seperated mate pair reads
-runDisco.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_PREFIX} 
 
 # Interleaved mate pair reads
-runDisco.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_PREFIX} 
 
 ```
 Use `./runDisco.sh -h` for help information.
@@ -53,11 +53,11 @@ For the basic MPI version make sure the RAM on the nodes is more than the disk s
 
 ### MPI Verion 
 ### Seperated paired end reads
-runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} 
+runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_PREFIX} 
 
 ### MPI Remote Memory Access(RMA) Verion 
 ### Seperated paired end reads
-runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_DIR} -rma 
+runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_PREFIX} -rma 
 
 ```
 Use `runDisco-MPI.sh -h` for help information.

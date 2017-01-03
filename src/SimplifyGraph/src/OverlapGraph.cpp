@@ -2125,14 +2125,14 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 			FILE_LOG(logERROR) << "Unable to open file: " << read_file << "\n";
 			return;
 		}
-		vector<std::string> line;
-		std::string line0,line1, text;
+		std::string text;
 		enum FileType {FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
 
 		while(getline(filePointer,text))
 		{
 			// Check FASTA and FASTQ
+			string line0="",line1="";
 			if(fileType == UNDEFINED) {
 				if (text.length() > 0){
 					if(text[0] == '>')
@@ -2143,15 +2143,12 @@ void OverlapGraph::loadStringFromReadsFile(const std::string &read_file, UINT64 
 						FILE_LOG(logERROR) << "Unknown input file format."<<"\n";
 						break;
 					}
-					filePointer.seekg(0, ios::beg);
 				}
 			}
-
-			line.clear();
+			line0=text;	// get ID line
 			// FASTA file read
 			if(fileType == FASTA) {
 				getline (filePointer,line1,'>');	// get string line
-
 				line1.erase(std::remove(line1.begin(), line1.end(), '\n'),
 						line1.end());
 			}
