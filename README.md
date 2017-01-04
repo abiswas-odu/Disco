@@ -77,7 +77,7 @@ Use `runDisco-MPI.sh -h` for help information.
 
 #### Preprocessing of the Illumina data
 
-Since Disco works best with reads without errors, preprocessing plays an important role in deciding the quality of the assembly results. The 3 basc pre-processing steps are trimming, filtering and eror correction.
+Since Disco works best with reads without errors, preprocessing plays an important role in deciding the quality of the assembly results. The 3 basic pre-processing steps are trimming, filtering and eror correction.
 
 ##### Trimming, filtering, (merging), and eror correction
 
