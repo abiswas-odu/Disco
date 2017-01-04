@@ -37,8 +37,10 @@ int main(int argc, char **argv)
 	MPI_Get_processor_name(name, &len);
 	start = MPI_Wtime();
 
-	cout<<"Software: Omega Assembler"<<endl;
-	cout<<"Version : 3.0.1"<<endl;
+	cout<<"Software: Disco Assembler (Distributed Computation) [November 2016]"<<endl;
+	cout<<"Version : 3.0.3"<<endl;
+	cout<<"Developed by: Biswas, Abhishek; Pan, Chongle et.al."<<endl;
+	cout<<"Affiliation: Oak Ridge National Lab / University of Tennessee"<<endl;
 
 
 	printf("Rank %d running on %s with %d threads.\n", myid, name, omp_get_max_threads());

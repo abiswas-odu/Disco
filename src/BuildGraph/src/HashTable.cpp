@@ -155,8 +155,8 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT
 		gzclose(fp);
 #else
 		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format."
-				"The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress"
-				"the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+				"The Disco code was not built with ZLIB using READGZ=1. To assemble either uncompress"
+				"the file or build Disco with ZLIB library using make \"make READGZ=1\".");
 #endif
 	}
 	else
@@ -265,8 +265,8 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 		gzclose(fp);
 #else
 		MYEXIT("Unknown input file format. Looks like the file is in gzip compressed format.\
-				The Omega3 code was not built with ZLIB using READGZ=1. To assemble either uncompress\
-				the file or build Omega3 with ZLIB library using make \"make READGZ=1\".");
+				The Disco code was not built with ZLIB using READGZ=1. To assemble either uncompress\
+				the file or build Disco with ZLIB library using make \"make READGZ=1\".");
 #endif
 	}
 	else

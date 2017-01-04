@@ -16,7 +16,7 @@
 int OverlapGraph::s_nReads_in_goodEdges = 0;
 int OverlapGraph::s_nGoodEdges = 0;
 TLogLevel loglevel = logINFO;                   /* verbosity level of logging */
-string outputFilenamePrefix = "omega3";
+string outputFilenamePrefix = "disco";
 
 bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 		vector<std::string> &read_PairInterFiles, vector<vector<int>> &checkPointParams, const vector<std::string> &edgeFilenameList,
