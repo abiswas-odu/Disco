@@ -163,10 +163,10 @@ outSimplifyPrefix="${dataOutPath}/assembly/${outPrefix}"
 
 logFile="${dataOutPath}/${outPrefix}.log"
 #Create edge file list
-i=0
 j=0
 while [ $j -lt $numProcs ]
 do
+   i=1
    while [ $i -lt $numThreads ]
    do
       edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${j}_${i}_parGraph.txt,"
@@ -177,10 +177,10 @@ done
 edgeFiles=${edgeFiles%?}
 
 #Create contained read file list
-i=0
 j=0
 while [ $j -lt $numProcs ]
 do
+   i=1
    while [ $i -lt $numThreads ]
    do
       containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${j}_${i}_containedReads.txt,"
