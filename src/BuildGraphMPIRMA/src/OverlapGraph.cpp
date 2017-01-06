@@ -104,14 +104,14 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 				procCtr++;
 				vector<string> toks = splitTok(text,'\t');
 				//Get source destination IDs
-				UINT64 sourceReadFindex = atoi(toks[0].c_str());
-				UINT64 destReadFindex = atoi(toks[1].c_str());
+				UINT64 sourceReadFindex = std::stoull(toks[0],nullptr,0);
+				UINT64 destReadFindex = std::stoull(toks[1],nullptr,0);
 				auto sourceIt = fIndxReadIDMap->find(sourceReadFindex);
 				auto destIt = fIndxReadIDMap->find(destReadFindex);
 
 				//Check if both marked or not
 				vector<string> toks2 = splitTok(toks[2],',');
-				UINT64 markFlag = atoi(toks2[toks2.size()-1].c_str());
+				UINT64 markFlag = std::stoull(toks2[toks2.size()-1],nullptr,0);
 
 				//Check if destination is also marked by this thread.
 				// 0: Only source is marked
@@ -415,8 +415,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 			{
 				procCtr++;
 				vector<string> toks = splitTok(text,'\t');
-				UINT64 containedReadFindex = atoi(toks[0].c_str());
-				UINT64 containingReadFindex = atoi(toks[1].c_str());
+				UINT64 containedReadFindex = std::stoull(toks[0],nullptr,0);
+				UINT64 containingReadFindex = std::stoull(toks[1],nullptr,0);
 				auto it = fIndxReadIDMap->find(containedReadFindex);
 				Read *r = dataSet->getReadFromID(it->second); // Get the read
 				r->superReadID=containingReadFindex;
