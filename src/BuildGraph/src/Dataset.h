@@ -12,6 +12,7 @@
 #include "Read.h"
 
 #define READ_TASK_BLOCK 10000
+#define MIN_READ_SIZE 30
 
 /**********************************************************************************************************************
 	Class to store the dataset

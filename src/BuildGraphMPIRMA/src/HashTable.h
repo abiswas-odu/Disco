@@ -34,7 +34,6 @@ class HashTable{
 		MPI_Win win;								//Pointer to MPI RMA window based on partitioning hashData
 		//vector<UINT64> *memoryHashPartitions;		//Gives the first hash index offset stored in the rank addressed by index on this vector
 		vector<UINT64> *memoryDataPartitions;		//Gives the first global data offset stored in the rank addressed by index on this vector
-		vector<UINT64> *memoryReadCount;			//Gives the number of reads stored in the rank addressed by index on this vector
 		map<UINT64, std::shared_ptr<UINT64> > *cachedHashTable;		//Local cache for the hash data table mapped by hash index
 		queue<UINT64> *hashQ;						//Queue to maintain the local hash data cache and pop the oldest entry when full
 													//stores hash index
@@ -84,8 +83,6 @@ class HashTable{
 		bool isGlobalOffsetInRange(UINT64 globalOffset, int myid) const;
 		int getOffsetRank(UINT64 globalOffset) const;
 		string toStringMPI(UINT64 *hashDataBlock,UINT64 stringLen,  UINT64 startOffset) const;
-		UINT64 getMemoryReadCount(int myid);
-		UINT64 getMaxMemoryReadCount();
 		UINT64 getMemoryMaxLocalOffset(int rank);
 		void endEpoch();
 		UINT64 getLocalReadID(UINT64 localOffset, int myid) const;

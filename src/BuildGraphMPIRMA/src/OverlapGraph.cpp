@@ -393,8 +393,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *fIndxReadIDMap, int numprocs)
 {
 	CLOCKSTART;
-
-
 	ofstream filePointer;
 	UINT64 nonContainedReads = 0;
 	string testContainedReadFile = fnamePrefix+"_"+SSTR(myProcID)+"_"+SSTR(0)+"_containedReads.txt";
@@ -474,6 +472,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				/*End global communication epoch*/
 				string subString;
 				read1->containmentChecked=true;
+				ostringstream strstream;
 				for(UINT64 j = 0; j < read1String.length() - hashTable->getHashStringLength(); j++) // fGr each substring of read1 of length getHashStringLength
 				{
 					subString = read1String.substr(j,hashTable->getHashStringLength()); // Get the substring from read1
@@ -511,7 +510,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 									if(read2->superReadID == 0) // This is the first super read found. we store the ID of the super read.
 											read2->superReadID = read1ID;
 									//Write contained read information regardless as it is a super read has been identified
-									*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+									strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 											<<read2Len<<","
 											<<"0"<<","<<"0"<<","								//No substitutions or edits
 											<<read2Len<<","					//Cointained Read (len,start,stop)
@@ -520,7 +519,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											<<read1Len<<","					//Super Read (len,start,stop)
 											<<read1Len-overlapLen<<","
 											<<read1Len-overlapLen+read2Len
-											<<endl;
+											<<'\n';
 								}
 								else if(read1String.length() == read2Len && read1->getReadNumber() < read2->getReadNumber())
 								{
@@ -540,7 +539,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 										read2->superReadID = read1ID;
 
 									//Write duplicate read information regardless as it is a super read has been identified
-									*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+									strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 											<<read2Len<<","
 											<<"0"<<","<<"0"<<","								//No substitutions or edits
 											<<read2Len<<","					//Duplicate Read (len,start,stop)
@@ -549,13 +548,15 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											<<read1Len<<","					//Super Read (len,start,stop)
 											<<read1Len-overlapLen<<","
 											<<read1Len-overlapLen+read2Len
-											<<endl;
+											<<'\n';
 								}
 							}
 						}
 					}
 				}//End of inner for
 				hashTable->deleteLocalHitList(localReadHits);
+				*(filePointerList[threadID])<<strstream.str();
+				filePointerList[threadID]->flush();
 			}//end of while
 		}
 		for(UINT64 i = 0; i < parallelThreadPoolSize; i++) // For each thread close file pointer
@@ -638,8 +639,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 		else
 			myMarked[i-1]=1;			//Once marked this read will not be marked by the graph construction...
 	}
-	cout<< endl << setw(10) << nonContainedReads << " Non-contained reads. (Keep as is)" << endl;
-	cout<< setw(10) << dataSet->getNumberOfUniqueReads()-nonContainedReads << " contained reads. (Need to change their mate-pair information)" << endl;
+	cout<< '\n' << setw(10) << nonContainedReads << " Non-contained reads. (Keep as is)\n";
+	cout<< setw(10) << dataSet->getNumberOfUniqueReads()-nonContainedReads << " contained reads. (Need to change their mate-pair information)\n";
 	cout<<"Process:"<<myProcID<<" RMA OPS:"<<hashTable->getRMACount()<<endl;
 	CLOCKSTOP;
 }
@@ -942,11 +943,7 @@ UINT8 OverlapGraph::twinEdgeOrientation(UINT8 orientation)
 bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * exploredReads,map<UINT64, vector<Edge*> * > *parGraph)
 {
 	//CLOCKSTART;
-	ofstream filePointer;
-	filePointer.open(fileName.c_str(), std::ios_base::app);
-	if(!filePointer)
-		MYEXIT("Unable to open file: "+fileName);
-
+	ostringstream strstream;
 	for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();)
 	{
 		UINT64 readID = it->first;
@@ -1017,11 +1014,11 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 					//write to file
 					if(list.size()>0)
 					{
-						filePointer<<list.at(0)<<"\t";
-						filePointer<<list.at(1)<<"\t";
+						strstream<<list.at(0)<<"\t";
+						strstream<<list.at(1)<<"\t";
 						for(UINT64 i = 2; i < list.size()-1; i++)	// store in a file for future use.
-							filePointer<<list.at(i)<<",";
-						filePointer<<"NA,"<<list.at(list.size()-1)<<endl;
+							strstream<<list.at(i)<<",";
+						strstream<<"NA,"<<list.at(list.size()-1)<<'\n';
 					}
 					//remove twin edges
 					UINT64 twinID = twinEdge->getSourceRead()->getReadNumber();
@@ -1052,7 +1049,11 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 		else
 			++it;
 	}
-	filePointer.close();
+	ofstream filePointer;
+	filePointer.open(fileName.c_str(), std::ios_base::app);
+	if(!filePointer)
+		MYEXIT("Unable to open file: "+fileName);
+	filePointer<<strstream.str();
 	//CLOCKSTOP;
 	return true;
 }

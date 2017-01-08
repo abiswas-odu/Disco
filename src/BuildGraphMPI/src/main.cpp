@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 				maxThreads, writeGraphSize,maxMemSizeGB,parameterFile);
 	UINT64 minimumOverlapLength = readOverlapParameter(parameterFile);
 	cout<<"Max usable memory: "<<maxMemSizeGB<< " GB"<<endl;
-	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength);
+	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength, maxThreads);
 	HashTable *hashTable=new HashTable();
 	hashTable->insertDataset(dataSet, minimumOverlapLength,maxThreads);
 	OverlapGraph *overlapGraph=nullptr;

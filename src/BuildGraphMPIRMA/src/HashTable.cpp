@@ -43,7 +43,7 @@ HashTable::HashTable(UINT64 parallelProcessPoolSize)
 	hashStringLength = 0;
 	numberOfHashCollision = 0;
 	memoryDataPartitions = NULL;
-	memoryReadCount=NULL;
+	//memoryReadCount=NULL;
 	dataSet=NULL;
 	hashTable = NULL;
 	hashData = NULL;
@@ -97,7 +97,6 @@ void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 numPro
 	// Populate partitioning vectors based on hash record and data boundaries.
 	size_t rankIndx=0;
 	memoryDataPartitions = new vector<UINT64>(numProcs+1,0);
-	memoryReadCount = new vector<UINT64>(numProcs,0);
 	memoryDataPartitions->at(rankIndx)=0;
 	rankIndx++;
 	for(size_t i=1; i<hashTableSize; i++)
@@ -115,16 +114,12 @@ void HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 numPro
 	{
 		memoryDataPartitions->at(rankIndx)=hashDataTableSize;
 	}
+	cout<<"Hash table partition information:"<<endl;
+	for(size_t i=0;i<memoryDataPartitions->size();i++)
+		cout<<"Data Part Offset:"<<memoryDataPartitions->at(i)<<endl;
 
 	setHashTableDataSize(myid);
 	populateReadData(myid);												//Populate the hash data table with reads
-
-	cout<<"Hash table partition information:"<<endl;
-	for(size_t i=0;i<memoryReadCount->size();i++)
-	{
-		cout<<"Data Part Offset:"<<memoryDataPartitions->at(i)<<" Read Count:"<<memoryReadCount->at(i)<<endl;
-	}
-
 	CLOCKSTOP;
 }
 
@@ -428,9 +423,9 @@ void HashTable::setHashTableDataSize(int myid)
 	int numElements=memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid);
 	int tsize = 0;
 	MPI_Type_size(MPI_UINT64_T, &tsize);
-	cout<<"MPI UINT64:"<<tsize<<endl;
 	hashData = NULL;
 	MPI_Aint winSize = numElements*tsize;
+	cout<<"MPI UINT64:"<<tsize<<", Window Size:"<<winSize<<endl;
 	MPI_Alloc_mem(winSize, MPI_INFO_NULL, (void **)&hashData);
 	MPI_Win_create(hashData, winSize, tsize, MPI_INFO_NULL, MPI_COMM_WORLD, &win);
  	//MPI_Win_allocate(winSize, tsize, MPI_INFO_NULL, MPI_COMM_WORLD, hashData, &win);
@@ -504,7 +499,6 @@ bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashData
 
 	UINT64 index = getHashIndex(prefixForward);						// Get the index using the hash function.
 	UINT64 baseOffset = hashTable[index];
-	memoryReadCount->at(getOffsetRank(baseOffset))++;
 	// Get the start offset of the hash value in the hashData table
 	if(isGlobalOffsetInRange(baseOffset, myid))
 	{
@@ -545,7 +539,6 @@ bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashData
 	/*store prefix reverse data*/
 	index = getHashIndex(suffixForward);						// Get the index using the hash function.
 	baseOffset = hashTable[index];							// Get the start offset of the hash value in the hashData table
-	memoryReadCount->at(getOffsetRank(baseOffset))++;
 	if(isGlobalOffsetInRange(baseOffset, myid))
 	{
 		UINT64 localBaseOffset = getLocalOffset(baseOffset,myid);
@@ -834,22 +827,6 @@ map<UINT64,string> HashTable::getLocalHitList_nocache(vector<UINT64*> *localRead
 	return listOfReads;
 }
 /**********************************************************************************************************************
-	Get the read counts for a given process...
-**********************************************************************************************************************/
-UINT64 HashTable::getMemoryReadCount(int myid)
-{
-	return memoryReadCount->at(myid);
-}
-
-/**********************************************************************************************************************
-	Get the maximum read counts...
-**********************************************************************************************************************/
-UINT64 HashTable::getMaxMemoryReadCount()
-{
-	return *max_element(memoryReadCount->begin(),memoryReadCount->end());
-
-}
-/**********************************************************************************************************************
 	Get the max offset for this rank
 **********************************************************************************************************************/
 UINT64 HashTable::getMemoryMaxLocalOffset(int rank)
@@ -871,7 +848,7 @@ HashTable::~HashTable(void)
 	// Free the memory used by the hash table.
 	delete[] hashTable;
 	delete memoryDataPartitions;
-	delete memoryReadCount;
+	//delete memoryReadCount;
 	MPI_Win_free(&win);
 	MPI_Free_mem(hashData);
 
