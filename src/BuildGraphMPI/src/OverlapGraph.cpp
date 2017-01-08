@@ -103,17 +103,8 @@ OverlapGraph::~OverlapGraph()
 bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numprocs)
 {
 	CLOCKSTART;
-	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
-	map<UINT64, UINT64> *fIndxReadIDMap = new map<UINT64, UINT64>;
-	for(UINT64 i = 1; i <= dataSet->getNumberOfUniqueReads(); i++)
-	{
-		UINT64 fIndx = dataSet->getReadFromID(i)->getFileIndex();
-		auto it = fIndxReadIDMap->end();
-		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
-	}
 	//Contained reads are considered already marked to remove them form further consideration...
-	markContainedReads(fnamePrefix, fIndxReadIDMap,numprocs);
-
+	markContainedReads(fnamePrefix, dataSet->getFRMap(),numprocs);
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 	int *allMarked = new int[numNodes];
 	allMarked[0]=0;
@@ -148,8 +139,10 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				//Get source destination IDs
 				UINT64 sourceReadFindex = std::stoull(toks[0],nullptr,0);
 				UINT64 destReadFindex = std::stoull(toks[1],nullptr,0);
-				auto sourceIt = fIndxReadIDMap->find(sourceReadFindex);
-				auto destIt = fIndxReadIDMap->find(destReadFindex);
+				auto sourceIt = dataSet->getFRMap()->find(sourceReadFindex);
+				auto destIt = dataSet->getFRMap()->find(destReadFindex);
+				if(sourceIt == dataSet->getFRMap()->end() || destIt == dataSet->getFRMap()->end() ) // If the reads do not exist go to the next record
+					continue;
 
 				//Check if both marked or not
 				vector<string> toks2 = splitTok(toks[2],',');
@@ -204,7 +197,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
 	//Restart operations complete. Delete file index to read ID map
-	delete fIndxReadIDMap;
+	dataSet->freeFindexReadIDMAP();
 	//Starting graph construction
 
 	#pragma omp parallel num_threads(parallelThreadPoolSize)

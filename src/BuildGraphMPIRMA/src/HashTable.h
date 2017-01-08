@@ -50,7 +50,7 @@ class HashTable{
 		mutable UINT64 numberOfHashCollision;		// Counter to count the number of hash collisions. For debugging only.
 													// It's mutable such that it can be modified in the const member function, getListOfReads
 		mutable UINT64 rmaCtr;
-		bool insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths, int myid);	// Insert a string in the hash table.
+		bool insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths, int myid);	// Insert a string in the hash table.
 		bool hashReadLengths(string forwardRead); 					// Ted: Hash prefix and suffix of the read and its reverse complement in the hash table. Turn over to the constant
 		void setHashTableSize(UINT64 size); 		// Set the size of the hash table.
 		void setHashTableDataSize(int myid);		// Set the size of the hash data table.
@@ -73,10 +73,10 @@ class HashTable{
 		string getStringForward(Read *r, int myid); 			// Get the forward string of the read at offset.
 		string getStringReverse(Read *r, int myid);  			// Get the reverse string of the read at offset.
 
-		void readReadLengthsFromFile(string fileName, UINT64 minOverlap);
+		void readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex);
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData(int myid);												//Populate the read sequence in the hash data
-		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID, int myid);
+		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex, int myid);
 
 		/*MPI Related Routines*/
 		UINT64 getLocalOffset(UINT64 globalOffset, int myid) const;

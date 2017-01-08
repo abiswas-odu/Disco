@@ -28,7 +28,6 @@ Dataset::Dataset(void)
 
 }
 
-
 /**********************************************************************************************************************
 	Another constructor
 **********************************************************************************************************************/
@@ -125,7 +124,25 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 		reads->at(i)->setReadNumber(i + 1);
 	numberOfUniqueReads=reads->size();
 	reads->shrink_to_fit();
+
+	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
+	fIndxReadIDMap = new map<UINT64, UINT64>;
+	for(UINT64 i = 1; i <= getNumberOfUniqueReads(); i++)
+	{
+		UINT64 fIndx = getReadFromID(i)->getFileIndex();
+		auto it = fIndxReadIDMap->end();
+		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
+	}
 }
+
+/*
+ * Deallocate the memory storing the map between file index and read id after its not needed
+ */
+void Dataset::freeFindexReadIDMAP()
+{
+	delete fIndxReadIDMap;
+}
+
 /**********************************************************************************************************************
 	This function reads the dataset from FASTA/FASTQ files
 **********************************************************************************************************************/
@@ -441,6 +458,25 @@ Read * Dataset::getReadFromID(UINT64 ID)
 		MYEXIT(s);
 	}
 	return reads->at(ID - 1);
+}
+
+/**********************************************************************************************************************
+	This function returns a read from its FileIndex.
+**********************************************************************************************************************/
+Read * Dataset::getReadFromFileIndex(UINT64 fID)
+{
+	UINT64 readID=0;
+	size_t i = fID<reads->size()?fID:reads->size();
+	for(;i>0;i--)
+	{
+		Read *r = getReadFromID(i);
+		if(r->getFileIndex()==fID)
+		{
+			readID = r->getReadNumber();
+			break;
+		}
+	}
+	return getReadFromID(readID);
 }
 
 /**********************************************************************************************************************

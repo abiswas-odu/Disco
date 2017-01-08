@@ -24,6 +24,7 @@ class Dataset
 		UINT64 numberOfUniqueReads; 						// number of unique reads in the dataset.
 		UINT64 minimumOverlapLength;						// Length of the shortest read in the dataset.
 		vector<Read *> *reads; 								// List of reads in the dataset.
+		map<UINT64, UINT64> *fIndxReadIDMap;				//Create a file index to readID lookup table.
 		string reverseComplement(const string & read); 		// Get the reverse complement of a string.
 															// The dataset contains only good quality reads.
 		vector<string> filterStrings;						// Reads filtered out of these repetitive strings appear in prefix of suffix of read
@@ -46,7 +47,9 @@ class Dataset
 		UINT64 getNumberOfReads(void); 						// Get the number of total reads in the database.
 		UINT64 getNumberOfUniqueReads(void); 				// Get the number of unique reads in the database.
 		Read * getReadFromID(UINT64 ID); 					// Find a read in the database given the ID in constant time.
-		UINT64 getReadLength(UINT64 ID);
+		Read * getReadFromFileIndex(UINT64 fID);
+		void freeFindexReadIDMAP();
+		map<UINT64, UINT64> *getFRMap(){ return fIndxReadIDMap; }
 };
 
 

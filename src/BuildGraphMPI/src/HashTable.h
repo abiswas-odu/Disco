@@ -2,7 +2,7 @@
  * HashTable.h
  *
  *  Created on: Apr 22, 2013
- *      Author: b72
+ *      Author: Abhishek Biswas
  */
 
 #ifndef HASHTABLE_H_
@@ -37,7 +37,7 @@ class HashTable{
 		UINT16 hashStringLength;					// Ted: Length of prefix and suffix of the reads to hash. This is equal to the minumum overlap length.
 		mutable UINT64 numberOfHashCollision;		// Counter to count the number of hash collisions. For debugging only.
 													// It's mutable such that it can be modified in the const member function, getListOfReads
-		bool insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
+		bool insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
 		bool hashReadLengths(string forwardRead); 					// Ted: Hash prefix and suffix of the read and its reverse complement in the hash table. Turn over to the constant
 		void setHashTableSize(UINT64 size); 		// Set the size of the hash table.
 		void setHashTableDataSize(UINT64 size);		// Set the size of the hash data table.
@@ -59,10 +59,10 @@ class HashTable{
 		string getStringReverse(UINT64 offset) const;  								// Get the reverse string of the read at offset.
 		UINT64 getReadLength(UINT64 offset) const; 								// Get the length of the string in the read at offset.
 
-		void readReadLengthsFromFile(string fileName, UINT64 minOverlap);
+		void readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex);
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData();												//Populate the read sequence in the hash data
-		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID);
+		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex);
 
 };
 
