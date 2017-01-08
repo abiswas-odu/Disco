@@ -103,7 +103,6 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 	numberOfNodes = 0;
 	numberOfEdges = 0;
 
-
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 	bool * allMarked = new bool[numNodes]();
 	allMarked[0]=0;

@@ -682,7 +682,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											#pragma omp atomic write
 												read2->superReadID = currIndex;
 											//Write contained read information regardless as it is a super read has been identified
-											strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+												*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
 													<<"0"<<","<<"0"<<","								//No substitutions or edits
 													<<read2Len<<","					//Cointained Read (len,start,stop)
@@ -709,7 +709,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											#pragma omp atomic write
 												read2->superReadID = currIndex;
 											//Write duplicate read information regardless as it is a super read has been identified
-											strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+												*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
 													<<"0"<<","<<"0"<<","								//No substitutions or edits
 													<<read2Len<<","					//Duplicate Read (len,start,stop)
@@ -726,8 +726,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 								delete listOfReads;
 							}
 						}//End of inner for
-						*(filePointerList[threadID])<<strstream.str();
-						filePointerList[threadID]->flush();
+						//*(filePointerList[threadID])<<strstream.str();
+						//filePointerList[threadID]->flush();
 					}
 					//Assign next index
 					UINT64 nextIndex = currIndex+1;
@@ -1053,7 +1053,6 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 {
 	//CLOCKSTART;
 	ostringstream strstream;
-
 	for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();)
 	{
 		UINT64 readID = it->first;
