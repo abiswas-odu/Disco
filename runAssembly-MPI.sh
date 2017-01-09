@@ -180,7 +180,7 @@ edgeFiles=${edgeFiles%?}
 j=0
 while [ $j -lt $numProcs ]
 do
-   i=1
+   i=0
    while [ $i -lt $numThreads ]
    do
       containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${j}_${i}_containedReads.txt,"

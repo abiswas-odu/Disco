@@ -229,8 +229,6 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
-   #Delete intermediate files
-   rm trm.${readFileP} ftl.trm.${readFileP}
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -se ${trimFtlEccOutput} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
@@ -238,6 +236,10 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
       ${exePath}/fullsimplify -fs ${trimFtlEccOutput} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
    fi
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Single P1/P2 files as input
+   #BBTools Preprocessing
+   ${exePath}/bbmap/bbduk.sh in=${readFile1} in2=${readFile2} out=trm.${readFile1} out2=trm.${readFile2} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+   ${exePath}/bbmap/bbduk.sh in=${trimOutput} out=${trimFtlOutput} k=31 hdist=1 ref=${exePath}/bbmap/resources/Illumina.artifacts.2013.12.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+   tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    if [ "$constructGraph" = "Y" ] ; then
       ${exePath}/buildG -pe ${readFile1},${readFile2} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
    fi
