@@ -421,7 +421,7 @@ void HashTable::setHashTableSize(UINT64 size)
 **********************************************************************************************************************/
 void HashTable::setHashTableDataSize(int myid)
 {
-	int numElements=memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid);
+	UINT64 numElements=memoryDataPartitions->at(myid+1)-memoryDataPartitions->at(myid);
 	int tsize = 0;
 	MPI_Type_size(MPI_UINT64_T, &tsize);
 	hashData = NULL;

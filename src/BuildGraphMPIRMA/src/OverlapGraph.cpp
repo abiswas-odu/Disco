@@ -341,8 +341,8 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 					}
 				}
 				INT64 mem_used = checkMemoryUsage();
-				if(writtenMakedNodes>5)
-					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
+				if(writtenMakedNodes>MIN_LOG_SIZE)
+					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << '\n';
 				saveParGraphToFile(fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 				for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
 				{
@@ -788,7 +788,8 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 		//map<UINT64,string> listOfReads = hashTable->getLocalHitList_nocache(localReadHits, subString, j);
 		if(!listOfReads.empty()) // If other reads contain the substring as prefix or suffix
 		{
-			for(map<UINT64,string>::iterator it=listOfReads.begin() ; it!=listOfReads.end(); ++it) // For each read in the list.
+			int insertCtr=0;
+			for(map<UINT64,string>::iterator it=listOfReads.begin() ; it!=listOfReads.end() && insertCtr < MAX_EDGE_PER_KMER; ++it) // For each read in the list.
 			{
 				UINT64 data = it->first; // We used bit operations in the hash table. Most significant 2 bits store orientation and least significant 62 bits store read ID.
 				UINT64 read2ID = data & 0X3FFFFFFFFFFFFFFF;
@@ -813,6 +814,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 					}
 					insertEdge(read1,read2,read1Len, read2String.length(),orientation,read1Len-overlapLen, parGraph); 			// Insert the edge in the graph.
 					insertedEdgeList.push_back(read2ID);
+					insertCtr++;
 				}
 			}
 		}

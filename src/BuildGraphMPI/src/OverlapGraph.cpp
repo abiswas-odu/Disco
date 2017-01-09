@@ -93,7 +93,6 @@ OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
 OverlapGraph::~OverlapGraph()
 {
 	// Free the memory used by the overlap graph.
-
 }
 
 
@@ -364,8 +363,8 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 					}
 				}
 				INT64 mem_used = checkMemoryUsage();
-				if(writtenMakedNodes>5)
-					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
+				if(writtenMakedNodes>MIN_LOG_SIZE)
+					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << '\n';
 				saveParGraphToFile(fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 				for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
 				{
@@ -682,7 +681,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											#pragma omp atomic write
 												read2->superReadID = currIndex;
 											//Write contained read information regardless as it is a super read has been identified
-												*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+												strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
 													<<"0"<<","<<"0"<<","								//No substitutions or edits
 													<<read2Len<<","					//Cointained Read (len,start,stop)
@@ -691,7 +690,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 													<<read1Len<<","					//Super Read (len,start,stop)
 													<<read1Len-overlapLen<<","
 													<<read1Len-overlapLen+read2Len
-													<<endl;
+													<<'\n';
 
 										}
 										else if(read1String.length() == read2Len && read1->getReadNumber() < read2->getReadNumber())
@@ -709,7 +708,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 											#pragma omp atomic write
 												read2->superReadID = currIndex;
 											//Write duplicate read information regardless as it is a super read has been identified
-												*(filePointerList[threadID])<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
+												strstream<<read2->getFileIndex()<<"\t"<<read1->getFileIndex()<<"\t"<<orientation<<","
 													<<read2Len<<","
 													<<"0"<<","<<"0"<<","								//No substitutions or edits
 													<<read2Len<<","					//Duplicate Read (len,start,stop)
@@ -718,7 +717,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 													<<read1Len<<","					//Super Read (len,start,stop)
 													<<read1Len-overlapLen<<","
 													<<read1Len-overlapLen+read2Len
-													<<endl;
+													<<'\n';
 
 										}
 									}
@@ -726,8 +725,8 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 								delete listOfReads;
 							}
 						}//End of inner for
-						//*(filePointerList[threadID])<<strstream.str();
-						//filePointerList[threadID]->flush();
+						*(filePointerList[threadID])<<strstream.str();
+						filePointerList[threadID]->flush();
 					}
 					//Assign next index
 					UINT64 nextIndex = currIndex+1;
@@ -905,7 +904,8 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 		vector<UINT64> * listOfReads=hashTable->getListOfReads(subString); // Search the string in the hash table.
 		if(listOfReads) // If there are some reads that contain s as prefix or suffix of the read or their reverse complement
 		{
-			for(UINT64 k = 0; k < listOfReads->size(); k++) // For each such reads.
+			int insertCtr=0;
+			for(UINT64 k = 0; k < listOfReads->size() && insertCtr < MAX_EDGE_PER_KMER; k++) // For each such reads.
 			{
 				UINT64 data = listOfReads->at(k);			// We used bit operations in the hash table. Most significant 2 bits store orientation and least significant 62 bits store read ID.
 				UINT64 read2ID = (data & 0X3FFFFFFFFFFFFFFF);
@@ -929,6 +929,7 @@ bool OverlapGraph::insertAllEdgesOfRead(UINT64 readNumber, map<UINT64,nodeType> 
 					}
 					insertEdge(read1,read2,orientation,read1Len-overlapLen, parGraph); 			// Insert the edge in the graph.
 					insertedEdgeList.push_back(read2ID);
+					insertCtr++;
 				}
 			}
 			delete listOfReads;

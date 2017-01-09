@@ -2,7 +2,7 @@
  * HashTable.h
  *
  *  Created on: Apr 22, 2013
- *      Author: Abhishek Biswas
+ *      Author: b72
  */
 
 #ifndef HASHTABLE_H_
@@ -37,7 +37,7 @@ class HashTable{
 		UINT16 hashStringLength;					// Ted: Length of prefix and suffix of the reads to hash. This is equal to the minumum overlap length.
 		mutable UINT64 numberOfHashCollision;		// Counter to count the number of hash collisions. For debugging only.
 													// It's mutable such that it can be modified in the const member function, getListOfReads
-		bool insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
+		bool insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths);	// Insert a string in the hash table.
 		bool hashReadLengths(string forwardRead); 					// Ted: Hash prefix and suffix of the read and its reverse complement in the hash table. Turn over to the constant
 		void setHashTableSize(UINT64 size); 		// Set the size of the hash table.
 		void setHashTableDataSize(UINT64 size);		// Set the size of the hash data table.

@@ -24,7 +24,7 @@ void readCheckpointInfo(string allFileNamePrefix, bool &containedReadComplete, b
 int main(int argc, char **argv)
 {
 	cout<<"Software: Disco Assembler (Single Computer) [November 2016]"<<endl;
-	cout<<"Version : 3.0.3"<<endl;
+	cout<<"Version : 1.0"<<endl;
 	cout<<"Developed by: Biswas, Abhishek; Pan, Chongle et.al."<<endl;
 	cout<<"Affiliation: Oak Ridge National Lab / University of Tennessee"<<endl;
 

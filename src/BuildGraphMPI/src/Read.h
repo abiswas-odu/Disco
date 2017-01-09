@@ -27,7 +27,6 @@ class Read
 		Read(void);								// Default constructor.
 		Read(UINT64 fIndx);					// Another constructor.
 		~Read(void);							// Destructor.
-
 		bool setReadNumber(UINT64 id); 			// Set the read number.
 		void setFileIndex(UINT64 id); 			// Set the file index number.
 		void setReadHashOffset(UINT64 offset); 			// Set the hash data table offset.

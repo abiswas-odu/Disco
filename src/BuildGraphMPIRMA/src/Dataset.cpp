@@ -151,7 +151,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 	CLOCKSTART;
 	cout << "Reading dataset: " << datasetNumber << " from file: " << fileName << endl;
 	UINT64 goodReads = 0, badReads = 0;
-	map<UINT64,string> readList;
 	if(fileName.substr( fileName.length() - 3 )==".gz")
 	{
 #ifdef INCLUDE_READGZ
@@ -160,62 +159,24 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		int l;
 		fp = gzopen(fileName.c_str(), "r");
 		seq = kseq_init(fp);
-		#pragma omp parallel num_threads(parallelThreadPoolSize)
-		{
-			#pragma omp single
+		while ((l = kseq_read(seq)) >= 0) {
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			string line1=seq->seq.s;
+			fIndx++;							//Increment file index of the read
+			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
 			{
-				while ((l = kseq_read(seq)) >= 0) {
-					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-						cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-					string line1=seq->seq.s;
-					fIndx++;							//Increment file index of the read
-					if(readList.size()>=READ_TASK_BLOCK)
-					{
-						readList.insert(std::pair<UINT64, string>(fIndx, line1));
-						#pragma omp task firstprivate(readList)
-						{
-							for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
-								UINT64 fileIndexOfRead=iterator->first;
-								string seqLine=iterator->second;
-								for (std::string::iterator p = seqLine.begin(); seqLine.end() != p; ++p) // Change the case
-									*p = toupper(*p);
-								if(seqLine.length() > minOverlap && testRead(seqLine) ) // Test the read is of good quality.
-								{
-									Read *r1=new Read(fileIndexOfRead);
-									UINT64 len = seqLine.length();
-
-									if(len > longestReadLength)
-									{
-										#pragma omp atomic write
-											longestReadLength = len;
-									}
-									if(len < shortestReadLength)
-									{
-										#pragma omp atomic write
-											shortestReadLength = len;
-									}
-
-									#pragma omp critical
-									{
-										reads->push_back(r1);						// Store the first string in the dataset.
-									}
-									#pragma omp atomic
-										goodReads++;
-								}
-								else
-								{
-									#pragma omp atomic
-										badReads++;
-								}
-							}
-						}
-						readList.clear();
-					}
-					else
-						readList.insert(std::pair<UINT64, string>(fIndx, line1));
-				}
-				#pragma omp taskwait
+				Read *r1=new Read(fIndx);
+				UINT64 len = line1.length();
+				if(len > longestReadLength)
+					longestReadLength = len;
+				if(len < shortestReadLength)
+					shortestReadLength = len;
+				reads->push_back(r1);						// Store the first string in the dataset.
+				goodReads++;
 			}
+			else
+				badReads++;
 		}
 		kseq_destroy(seq);
 		gzclose(fp);
@@ -236,125 +197,64 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
-		#pragma omp parallel num_threads(parallelThreadPoolSize)
+
+		while(getline(myFile,text))
 		{
-			#pragma omp single
+			string line1="",line0="";
+			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
+				cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
+			if(fileType == UNDEFINED)
 			{
-				while(getline(myFile,text))
+				if(text[0] == '>')
+					fileType = FASTA;
+				else if(text[0] == '@')
+					fileType = FASTQ;
+				else
+					MYEXIT("Unknown input file format.");
+			}
+			line.clear();
+			if(fileType == FASTA) 			// Fasta file
+			{
+				line.push_back(text);
+				getline (myFile,text,'>');
+				line.push_back(text);
+
+				line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1);								// The first string is in the 2nd line.
+
+			}
+			else if(fileType == FASTQ) 					// Fastq file.
+			{
+				line.push_back(text);
+				for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
 				{
-					string line1="",line0="";
-					if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
-						cout<< setw(10) << goodReads + badReads << " reads processed in dataset " << setw(2) << datasetNumber <<". " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
-					if(fileType == UNDEFINED)
-					{
-						if(text[0] == '>')
-							fileType = FASTA;
-						else if(text[0] == '@')
-							fileType = FASTQ;
-						else
-							MYEXIT("Unknown input file format.");
-					}
-					line.clear();
-					if(fileType == FASTA) 			// Fasta file
-					{
-						line.push_back(text);
-						getline (myFile,text,'>');
-						line.push_back(text);
-
-						line.at(1).erase(std::remove(line.at(1).begin(), line.at(1).end(), '\n'), line.at(1).end());
-						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-						line0=line.at(0);
-						line1 = line.at(1);								// The first string is in the 2nd line.
-
-					}
-					else if(fileType == FASTQ) 					// Fastq file.
-					{
-						line.push_back(text);
-						for(UINT64 i = 0; i < 3; i++) 	// Read the remaining 3 lines. Total of 4 lines represent one sequence in a fastq file.
-						{
-							getline (myFile,text);
-							line.push_back(text);
-						}
-						line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
-						line0=line.at(0);
-						line1 = line.at(1); 			// The first string is in the 2nd line.
-					}
-					fIndx++;							//Increment file index of the read
-					if(readList.size()>=READ_TASK_BLOCK)
-					{
-						readList.insert(std::pair<UINT64, string>(fIndx, line1));
-						#pragma omp task firstprivate(readList)
-						{
-							for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
-								UINT64 fileIndexOfRead=iterator->first;
-								string seqLine=iterator->second;
-								for (std::string::iterator p = seqLine.begin(); seqLine.end() != p; ++p) // Change the case
-									*p = toupper(*p);
-								if(seqLine.length() > minOverlap && testRead(seqLine) ) // Test the read is of good quality.
-								{
-									Read *r1=new Read(fileIndexOfRead);
-									UINT64 len = seqLine.length();
-
-									if(len > longestReadLength)
-									{
-										#pragma omp atomic write
-											longestReadLength = len;
-									}
-									if(len < shortestReadLength)
-									{
-										#pragma omp atomic write
-											shortestReadLength = len;
-									}
-
-									#pragma omp critical
-									{
-										reads->push_back(r1);						// Store the first string in the dataset.
-									}
-									#pragma omp atomic
-										goodReads++;
-								}
-								else
-								{
-									#pragma omp atomic
-										badReads++;
-								}
-							}
-						}
-						readList.clear();
-					}
-					else
-						readList.insert(std::pair<UINT64, string>(fIndx, line1));
+					getline (myFile,text);
+					line.push_back(text);
 				}
-				#pragma omp taskwait
+				line.at(0).erase(std::remove(line.at(0).begin(),line.at(0).end(),'>'),line.at(0).end());			//Sequence name
+				line0=line.at(0);
+				line1 = line.at(1); 			// The first string is in the 2nd line.
+			}
+			fIndx++;							//Increment file index of the read
+			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
+			{
+				Read *r1=new Read(fIndx);
+				UINT64 len = line1.length();
+				if(len > longestReadLength)
+					longestReadLength = len;
+				if(len < shortestReadLength)
+					shortestReadLength = len;
+				reads->push_back(r1);						// Store the first string in the dataset.
+				goodReads++;
+			}
+			else
+			{
+				badReads++;
 			}
 		}
 		myFile.close();
-	}
-	//Insert remaining reads left in the map
-	for(auto iterator = readList.begin(); iterator != readList.end(); iterator++) {
-		UINT64 fileIndexOfRead=iterator->first;
-		string seqLine=iterator->second;
-		for (std::string::iterator p = seqLine.begin(); seqLine.end() != p; ++p) // Change the case
-			*p = toupper(*p);
-		if(seqLine.length() > minOverlap && testRead(seqLine) ) // Test the read is of good quality.
-		{
-			Read *r1=new Read(fileIndexOfRead);
-			UINT64 len = seqLine.length();
-			if(len > longestReadLength)
-			{
-				longestReadLength = len;
-			}
-			if(len < shortestReadLength)
-			{
-				shortestReadLength = len;
-			}
-			reads->push_back(r1);						// Store the first string in the dataset.
-			goodReads++;
-		}
-		else
-		{
-				badReads++;
-		}
 	}
 	numberOfReads+=goodReads;				// Counter of the total number of reads.
     cout << endl << "Dataset: " << setw(2) << datasetNumber << endl;
@@ -366,7 +266,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 	CLOCKSTOP;
 	return true;
 }
-
 /**********************************************************************************************************************
 	This function returns the number of reads
 **********************************************************************************************************************/

@@ -257,9 +257,13 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			bool insertFlag=insertIntoTable(fileIndex, line1 ,hashDataLengths);
-			if(insertFlag) // Test the read is of good quality and inserted.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read does not exist
+			{
+				Read *read = dataSet->getReadFromID(it->second); // Get the read
+				insertIntoTable(read, line1 ,hashDataLengths);
 				goodReads++;
+			}
 			else
 				badReads++;
 		}
@@ -323,13 +327,16 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			bool insertFlag=insertIntoTable(fileIndex, line1 ,hashDataLengths);
-			if(insertFlag) // Test the read is of good quality and inserted.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read does not exist
+			{
+				Read *read = dataSet->getReadFromID(it->second); // Get the read
+				insertIntoTable(read, line1 ,hashDataLengths);
 				goodReads++;
+			}
 			else
 				badReads++;
 		}
-
 		myFile.close();
 	}
 	cout << "File name: " << fileName << endl;
@@ -423,13 +430,8 @@ UINT64 HashTable::hashFunction(const string & subString) const
 /**********************************************************************************************************************
 	Insert a subString in a hashTable
 **********************************************************************************************************************/
-bool HashTable::insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths)
+bool HashTable::insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths)
 {
-	auto it = dataSet->getFRMap()->find(fileIndex);
-	if(it == dataSet->getFRMap()->end()) // If the read does not exist return
-		return false;
-	Read *read = dataSet->getReadFromID(it->second); // Get the read
-
 	string prefixForward = forwardRead.substr(0,hashStringLength); 											// Prefix of the forward string.
 	string suffixForward = forwardRead.substr(forwardRead.length() - hashStringLength,hashStringLength);	// Suffix of the forward string.
 
@@ -638,6 +640,3 @@ string HashTable::getStringReverse(UINT64 offset) const
 	UINT64 stringLen=getReadLength(offset);
 	return reverseComplement(toString(offset+1,stringLen));
 }
-
-
-

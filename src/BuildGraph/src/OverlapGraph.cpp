@@ -284,7 +284,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 					}
 				}
 			}
-			if(writtenMakedNodes>10)
+			if(writtenMakedNodes>MIN_LOG_SIZE)
 			{
 				INT64 mem_used = checkMemoryUsage();
 				cout<<"Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
