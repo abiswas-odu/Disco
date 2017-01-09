@@ -1,0 +1,6 @@
+Masked version of human HG19 reference, for removing human contaminant reads:
+https://drive.google.com/open?id=0B3llHR93L14wd0pSSnFULUlhcUk
+
+Ribosomal kmers, for ribosomal (16S/18S/etc) read removal via BBDuk:
+https://drive.google.com/open?id=0B3llHR93L14wS2NqRXpXakhFaEk
+

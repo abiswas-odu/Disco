@@ -1,0 +1,9 @@
+To install BBTools, unzip it to a directory and it will run as long as Java is installed.  It is also possible to increase performance with some additional steps.
+
+BBTools has 4 components:
+1) Java code.  This is the bulk of the code and all that is strictly necessary.  It is already compiled for Java 6 and does not need recompiling.  It can run under Java 7 or higher, and most components (aside from BBNorm) can also run in Java 6.  No components will work with Java versions below 6.
+2) Bash shellscripts.  These are present to make it easier to invoke the Java code (by automatically detecting and setting memory limits, for example).  If you are not using Bash and Linux, then the shellscripts probably won't work, but you can still invoke the Java code from the command line.  Shellscripts are interpreted and do not require compiling.
+3) C code.  This is currently under development by Jonathan Rood to accelerate certain programs (currently BBMap, BBMerge, and Dedupe).  It can be enabled with the "usejni" flag, but requires platform-specific compilation first.
+4) MPI code.  This is also under development by Jonathan Rood and support requires a recent version of OpenMPI.  It's currently experimental.  If you want to recompile BBTools, you will need the "mpi.jar" file that is present in systems with OpenMPI installed.
+
+To use the accelerated versions of BBMap, BBMerge, or Dedupe, the C code must first be compiled for your specific platform.  The instructions are in "/jni/README.txt"
