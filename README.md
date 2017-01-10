@@ -3,7 +3,7 @@
 DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **DISCO**. 
 
 ### Current Version
-* v3.0.4
+* v1.0
 
 ### Setup and Installation
 
