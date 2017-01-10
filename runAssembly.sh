@@ -217,8 +217,10 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    fi
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#Multiple SE file as input
    #BBTools Preprocessing
+   OLDIFS=$IFS
    IFS=',' 
    array=($readFileS)
+   IFS=$OLDIFS
    for element in "${array[@]}"
    do
       fName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"		#Remove any leading or trailing spaces
@@ -247,8 +249,11 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as input
    #BBTools Preprocessing
    # Process pair R1
+   OLDIFS=$IFS
    IFS=',' 
    array1=($readFile1)
+   array2=($readFile2)
+   IFS=$OLDIFS
    i=0
    for element in "${array1[@]}"
    do
@@ -267,8 +272,6 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as
    rmTrimOutput1=${rmTrimOutput1%?}
    rmTrimFtlOutput1=${rmTrimFtlOutput1%?}
    # Process pair R2
-   IFS=',' 
-   array2=($readFile2)
    for element in "${array2[@]}"
    do
       fName2="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"		#Remove any leading or trailing spaces
@@ -296,8 +299,11 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE file and a Multiple SE file as input
    #BBTools Preprocessing
    #Process SE files
+   OLDIFS=$IFS
    IFS=',' 
    arrayS=($readFileS)
+   arrayP=($readFileP)
+   IFS=$OLDIFS
    for element in "${arrayS[@]}"
    do
       fName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
@@ -315,7 +321,6 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    ${exePath}/bbmap/bbduk.sh in=${readFileS} out=${trimOutputS} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
    ${exePath}/bbmap/bbduk.sh in=${trimOutputS} out=${trimFtlOutputS} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
    #Process PE files
-   arrayP=($readFileP)
    for element in "${arrayP[@]}"
    do
       fName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
