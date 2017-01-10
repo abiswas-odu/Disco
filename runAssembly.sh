@@ -191,8 +191,9 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    IFS=$OLDIFS
    for element in "${array[@]}"
    do
-      fName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
-      ${exePath}/bbmap/bbduk.sh in=${fName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fname=$(basename "$fullName")
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
       ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       rmTrimOutput="trm.${fName} "		#File list to delete trimming output
       rmTrimFtlOutput="ftl.trm.${fName} "     #File list for deleting filtered output
