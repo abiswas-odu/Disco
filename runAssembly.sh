@@ -192,20 +192,16 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    for element in "${array[@]}"
    do
       fName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
-      trimOutput="trm.${fName},"		#File list for trimming output
+      ${exePath}/bbmap/bbduk.sh in=${fName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       rmTrimOutput="trm.${fName} "		#File list to delete trimming output
-      trimFtlOutput="ftl.trm.${fName},"       #File list for filtered output
       rmTrimFtlOutput="ftl.trm.${fName} "     #File list for deleting filtered output
       trimFtlEccOutput="tecc.ftl.trm.${fName}," #File list for error corrected output
    done
-   trimOutput=${trimOutput%?}
-   trimFtlOutput=${trimFtlOutput%?}
    trimFtlEccOutput=${trimFtlEccOutput%?}
    rmTrimOutput=${rmTrimOutput%?}
    rmTrimFtlOutput=${rmTrimFtlOutput%?}
    #BBTools Preprocessing
-   ${exePath}/bbmap/bbduk.sh in=${readFileP} out=${trimOutput} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-   ${exePath}/bbmap/bbduk.sh in=${trimOutput} out=${trimFtlOutput} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
    ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
