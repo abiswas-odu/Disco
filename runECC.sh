@@ -202,7 +202,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    #BBTools Preprocessing
    ${exePath}/bbmap/bbduk.sh in=${readFileP} out=${trimOutput} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
    ${exePath}/bbmap/bbduk.sh in=${trimOutput} out=${trimFtlOutput} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
-   tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#Multiple SE file as input
@@ -223,7 +223,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput%?}
    ${exePath}/bbmap/bbduk.sh in=${readFileS} out=${trimOutput} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
    ${exePath}/bbmap/bbduk.sh in=${trimOutput} out=${trimFtlOutput} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
-   tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Single P1/P2 files as input
@@ -265,7 +265,7 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Single P1/P2 files as i
    #BBTools Preprocessing
    ${exePath}/bbmap/bbduk.sh in=${readFile1} in2=${readFile1} out=${trimOutput1} out2=${trimOutput2} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
    ${exePath}/bbmap/bbduk.sh in=${trimOutput1} in2=${trimOutput2} out=${trimFtlOutput1} out2=${trimFtlOutput2} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
-   tadpole.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput1} ${rmTrimFtlOutput1} ${rmTrimOutput2} ${rmTrimFtlOutput2}
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE file and a Multiple SE file as input
@@ -303,7 +303,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    trimFtlEccOutputP=${trimFtlEccOutputP%?}
    ${exePath}/bbmap/bbduk.sh in=${readFileP} out=${trimOutputP} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
    ${exePath}/bbmap/bbduk.sh in=${trimOutputP} out=${trimFtlOutputP} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
-   tadpole.sh in=${trimFtlOutputP},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutputP},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutputS} ${rmTrimFtlOutputS} ${rmTrimOutputP} ${rmTrimFtlOutputP}
 else
