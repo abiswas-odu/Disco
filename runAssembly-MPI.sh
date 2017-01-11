@@ -224,7 +224,83 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then   
    done
    trimFtlEccOutput=${trimFtlEccOutput#?}
    if [ "$constructGraph" = "Y" ] ; then
+<<<<<<< HEAD
       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe ${trimFtlEccOutput} -f $outGraphPrefix -s ${outSimplifyPrefix} -simPth ${exePath} -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
+   fi
+   if [ "$simplifyGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fpi ${trimFtlEccOutput} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+   fi
+elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then              #Multiple SE file as input
+   #BBTools Preprocessing
+   OLDIFS=$IFS
+   IFS=',' 
+   array=($readFileS)
+   IFS=$OLDIFS
+   trimFtlEccOutput="" #File list for error corrected output
+   for element in "${array[@]}"
+   do
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName=`basename $fullName`
+      trimFtlEccOutput="${trimFtlEccOutput},tecc.ftl.trm.${fName}" 
+   done
+   trimFtlEccOutput=${trimFtlEccOutput#?}
+   if [ "$constructGraph" = "Y" ] ; then
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -se ${trimFtlEccOutput} -f $outGraphPrefix -s ${outSimplifyPrefix} -simPth ${exePath} -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+   fi
+   if [ "$simplifyGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fs ${trimFtlEccOutput} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+   fi
+elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as input
+    #BBTools Preprocessing
+   # Process pair R1
+   OLDIFS=$IFS
+   IFS=',' 
+   array1=($readFile1)
+   array2=($readFile2)
+   IFS=$OLDIFS
+   trimFtlEccOutput="" #File list for error corrected output
+   i=0
+   for element in "${array1[@]}"
+   do
+      trimFtlEccOutput="${trimFtlEccOutput},int.tecc.ftl.trm.${i}.${extension1}"      #File list for error corrected output
+      i=$(( $i+1 ))
+   done
+   trimFtlEccOutput=${trimFtlEccOutput#?}
+   if [ "$constructGraph" = "Y" ] ; then
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe ${trimFtlEccOutput} -f $outGraphPrefix -s ${outSimplifyPrefix} -simPth ${exePath} -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+   fi
+   if [ "$simplifyGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fp ${trimFtlEccOutput} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+   fi
+elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE file and a Multiple SE file as input
+   #BBTools Preprocessing
+   #Process SE files
+   OLDIFS=$IFS
+   IFS=',' 
+   arrayS=($readFileS)
+   arrayP=($readFileP)
+   IFS=$OLDIFS
+   trimFtlEccOutputS="" #File list for error corrected output
+   for element in "${arrayS[@]}"
+   do
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName=`basename $fullName`
+      trimFtlEccOutputS="${trimFtlEccOutputS},tecc.ftl.trm.${fName}" 
+   done
+   trimFtlEccOutputS=${trimFtlEccOutputS#?}
+   #Process PE files
+   trimFtlEccOutputP="" #File list for error corrected output
+   for element in "${arrayP[@]}"
+   do
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName=`basename $fullName`
+      trimFtlEccOutputP="${trimFtlEccOutputP},tecc.ftl.trm.${fName}" 
+   done
+   trimFtlEccOutputP=${trimFtlEccOutputP#?}
+   if [ "$constructGraph" = "Y" ] ; then
+       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe ${trimFtlEccOutputP} -se ${trimFtlEccOutputS} -f $outGraphPrefix -s ${outSimplifyPrefix} -simPth ${exePath} -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+=======
+      mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe ${trimFtlEccOutput} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${trimFtlEccOutput} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1

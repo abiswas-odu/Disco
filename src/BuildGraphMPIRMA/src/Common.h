@@ -61,6 +61,8 @@ typedef long long INT64;
 #define MID_THD_MEMORY_SIZE 5000
 #define MIN_THD_MEMORY_SIZE 1000
 
+//Defines the number of edges allowed for a kmer
+#define MAX_EDGE_PER_KMER 4
 
 //	Exit code that displays the place of exit and message.
 #define MYEXIT(a) { cout << endl << "Exit from File: " << __FILE__ << " Line: " << __LINE__ << " Function: " << __FUNCTION__ << "()" << endl << "Message: " << a << endl; exit(0);}
@@ -185,5 +187,18 @@ inline std::string reverseComplement(const std::string & seq)
 	}
 	return reverse; // return the reverse complement as a string
 }
+
+inline int countSubstring(const std::string& str, const std::string& sub)
+{
+    if (sub.length() == 0) return 0;
+    int count = 0;
+    for (size_t offset = str.find(sub); offset != std::string::npos;
+	 offset = str.find(sub, offset + sub.length()))
+    {
+        ++count;
+    }
+    return count;
+}
+
 
 #endif /* COMMON_H_ */

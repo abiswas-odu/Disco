@@ -19,6 +19,8 @@
 
 #define MIN_MARKED 5000				//No. of reads to be marked before a send communication is initiated...
 
+#define MIN_LOG_SIZE 100 			//Min size of graph to write log entry
+
 enum nodeType {
 	UNEXPLORED = 0, // Current node u is not explored yet. Meaning that there is no edge (u,v) in the graph.
 	EXPLORED = 1, //  Current node u is explored. Meaning that all edges (u,v) are inserted in the dataset.

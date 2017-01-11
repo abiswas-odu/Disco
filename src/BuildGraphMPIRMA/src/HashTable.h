@@ -34,7 +34,6 @@ class HashTable{
 		MPI_Win win;								//Pointer to MPI RMA window based on partitioning hashData
 		//vector<UINT64> *memoryHashPartitions;		//Gives the first hash index offset stored in the rank addressed by index on this vector
 		vector<UINT64> *memoryDataPartitions;		//Gives the first global data offset stored in the rank addressed by index on this vector
-		vector<UINT64> *memoryReadCount;			//Gives the number of reads stored in the rank addressed by index on this vector
 		map<UINT64, std::shared_ptr<UINT64> > *cachedHashTable;		//Local cache for the hash data table mapped by hash index
 		queue<UINT64> *hashQ;						//Queue to maintain the local hash data cache and pop the oldest entry when full
 													//stores hash index
@@ -51,7 +50,7 @@ class HashTable{
 		mutable UINT64 numberOfHashCollision;		// Counter to count the number of hash collisions. For debugging only.
 													// It's mutable such that it can be modified in the const member function, getListOfReads
 		mutable UINT64 rmaCtr;
-		bool insertIntoTable(Read *read, string forwardRead, UINT64 *hashDataLengths, int myid);	// Insert a string in the hash table.
+		bool insertIntoTable(UINT64 fileIndex, string forwardRead, UINT64 *hashDataLengths, int myid);	// Insert a string in the hash table.
 		bool hashReadLengths(string forwardRead); 					// Ted: Hash prefix and suffix of the read and its reverse complement in the hash table. Turn over to the constant
 		void setHashTableSize(UINT64 size); 		// Set the size of the hash table.
 		void setHashTableDataSize(int myid);		// Set the size of the hash data table.
@@ -74,18 +73,16 @@ class HashTable{
 		string getStringForward(Read *r, int myid); 			// Get the forward string of the read at offset.
 		string getStringReverse(Read *r, int myid);  			// Get the reverse string of the read at offset.
 
-		void readReadLengthsFromFile(string fileName, UINT64 minOverlap);
+		void readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex);
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData(int myid);												//Populate the read sequence in the hash data
-		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID, int myid);
+		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex, int myid);
 
 		/*MPI Related Routines*/
 		UINT64 getLocalOffset(UINT64 globalOffset, int myid) const;
 		bool isGlobalOffsetInRange(UINT64 globalOffset, int myid) const;
 		int getOffsetRank(UINT64 globalOffset) const;
 		string toStringMPI(UINT64 *hashDataBlock,UINT64 stringLen,  UINT64 startOffset) const;
-		UINT64 getMemoryReadCount(int myid);
-		UINT64 getMaxMemoryReadCount();
 		UINT64 getMemoryMaxLocalOffset(int rank);
 		void endEpoch();
 		UINT64 getLocalReadID(UINT64 localOffset, int myid) const;

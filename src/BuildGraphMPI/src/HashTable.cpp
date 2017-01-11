@@ -83,14 +83,15 @@ bool HashTable::insertDataset(Dataset* d, UINT64 minOverlapLength, UINT64 parall
 void HashTable::populateReadLengths()
 {
 	CLOCKSTART;
+	UINT64 fileIndex=0;
 	for(UINT64 i = 0; i < dataSet->pairedEndDatasetFileNames.size(); i++)						// Read the paired-end datasets.
 	{
-		readReadLengthsFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1);
+		readReadLengthsFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1,fileIndex);
 	}
 
 	for(UINT64 i = 0; i < dataSet->singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
 	{
-		readReadLengthsFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1);
+		readReadLengthsFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1,fileIndex);
 	}
 	CLOCKSTOP;
 }
@@ -104,15 +105,15 @@ void HashTable::populateReadData()
 	CLOCKSTART;
 	UINT64 *hashDataLengths = new UINT64[hashTableSize];
 	std::memset(hashDataLengths, 0, hashTableSize*sizeof(UINT64));
-	UINT64 readID=0;
+	UINT64 fileIndex=0;
 	for(UINT64 i = 0; i < dataSet->pairedEndDatasetFileNames.size(); i++)						// Read the paired-end datasets.
 	{
-		readReadSequenceFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID);
+		readReadSequenceFromFile(dataSet->pairedEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, fileIndex);
 	}
 
 	for(UINT64 i = 0; i < dataSet->singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
 	{
-		readReadSequenceFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, readID);
+		readReadSequenceFromFile(dataSet->singleEndDatasetFileNames.at(i), hashStringLength+1, hashDataLengths, fileIndex);
 	}
 	delete[] hashDataLengths;
 	CLOCKSTOP;
@@ -121,7 +122,7 @@ void HashTable::populateReadData()
 /**********************************************************************************************************************
 	Read sequence lengths into the hashTable
 **********************************************************************************************************************/
-void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
+void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex)
 {
 	CLOCKSTART;
 	cout << "Reading read lengths from file: " << fileName << endl;
@@ -142,9 +143,11 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 			//printf("seq: %s\n", seq->seq.s);
 			//if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
 			string line1=seq->seq.s;
+			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read is good and exists
 			{
 				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
 				goodReads++;
@@ -209,9 +212,11 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 				line0=line.at(0);
 				line1 = line.at(1); 			// The first string is in the 2nd line.
 			}
+			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read is good and exists
 			{
 				hashReadLengths(line1); 								// Calculate the offset lengths of each hash table key in the hash table.
 				goodReads++;
@@ -232,7 +237,7 @@ void HashTable::readReadLengthsFromFile(string fileName, UINT64 minOverlap)
 /**********************************************************************************************************************
 	Read sequence data into hashData
 **********************************************************************************************************************/
-void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID)
+void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex)
 {
 	CLOCKSTART;
 	cout << "Reading read data from file: " << fileName << endl;
@@ -249,12 +254,14 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 			if( (goodReads + badReads ) != 0 && (goodReads + badReads)%1000000 == 0)
 				cout<< setw(10) << goodReads + badReads << " read sequences added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
 			string line1=seq->seq.s;
+			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read does not exist
 			{
-				readID++;
-				insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths); 								// Calculate the offset lengths of each hash table key in the hash table.
+				Read *read = dataSet->getReadFromID(it->second); // Get the read
+				insertIntoTable(read, line1 ,hashDataLengths);
 				goodReads++;
 			}
 			else
@@ -317,18 +324,19 @@ void HashTable::readReadSequenceFromFile(string fileName, UINT64 minOverlap, UIN
 				line0=line.at(0);
 				line1 = line.at(1); 			// The first string is in the 2nd line.
 			}
+			fileIndex++;
 			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
 				*p = toupper(*p);
-			if(line1.length() > minOverlap && dataSet->testRead(line1) ) // Test the read is of good quality.
+			auto it = dataSet->getFRMap()->find(fileIndex);
+			if(it != dataSet->getFRMap()->end()) // If the read does not exist
 			{
-				readID++;
-				insertIntoTable(dataSet->getReadFromID(readID), line1 ,hashDataLengths); 								// Calculate the offset lengths of each hash table key in the hash table.
+				Read *read = dataSet->getReadFromID(it->second); // Get the read
+				insertIntoTable(read, line1 ,hashDataLengths);
 				goodReads++;
 			}
 			else
 				badReads++;
 		}
-
 		myFile.close();
 	}
 	cout << "File name: " << fileName << endl;
@@ -632,6 +640,3 @@ string HashTable::getStringReverse(UINT64 offset) const
 	UINT64 stringLen=getReadLength(offset);
 	return reverseComplement(toString(offset+1,stringLen));
 }
-
-
-

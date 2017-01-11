@@ -422,7 +422,7 @@ elif [ -z "$readFileP" ] ; then
    #Error Correction
    ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
-   rm ${rmTrimOutput1} ${rmTrimFtlOutput} ${rmTrimOutput2} ${rmTrimFtlOutputS} ${trimFtlOutputS}
+   rm ${rmTrimOutput1} ${rmTrimFtlOutput} ${rmTrimOutput2} ${rmTrimFtlOutputS}
    if [ "$constructGraph" = "Y" ] ; then
       
       ${exePath}/buildG -pe ${trimFtlEccOutput} -se ${trimFtlEccOutputS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}

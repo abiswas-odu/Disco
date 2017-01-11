@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 				maxThreads, writeGraphSize,maxMemSizeGB,parameterFile);
 	UINT64 minimumOverlapLength = readOverlapParameter(parameterFile);
 	cout<<"Max usable memory: "<<maxMemSizeGB<< " GB"<<endl;
-	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, graphFileNames, minimumOverlapLength);
+	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, graphFileNames, minimumOverlapLength, maxThreads);
 	HashTable *hashTable=new HashTable(numprocs);
 	hashTable->insertDataset(dataSet, minimumOverlapLength,numprocs, myid);
 	OverlapGraph *overlapGraph;
@@ -131,11 +131,11 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 		else if (argumentsList[i] == "-f")
 			graphFileNames = argumentsList[++i];
 		else if (argumentsList[i] == "-t")
-			maxthreads = atoi(argumentsList[++i].c_str());
+			maxthreads = std::stoull(argumentsList[++i].c_str(),nullptr,0);
 		else if (argumentsList[i] == "-w")
-			writeGraphSize = atoi(argumentsList[++i].c_str());
+			writeGraphSize = std::stoull(argumentsList[++i].c_str(),nullptr,0);
 		else if (argumentsList[i] == "-m")
-			maxMemSizeGB = atoi(argumentsList[++i].c_str());
+			maxMemSizeGB = std::stoull(argumentsList[++i].c_str(),nullptr,0);
 		else if (argumentsList[i] == "-p")
 			parameterFile = argumentsList[++i];
 		else if (argumentsList[i] == "-s")

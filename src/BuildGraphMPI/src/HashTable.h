@@ -59,10 +59,10 @@ class HashTable{
 		string getStringReverse(UINT64 offset) const;  								// Get the reverse string of the read at offset.
 		UINT64 getReadLength(UINT64 offset) const; 								// Get the length of the string in the read at offset.
 
-		void readReadLengthsFromFile(string fileName, UINT64 minOverlap);
+		void readReadLengthsFromFile(string fileName, UINT64 minOverlap, UINT64 &fileIndex);
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData();												//Populate the read sequence in the hash data
-		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &readID);
+		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex);
 
 };
 

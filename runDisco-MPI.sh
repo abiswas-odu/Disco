@@ -32,10 +32,10 @@ case $key in
     echo -e "Usage: For clusters using PBS with OpenMPI's mpirun\n"
     echo -e "   runDisco.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
-    echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
+    echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz files).\n"
     echo -e "   -in1\t forward paired read filename (single fasta/fastq/fastq.gz file).\n"
     echo -e "   -in2\t reverse paired read filename (single fasta/fastq/fastq.gz file).\n"
-    echo -e "   -inP\t interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).\n"
+    echo -e "   -inP\t interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz files).\n"
     echo -e "   -d\t output directory path.\n"
     echo -e "   -o\t output filename prefix.\n"
     echo -e "<OPTIONS>\n"
@@ -163,10 +163,10 @@ outSimplifyPrefix="${dataOutPath}/assembly/${outPrefix}"
 
 logFile="${dataOutPath}/${outPrefix}.log"
 #Create edge file list
-i=0
 j=0
 while [ $j -lt $numProcs ]
 do
+   i=1
    while [ $i -lt $numThreads ]
    do
       edgeFiles="${edgeFiles}${dataOutPath}/graph/${outPrefix}_${j}_${i}_parGraph.txt,"
@@ -177,10 +177,10 @@ done
 edgeFiles=${edgeFiles%?}
 
 #Create contained read file list
-i=0
 j=0
 while [ $j -lt $numProcs ]
 do
+   i=1
    while [ $i -lt $numThreads ]
    do
       containedReads="${containedReads}${dataOutPath}/graph/${outPrefix}_${j}_${i}_containedReads.txt,"

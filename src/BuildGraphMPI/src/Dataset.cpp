@@ -31,7 +31,8 @@ Dataset::Dataset(void)
 /**********************************************************************************************************************
 	Another constructor
 **********************************************************************************************************************/
-Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFileNames, string fileNamePrefix, UINT64 minOverlap)
+Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFileNames, string fileNamePrefix,
+		UINT64 minOverlap, UINT64 maxThreads)
 {
 	// Initialize the variables.
 	numberOfUniqueReads = 0;
@@ -43,6 +44,50 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	singleEndDatasetFileNames = singleEndFileNames;
 	minimumOverlapLength = minOverlap;
 	UINT64 counter = 0, fileIndex=0;
+
+	filterStrings = {"ACACACACACACACACACACACACACACA",
+			"AGAGAGAGAGAGAGAGAGAGAGAGAGAGA",
+			"ATATATATATATATATATATATATATATA",
+			"CGCGCGCGCGCGCGCGCGCGCGCGCGCGC",
+			"CTCTCTCTCTCTCTCTCTCTCTCTCTCTC",
+			"AAGAAGAAGAAGAAGAAGAAGAAGAAGAA",
+			"ATAATAATAATAATAATAATAATAATAAT",
+			"TAATAATAATAATAATAATAATAATAATA",
+			"AACAACAACAACAACAACAACAACAACAA",
+			"ACAACAACAACAACAACAACAACAACAAC",
+			"CAACAACAACAACAACAACAACAACAACA",
+			"AAGAAGAAGAAGAAGAAGAAGAAGAAGAA",
+			"AGAAGAAGAAGAAGAAGAAGAAGAAGAAG",
+			"GAAGAAGAAGAAGAAGAAGAAGAAGAAGA",
+			"TTCTTCTTCTTCTTCTTCTTCTTCTTCTT",
+			"AAATAAATAAATAAATAAATAAATAAATA",
+			"TAAATAAATAAATAAATAAATAAATAAAT",
+			"ATAAATAAATAAATAAATAAATAAATAAA",
+			"AATAAATAAATAAATAAATAAATAAATAA",
+			"AATTAATTAATTAATTAATTAATTAATTA",
+			"ATTAATTAATTAATTAATTAATTAATTAA",
+			"TTAATTAATTAATTAATTAATTAATTAAT",
+			"TAATTAATTAATTAATTAATTAATTAATT",
+			"AAAGAAAGAAAGAAAGAAAGAAAGAAAGA",
+			"AAAGAAAGAAAGAAAGAAAGAAAGAAAGA",
+			"AGAAAGAAAGAAAGAAAGAAAGAAAGAAA",
+			"GAAAGAAAGAAAGAAAGAAAGAAAGAAAG",
+			"TACATACATACATACATACATACATACAT",
+			"ACATACATACATACATACATACATACATA",
+			"CATACATACATACATACATACATACATAC",
+			"ATACATACATACATACATACATACATACA",
+			"GTTTGTTTGTTTGTTTGTTTGTTTGTTTG",
+			"TGTTTGTTTGTTTGTTTGTTTGTTTGTTT",
+			"TTGTTTGTTTGTTTGTTTGTTTGTTTGTT",
+			"TTTGTTTGTTTGTTTGTTTGTTTGTTTGT",
+			"AGGGAGGGAGGGAGGGAGGGAGGGAGGGA",
+			"GAGGGAGGGAGGGAGGGAGGGAGGGAGGG",
+			"GGAGGGAGGGAGGGAGGGAGGGAGGGAGG",
+			"GGGAGGGAGGGAGGGAGGGAGGGAGGGAG"};
+
+	merCheckStrings={"AC","AG","AT","CG","CT","GT","AAT","ATA","TAA","AAC","ACA","CAA","AAG","AGA","GAA"};
+
+	parallelThreadPoolSize=maxThreads;
 
 	ofstream filePointer;
 	string fileName = fileNamePrefix+"_ReadIDMap.txt";
@@ -79,6 +124,15 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 		reads->at(i)->setReadNumber(i + 1);
 	numberOfUniqueReads=reads->size();
 	reads->shrink_to_fit();
+
+	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
+	fIndxReadIDMap = new map<UINT64, UINT64>;
+	for(UINT64 i = 1; i <= getNumberOfUniqueReads(); i++)
+	{
+		UINT64 fIndx = getReadFromID(i)->getFileIndex();
+		auto it = fIndxReadIDMap->end();
+		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
+	}
 }
 /**********************************************************************************************************************
 	This function reads the dataset from FASTA/FASTQ files
@@ -101,8 +155,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 				cout<< setw(10) << goodReads + badReads << " read processed added in hashtable. " << setw(10) << goodReads << " good reads." << setw(10) << badReads << " bad reads." << endl;
 			string line1=seq->seq.s;
 			fIndx++;							//Increment file index of the read
-			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-				*p = toupper(*p);
 			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
 			{
 				Read *r1=new Read(fIndx);
@@ -112,7 +164,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 				if(len < shortestReadLength)
 					shortestReadLength = len;
 				reads->push_back(r1);						// Store the first string in the dataset.
-				numberOfReads++;							// Counter of the total number of reads.
 				goodReads++;
 			}
 			else
@@ -137,6 +188,7 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 		string text;
 		enum FileType { FASTA, FASTQ, UNDEFINED};
 		FileType fileType = UNDEFINED;
+
 		while(getline(myFile,text))
 		{
 			string line1="",line0="";
@@ -177,8 +229,6 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 				line1 = line.at(1); 			// The first string is in the 2nd line.
 			}
 			fIndx++;							//Increment file index of the read
-			for (std::string::iterator p = line1.begin(); line1.end() != p; ++p) // Change the case
-				*p = toupper(*p);
 			if(line1.length() > minOverlap && testRead(line1) ) // Test the read is of good quality.
 			{
 				Read *r1=new Read(fIndx);
@@ -187,17 +237,17 @@ bool Dataset::readDataset(string fileName, UINT64 minOverlap, UINT64 datasetNumb
 					longestReadLength = len;
 				if(len < shortestReadLength)
 					shortestReadLength = len;
-
 				reads->push_back(r1);						// Store the first string in the dataset.
-				numberOfReads++;							// Counter of the total number of reads.
 				goodReads++;
 			}
 			else
+			{
 				badReads++;
+			}
 		}
-
 		myFile.close();
 	}
+	numberOfReads+=goodReads;				// Counter of the total number of reads.
     cout << endl << "Dataset: " << setw(2) << datasetNumber << endl;
     cout << "File name: " << fileName << endl;
 	cout << setw(10) << goodReads << " good reads in current dataset."  << endl;
@@ -230,18 +280,40 @@ UINT64 Dataset::getNumberOfUniqueReads(void)
 **********************************************************************************************************************/
 bool Dataset::testRead(const string & read)
 {
-
 	UINT64 cnt[4] = {0,0,0,0};
 	UINT64 readLength = read.length();
-	for(UINT64 i = 0; i < readLength; i++) // Count the number of A's, C's , G's and T's in the string.
+	if(readLength < MIN_READ_SIZE)
+		return false;
+	for(UINT64 i = 0; i < readLength; i++) // Count the number of A's, C's , G's and T's in the string and check no other characters exist
 	{
 		if(read[i]!= 'A' && read[i] != 'C' && read[i] != 'G' && read[i] != 'T')
 			return false;
 		cnt[(read[i] >> 1) & 0X03]++; // Least significant 2nd and 3rd bits of ASCII value used here
 	}
-	UINT64 threshold = read.length()*.8;	// 80% of the length.
+	UINT64 threshold = read.length()*.7;	// 70% of the length.
 	if(cnt[0] >= threshold || cnt[1] >= threshold || cnt[2] >= threshold || cnt[3] >= threshold)
 		return false;	// If 80% bases are the same base.
+
+	//This loop filters out reads with unusually micro-repeating kmers at start or end
+	for(size_t i=0;i<filterStrings.size();i++)
+	{
+		UINT64 len=filterStrings[i].size();
+		if(read.size()<len)				//Read must be at-least as long as the filter strings
+			return false;
+		if(filterStrings[i] == read.substr(0,len))
+			return false;
+		if(filterStrings[i] == read.substr(read.length()-len))
+			return false;
+	}
+	//Check if dimers or trimers exist in very large numbers
+	threshold = read.length()*.5;	// 50% of the length.
+	for(size_t i=0;i<merCheckStrings.size();i++)
+	{
+		size_t repeatCtr = countSubstring(read, merCheckStrings[i]);
+		repeatCtr = repeatCtr * merCheckStrings[i].length();
+		if(repeatCtr >= threshold)		//Check if repeat appears over more than 50% of the read's sequence
+			return false;				//One of the dimers/trimers exist in large micro repeats
+	}
 	return true;
 }
 
@@ -278,7 +350,24 @@ Read * Dataset::getReadFromID(UINT64 ID)
 	}
 	return reads->at(ID - 1);
 }
-
+/**********************************************************************************************************************
+	This function returns a read from its FileIndex.
+**********************************************************************************************************************/
+Read * Dataset::getReadFromFileIndex(UINT64 fID)
+{
+	UINT64 readID=0;
+	size_t i = fID<reads->size()?fID:reads->size();
+	for(;i>0;i--)
+	{
+		Read *r = getReadFromID(i);
+		if(r->getFileIndex()==fID)
+		{
+			readID = r->getReadNumber();
+			break;
+		}
+	}
+	return getReadFromID(readID);
+}
 /**********************************************************************************************************************
 	Default destructor
 **********************************************************************************************************************/
@@ -291,4 +380,11 @@ Dataset::~Dataset(void)
 	}
 	delete reads;
 
+}
+/*
+ * Deallocate the memory storing the map between file index and read id after its not needed
+ */
+void Dataset::freeFindexReadIDMAP()
+{
+	delete fIndxReadIDMap;
 }

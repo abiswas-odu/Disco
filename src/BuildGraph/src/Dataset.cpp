@@ -390,6 +390,8 @@ bool Dataset::testRead(const string & read)
 {
 	UINT64 cnt[4] = {0,0,0,0};
 	UINT64 readLength = read.length();
+	if(readLength < MIN_READ_SIZE)
+		return false;
 	for(UINT64 i = 0; i < readLength; i++) // Count the number of A's, C's , G's and T's in the string and check no other characters exist
 	{
 		if(read[i]!= 'A' && read[i] != 'C' && read[i] != 'G' && read[i] != 'T')
@@ -404,6 +406,8 @@ bool Dataset::testRead(const string & read)
 	for(size_t i=0;i<filterStrings.size();i++)
 	{
 		UINT64 len=filterStrings[i].size();
+		if(read.size()<len)				//Read must be at-least as long as the filter strings
+			return false;
 		if(filterStrings[i] == read.substr(0,len))
 			return false;
 		if(filterStrings[i] == read.substr(read.length()-len))
@@ -473,8 +477,6 @@ Read * Dataset::getReadFromFileIndex(UINT64 fID)
 	}
 	return getReadFromID(readID);
 }
-
-
 
 /**********************************************************************************************************************
 	Default destructor
