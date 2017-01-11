@@ -1,27 +1,27 @@
 # DISCO
 
-DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **DISCO**. 
+DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multiprocess distributed memory overlap-layout-consensus (OLC) metagenome assembler - **DISCO**. The detailed user manual of the assembler and how to use it to acheive best results is provided here: [http://disco.omicsbio.org/user-manual](http://disco.omicsbio.org/user-manual). This is a quick start guide generally for developers and testers. Users with limited experience with genome assembly are advised to use the user manual.    
 
 ### Current Version
 * v1.0
 
 ### Setup and Installation
 
-### Dependencies
+### Basic Dependencies
 
 1. GNU GCC with C++11 support i.e. gcc4.9+ or above
 2. MPI Library with MPI-3 support i.e. OpenMPI 1.8 and above or cray-mpich/7.4.0 and above. By default the mpic++ wrapper is needed. If you are on a Cray cluster and the wrapper is "CC". You will need to edit the compiler.mk file. Uncomment the line "CC := CC" and comment out "CC := mpic++".   
 3. zlib/1.2.8 is optional for reading gzipped fasta/fastq files.
  
 ### Installation Steps
-1. Download the tarball with compiled executables for Linux or the source code at: [https://github.com/abiswas-odu/Disco](https://github.com/abiswas-odu/Disco). The code has been tested on Linux a, but not under Windows or MacOSX.
+1. Download the tarball with compiled executables for Linux with GCC 4.9 and above from  [https://github.com/abiswas-odu/Disco/releases](https://github.com/abiswas-odu/Disco/releases). The code has been tested only on Linux.
 2. If you decide to download the source code, use the following commands to build:
   1. OpenMP version "make openmp". This is also the default make option.  
   2. MPI distributed computing version "make mpi-dist-comp" 
   3. MPI distributed memory version "make mpi-dist-mem"
   4. All the versions can be built with "make all"
 3. The assembler can be built with the make option "READGZ=1". 
-If compiled successfully, the required executables will be built anf the runDisco scripts can be used to run the assembler. 
+If compiled successfully, the required executables will be built and the various `runDisco...` scripts can be used to run the assembler. 
 
 ### Quickly Running The Assembler
 
@@ -33,10 +33,10 @@ There are two basic versions of the assembler one for running on a single machin
 #!/bin/bash
 
 # Seperated mate pair reads
-runDisco.sh -d ${output_directory} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OUTPUT_PREFIX} 
+runDisco.sh -d ${output_dir} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
 
 # Interleaved mate pair reads
-runDisco.sh -d ${output_directory} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OUTPUT_PREFIX} 
+runDisco.sh -d ${output_dir} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OP_PREFIX} 
 
 ```
 Use `./runDisco.sh -h` for help information.
@@ -53,27 +53,18 @@ For the basic MPI version make sure the RAM on the nodes is more than the disk s
 
 ### MPI Verion 
 ### Seperated paired end reads
-runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_PREFIX} 
+runDisco-MPI.sh -d ${output_dir} -in1 {read_1.fastq} -in2 ${read2_2.fastq} -o ${OP_PREFIX} 
 
 ### MPI Remote Memory Access(RMA) Verion 
 ### Seperated paired end reads
-runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -o ${OUTPUT_PREFIX} -rma 
+runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -o ${OP_PREFIX} -rma 
 
 ```
 Use `runDisco-MPI.sh -h` for help information.
 
-### Features
+### Guide to Assembly of Raw Metagenomic Illumina data
 
-* Quick summary
-**Disco** is a massively improved multi-threaded, multi-process distributed memory version of [Omega](http://bioinformatics.oxfordjournals.org/content/early/2014/07/06/bioinformatics.btu395.short), its unique capabilities include:
-
-    1. Modularization of contained and duplicate reads removal, and initial graph construction after transitive edge reduction step: Big data set can be processed in chunks so that memory limitation problem is solved.
-
-    2. More effective and accurate graph reduction steps result in shorter running time and much higher assembly quality.
-
-    3. The assembler includes a paired end read based scaffolding step. 
-    
-### Assembly of Metagenomic sequencing reads from raw Illumina data
+The raw Illumina sequences need to be preprocessed before assembly with Disco. Disco provides wrapper scripts to perform preprocessing with BBTools. Please see user manual for more details: [http://disco.omicsbio.org/user-manual](http://disco.omicsbio.org/user-manual)
 
 #### Preprocessing of the Illumina data
 
@@ -201,85 +192,6 @@ Disco assembler can be restarted with changed assembly and scaffolding parameter
 
 Disco assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Disco will attempt to continue the assembly. Do not set the `-osg` option in this case.   
 
-#### Setting assembly parameters
-
-The assembly parameters can be modified to attempt better assembly. This can be done through a parameter file passed using the `-p` parameter to the run script. 
-
-The configurable parameters include the following:
-
-```
-##############################################################
-###   Assembly and scaffolding configurations for Disco   ###
-##############################################################
-
-#### Parameters for building an overlap graph ####
-
-# Minimum overlap length (bp) required to insert an edge between two reads during graph construction 
-# Increase this to reduce N50 and mis-assemblies
-MinOverlap4BuildGraph = 40  
-
-###################################################
-
-#### Parameters for simplifying an overlap graph ####
-# You can run graph simplification using different settings below on the same assembly graph without re-doing graph construction.
-
-# Parameters for Disco output
-
-# Print contigs or not. Options are "false" (default) or "true". Printing takes a non-trivial amount of wall-clock time.
-PrintContigs = true
-# Print scaffolds or not. Options are "true" (default) or "false"
-PrintScaffolds = true
-# Print unused reads or not. Options are "true" or "false" (default)
-PrintUnused = true
-# Print GFA/GFA2 graph format. Options are "true" or "false" (default)
-PrintGFA = false
-PrintGFA2 = false
-# Minimum length of contigs or scaffolds to be printed (default: 1000 bp)
-minSequenceLengthTobePrinted = 1000
-
-
-# Minimum overlap length (bp) required to keep an edge between two reads during graph simplification
-# This minimum overlap length must be equal to (Default) or larger than the MinOverlap4BuildGraph above
-# This allows you to try different minimum overlap lengths for assembly without re-doing assembly graph construction
-# Edges with shorter overlap length than this parameter will be ignored during graph simplification
-# Increase this to reduce N50 and mis-assemblies
-MinOverlap4SimplifyGraph = 40
-
-# Minimum overlap length difference (bp) to clip branches (default: 25 bp)
-# If a read has multiple edges, Disco clips the branches with overlap lengths less than the largest overlap of this read by this difference or more.
-# Increase this to reduce N50 and mis-assemblies
-minOverlapDifference4ClipBranches = 25 
-
-
-# Parameters for joins edges or scaffolding edges using paired-end information 
-# Minumum number of paired-end reads that provide unique support to merge two edges (default: 3)
-# Increase this to reduce N50 and mis-assemblies
-minUniquePEsupport=3  
-# Minumum number of paired-end reads that provide non-unique support to merge two edges (default: 0)
-minNonUniquePEsupport=0
-
-
-# Parameters for dead-end edge removal
-
-# Minimum number of reads in an edge to be not dead-end edge (default: 10)
-minReadsCountInEdgeToBeNotDeadEnd = 10
-# Minimum edge length (bp) to be not dead-end edge (default: 1000)
-minEdgeLengthToBeNotDeadEnd = 1000
-# Minimum fold difference between two branches' lengths to consider a branch to be short (default: 5)
-minFoldToBeShortBranch = 5
-
-# Parameters for flow analysis
-
-# Minimum number of reads for an edge to be kept even if it has 0 flow (default: 15)
-minReadsCountToHave0Flow = 15
-# Minimum edge length for an edge to be kept even if it has 0 flow (default: 1500)
-minEdgeLengthToHave0Flow = 1500
-# Minimum number of reads in an edge to be assigned with 1 minimum flow (default: 20)
-minReadsCountInEdgeToBe1MinFlow = 20
-# Minimum edge length to be assigned with 1 minimum flow (default: 2000 bp)
-minEdgeLengthToBe1MinFlow = 2000
-
-```
 #### Disco Assembler Output
 
 Please see the OUTPUT.md file for description of the output files.  

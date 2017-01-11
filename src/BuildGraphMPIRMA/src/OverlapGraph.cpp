@@ -372,7 +372,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 			string edge_file=fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" ;
 			string prev_composite_out_edge_file = fnamePrefixSimplify + "_" + SSTR((myProcID*(parallelThreadPoolSize-1))+(threadID-1)) +"_ParSimpleEdges.txt";
 			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
-									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(parallelThreadPoolSize) ;
+									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(1) ;
 			//Perform the first partial graph simplification
 			int retStatus = system(runSimplifyExeStr.c_str());
 		}
