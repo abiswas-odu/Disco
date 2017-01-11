@@ -192,6 +192,14 @@ Disco assembler can be restarted with changed assembly and scaffolding parameter
 
 Disco assembler can also be restarted after a crash caused due to exceeding wall clock time or out of memory errors. The job must be restarted with the same command as before and Disco will attempt to continue the assembly. Do not set the `-osg` option in this case.   
 
+#### Setting assembly parameters
+
+The assembly parameters can be modified to attempt better assembly. This can be done through a parameter file passed using the `-p` parameter to the run script. 
+
+The configurable parameters are described in the user manual [http://disco.omicsbio.org/user-manual](http://disco.omicsbio.org/user-manual).
+
+The default configuration parameters are in disco.cfg, disco_2.cfg, and disco_3.cfg. 
+
 #### Disco Assembler Output
 
 Please see the OUTPUT.md file for description of the output files.  
