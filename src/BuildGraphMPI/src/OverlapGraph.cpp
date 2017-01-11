@@ -58,7 +58,8 @@ BNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNMM
 
 **********************************************************************************************************************/
 OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
-		UINT64 maxMemSizeGB, string fnamePrefix,int myid, int numprocs)
+		UINT64 maxMemSizeGB, string fnamePrefixGraph,string fnamePrefixSimplify,
+		string simplifyPartialPath,int myid, int numprocs)
 {
 	// Initialize the variables.
 	numberOfNodes = 0;
@@ -84,7 +85,7 @@ OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
 	else
 		writeParGraphSize=MIN_PAR_GRAPH_SIZE;		// (0,5)GB per thread available
 
-	buildOverlapGraphFromHashTable(fnamePrefix,numprocs);
+	buildOverlapGraphFromHashTable(fnamePrefixGraph,fnamePrefixSimplify,simplifyPartialPath,numprocs);
 }
 
 /**********************************************************************************************************************
@@ -93,14 +94,14 @@ OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
 OverlapGraph::~OverlapGraph()
 {
 	// Free the memory used by the overlap graph.
-
 }
 
 
 /**********************************************************************************************************************
 	Build the overlap graph from hash table
 **********************************************************************************************************************/
-bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numprocs)
+bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefixGraph,string fnamePrefixSimplify,
+		string simplifyPartialPath, int numprocs)
 {
 	CLOCKSTART;
 	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
@@ -112,7 +113,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
 	}
 	//Contained reads are considered already marked to remove them form further consideration...
-	markContainedReads(fnamePrefix, fIndxReadIDMap,numprocs);
+	markContainedReads(fnamePrefixGraph, fIndxReadIDMap,numprocs);
 
 	UINT64 numNodes = dataSet->getNumberOfUniqueReads()+1;
 	int *allMarked = new int[numNodes];
@@ -132,7 +133,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		int threadID = omp_get_thread_num();
-		string parFileName = fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt";
+		string parFileName = fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt";
 		if(ifstream(parFileName.c_str()))
 		{
 			prevResultExists=true;
@@ -373,7 +374,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 				INT64 mem_used = checkMemoryUsage();
 				if(writtenMakedNodes>5)
 					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
-				saveParGraphToFile(fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
+				saveParGraphToFile(fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 				for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
 				{
 					UINT64 readID = it->first;
@@ -398,10 +399,16 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, int numpro
 					}
 				}
 			}
+			string edge_file=fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" ;
+			string prev_composite_out_edge_file = fnamePrefixSimplify + "_" + SSTR((myProcID*(parallelThreadPoolSize-1))+(threadID-1)) +"_ParSimpleEdges.txt";
+			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
+									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(parallelThreadPoolSize) ;
+			//Perform the first partial graph simplification
+			int retStatus = system(runSimplifyExeStr.c_str());
 		}
 	}
 	delete[] allMarked;
-	cout<<endl<<"Graph construction complete."<<endl;
+	cout<<endl<<"Graph construction and initial simplification complete."<<endl;
 	CLOCKSTOP;
 	return true;
 }

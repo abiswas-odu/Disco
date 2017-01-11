@@ -15,7 +15,8 @@
 #include "Read.h"
 
 void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, vector<string> & singleEndFileNames,
-		string & allFileName,UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile);
+		string & graphFileNames,string &fnamePrefixSimplify, string &simplifyPartialPath,
+		UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile);
 
 UINT64 readOverlapParameter(string parameterFile);
 
@@ -38,28 +39,31 @@ int main(int argc, char **argv)
 	start = MPI_Wtime();
 
 	cout<<"Software: Disco Assembler (Distributed Memory) [November 2016]"<<endl;
-	cout<<"Version : 3.0.3"<<endl;
+	cout<<"Version : 1.0"<<endl;
 	cout<<"Developed by: Biswas, Abhishek; Pan, Chongle et.al."<<endl;
 	cout<<"Affiliation: Oak Ridge National Lab / University of Tennessee"<<endl;
 
 
 	printf("Rank %d running on %s with %d threads.\n", myid, name, omp_get_max_threads());
 	vector<string> pairedEndFileNames, singleEndFileNames;
-	string allFileName;
+	string graphFileNames;
 	string parameterFile;
 	UINT64 maxThreads = omp_get_max_threads();
 	UINT64 writeGraphSize = MID_PAR_GRAPH_SIZE;
+	string fnamePrefixSimplify;
+	string simplifyPartialPath;
 	UINT64 maxMemSizeGB = getMaxMemory();
 	cout<<"Max available memory: "<<maxMemSizeGB<< " GB"<<endl;
-	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, allFileName,
+	parseArguments(argc, argv, pairedEndFileNames, singleEndFileNames, graphFileNames,fnamePrefixSimplify,simplifyPartialPath,
 				maxThreads, writeGraphSize,maxMemSizeGB,parameterFile);
 	UINT64 minimumOverlapLength = readOverlapParameter(parameterFile);
 	cout<<"Max usable memory: "<<maxMemSizeGB<< " GB"<<endl;
-	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, allFileName, minimumOverlapLength);
+	Dataset *dataSet = new Dataset(pairedEndFileNames, singleEndFileNames, graphFileNames, minimumOverlapLength);
 	HashTable *hashTable=new HashTable(numprocs);
 	hashTable->insertDataset(dataSet, minimumOverlapLength,numprocs, myid);
 	OverlapGraph *overlapGraph;
-	overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,allFileName,myid,numprocs); //hashTable deleted by this function after building the graph also writes graph
+	overlapGraph=new OverlapGraph(hashTable,maxThreads,writeGraphSize,maxMemSizeGB,graphFileNames,fnamePrefixSimplify,
+			simplifyPartialPath,myid,numprocs); //hashTable deleted by this function after building the graph also writes graph
 	MPI_Barrier(MPI_COMM_WORLD); /* IMPORTANT */
 	delete hashTable;	//  Do not need the hash table any more.
 	delete dataSet;
@@ -78,9 +82,10 @@ int main(int argc, char **argv)
 **********************************************************************************************************************/
 
 void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, vector<string> & singleEndFileNames,
-		string & allFileName,UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile)
+		string & graphFileNames,string &fnamePrefixSimplify, string &simplifyPartialPath,
+		UINT64 & maxthreads, UINT64 & writeGraphSize, UINT64 &maxMemSizeGB,string &parameterFile)
 {
-	allFileName = "";
+	graphFileNames = "";
 	vector<string> argumentsList;
 	cout << "PRINTING ARGUMENTS" << endl;
 	for(int i = 0; i < argc; i++)
@@ -96,7 +101,9 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 		cerr << endl << "Usage: buildG [OPTION]...[PRARAM]..." << endl;
 		cerr << "  -pe\tnumber of files and paired-end file names" <<endl; 			// Paired-end file name in fasta/fastq format. mate pairs should be one after another in the file.
 		cerr << "  -se\tnumber of files and single-end file names" <<endl; 			// Single-end file name in fasta/fastq format.
-		cerr << "  -f\tAll file name prefix" <<endl; 			// all output file with have this name with different extensions.
+		cerr << "  -f\tGraph file name prefix" <<endl; 			// graph output file with have this name with different extensions.
+		cerr << "  -s\tSimplified edges file name prefix" <<endl; 			// edges output file with have this name with different extensions.
+		cerr << "  -simPth\tPartial simplification executable path" <<endl; 			// path to partial simplification exe
 		cerr << "  -t\tmaximum threads used" << endl; 	// Maximum OMP threads used
 		cerr << "  -m\tmaximum memory usage allowed (default: max available; info: use atleast disk space size of reads + 1GB per thread specified by -t)" << endl; 	// Maximum memory to be used before written to disk
 		exit(0);
@@ -122,7 +129,7 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 			}
 		}
 		else if (argumentsList[i] == "-f")
-			allFileName = argumentsList[++i];
+			graphFileNames = argumentsList[++i];
 		else if (argumentsList[i] == "-t")
 			maxthreads = atoi(argumentsList[++i].c_str());
 		else if (argumentsList[i] == "-w")
@@ -131,12 +138,18 @@ void parseArguments(int argc, char **argv, vector<string> & pairedEndFileNames, 
 			maxMemSizeGB = atoi(argumentsList[++i].c_str());
 		else if (argumentsList[i] == "-p")
 			parameterFile = argumentsList[++i];
+		else if (argumentsList[i] == "-s")
+			fnamePrefixSimplify = argumentsList[++i];
+		else if (argumentsList[i] == "-simPth")
+			simplifyPartialPath = argumentsList[++i];
 		else
 		{
 			cerr << endl << "Usage: buildG [OPTION]...[PRARAM]..." << endl;
 			cerr << "  -pe\tnumber of files and paired-end file names" <<endl; 			// Paired-end file name in fasta/fastq format. mate pairs should be one after another in the file.
 			cerr << "  -se\tnumber of files and single-end file names" <<endl; 			// Single-end file name in fasta/fastq format.
-			cerr << "  -f\tAll file name prefix" <<endl; 			// all output file with have this name with different extensions.
+			cerr << "  -f\tGraph file name prefix" <<endl; 			// graph output file with have this name with different extensions.
+			cerr << "  -s\tSimplified edges file name prefix" <<endl; 			// edges output file with have this name with different extensions.
+			cerr << "  -simPth\tPartial simplification executable path" <<endl; 			// path to partial simplification exe
 			cerr << "  -t\tmaximum threads used" << endl; 	// Maximum OMP threads used
 			cerr << "  -m\tmaximum memory usage allowed (default: max available; info: use at least disk space size of reads + 1GB per thread specified by -t)" << endl; 	// Maximum memory to be used before written to disk
 			if (argumentsList[i] == "-h" || argumentsList[i] == "--help")

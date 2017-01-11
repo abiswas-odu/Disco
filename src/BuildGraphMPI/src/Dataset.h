@@ -41,6 +41,7 @@ class Dataset
 		UINT64 getNumberOfUniqueReads(void); 				// Get the number of unique reads in the database.
 		Read * getReadFromID(UINT64 ID); 					// Find a read in the database given the ID in constant time.
 		UINT64 getReadLength(UINT64 ID);
+		UINT64 getMinimumOverlapLength() { return minimumOverlapLength; }
 };
 
 

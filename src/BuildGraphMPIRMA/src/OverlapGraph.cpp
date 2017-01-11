@@ -22,7 +22,8 @@ bool compareEdges (Edge *edge1, Edge* edge2)
 	Constructor. Build the overlap graph using the hash table.
 **********************************************************************************************************************/
 OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
-		UINT64 maxMemSizeGB, string fnamePrefix, int myid, int numprocs)
+		UINT64 maxMemSizeGB, string fnamePrefixGraph,string fnamePrefixSimplify,
+		string simplifyPartialPath, int myid, int numprocs)
 {
 	// Initialize the variables.
 	numberOfNodes = 0;
@@ -53,7 +54,7 @@ OverlapGraph::OverlapGraph(HashTable *ht, UINT64 maxThreads,UINT64 maxParGraph,
 		writeParGraphSize=MIN_PAR_GRAPH_SIZE;		// (0,5)GB per thread available
 
 
-	buildOverlapGraphFromHashTable(ht,fnamePrefix,numprocs);
+	buildOverlapGraphFromHashTable(ht,fnamePrefixGraph,fnamePrefixSimplify,simplifyPartialPath,numprocs);
 }
 
 /**********************************************************************************************************************
@@ -69,7 +70,8 @@ OverlapGraph::~OverlapGraph()
 /**********************************************************************************************************************
 	Build the overlap graph from hash table
 **********************************************************************************************************************/
-bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePrefix, int numprocs)
+bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePrefixGraph,string fnamePrefixSimplify,
+		string simplifyPartialPath, int numprocs)
 {
 	CLOCKSTART;
 
@@ -82,7 +84,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 		fIndxReadIDMap->insert(it, pair<UINT64,UINT64>(fIndx,i));
 	}
 	//Contained reads are considered already marked to remove them form further consideration...
-	markContainedReads(fnamePrefix, fIndxReadIDMap, numprocs);
+	markContainedReads(fnamePrefixGraph, fIndxReadIDMap, numprocs);
 	UINT64 numNodes=dataSet->getNumberOfUniqueReads()+1;
 
 	//Check if partial previous run data exists... Load partial graph data and mark reads.
@@ -90,7 +92,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 	#pragma omp parallel num_threads(parallelThreadPoolSize)
 	{
 		int threadID = omp_get_thread_num();
-		string parFileName = fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt";
+		string parFileName = fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt";
 		if(ifstream(parFileName.c_str()))
 		{
 			prevResultExists=true;
@@ -350,7 +352,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 				INT64 mem_used = checkMemoryUsage();
 				if(writtenMakedNodes>5)
 					cout<<"Proc:"<<myProcID<<" Thread:"<<threadID<<" Start Read ID:"<<startReadID<<" Reads Processed:"<<writtenMakedNodes<<" Memory Used:" << mem_used << endl;
-				saveParGraphToFile(fnamePrefix + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
+				saveParGraphToFile(fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" , exploredReads, parGraph);
 				for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
 				{
 					UINT64 readID = it->first;
@@ -375,6 +377,12 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 					}
 				}
 			}
+			string edge_file=fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" ;
+			string prev_composite_out_edge_file = fnamePrefixSimplify + "_" + SSTR((myProcID*(parallelThreadPoolSize-1))+(threadID-1)) +"_ParSimpleEdges.txt";
+			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
+									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(parallelThreadPoolSize) ;
+			//Perform the first partial graph simplification
+			int retStatus = system(runSimplifyExeStr.c_str());
 		}
 	}
 	hashTable->unLockAll();
