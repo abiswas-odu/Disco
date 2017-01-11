@@ -43,7 +43,7 @@ Use `./runDisco.sh -h` for help information.
 
 * __MPI Version:__ This version of the assembler should be used if you are going to run the assembler with MPI support on a cluster. The run script to invoke the assembler depends on the cluster management and job scheduling system.
 
-	1. If you have ORTE i.e. __mpirun__ is avilable, invoke the assembler using the run script `runDisco-MPI.sh`. 
+	1. If you have ORTE i.e. __mpirun__ is available, invoke the assembler using the run script `runDisco-MPI.sh`. 
 	2. If you have SLRUM i.e. __srun__ is available, invoke the assembler using the run script `runDisco-MPI-SLRUM.sh`.
 	3. If you have ALPS i.e. __aprun__ is available, invoke the assembler using the run script `runDisco-MPI-ALPS.sh`.
  
@@ -127,7 +127,7 @@ The Disco assembler is invoked through the run script `./runDisco.sh`. The basic
 ```
 #!/bin/bash
 
-# Seperated paired end reads
+# Separated paired end reads
 runDisco.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -n ${num_threads} -m {max_mem_usage} -o ${64gen} 
 
 # Interleaved paired end reads

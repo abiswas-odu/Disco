@@ -361,6 +361,79 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${trimFtlEccOutputP} -fs ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
    fi
+elif [ -z "$readFileP" ] ; then
+   #BBTools Preprocessing
+   # Process pair reads
+   OLDIFS=$IFS
+   IFS=',' 
+   array1=($readFile1)
+   array2=($readFile2)
+   arrayS=($readFileS)
+   IFS=$OLDIFS
+   trimFtlOutput1=""       #File list for filtered output
+   rmTrimOutput1=""		#File list to delete trimming output
+   rmTrimFtlOutput1=""     #File list for deleting filtered output
+   trimFtlOutput2=""       #File list for filtered output
+   rmTrimOutput2=""		#File list to delete trimming output
+   rmTrimFtlOutput2=""     #File list for deleting filtered output
+   trimFtlEccOutput="" #File list for error corrected output
+   i=0
+   for element in "${array1[@]}"
+   do
+      fullName1="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fullName2="$(echo -e "${array2[$i]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName1=`basename $fullName1`
+      fName2=`basename $fullName2`
+       ${exePath}/bbmap/bbduk.sh in=${fullName1} in2=${fullName2} out=trm.${fName1} out2=trm.${fName2} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+   ${exePath}/bbmap/bbduk.sh in=trm.${fName1} in2=trm.${fName2} out=int.ftl.trm.${fName1} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      trimFtlOutput="${trimFtlOutput},int.ftl.trm.${fName1}"
+      rmTrimOutput1="${rmTrimOutput1} trm.${fName1}"		
+      rmTrimOutput2="${rmTrimOutput2} trm.${fName2}"		
+      rmTrimFtlOutput="${rmTrimFtlOutput} int.ftl.trm.${fName1}"     
+      extension1="${fName1#*.}"
+      trimFtlEccOutput="${trimFtlEccOutput},tecc.int.ftl.trm.${fName1}"      #File list for error corrected output
+      i=$(( $i+1 ))
+   done
+   trimFtlOutput=${trimFtlOutput#?}
+   rmTrimOutput1=${rmTrimOutput1#?}
+   rmTrimOutput2=${rmTrimOutput2#?}
+   rmTrimFtlOutput=${rmTrimFtlOutput#?}
+   trimFtlEccOutput=${trimFtlEccOutput#?}
+
+   trimFtlOutputS=""       #File list for filtered output
+   rmTrimOutputS=""		#File list to delete trimming output
+   rmTrimFtlOutputS=""     #File list for deleting filtered output
+   trimFtlEccOutputS="" #File list for error corrected output
+   for element in "${arrayS[@]}"
+   do
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName=`basename $fullName`
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      trimFtlOutputS="${trimFtlOutputS},ftl.trm.${fName}"       
+      rmTrimOutputS="${rmTrimOutputS} trm.${fName}"		
+      rmTrimFtlOutputS="${rmTrimFtlOutputS} ftl.trm.${fName}"     
+      trimFtlEccOutputS="${trimFtlEccOutputS},tecc.ftl.trm.${fName}" 
+   done
+   trimFtlOutputS=${trimFtlOutputS#?}
+   trimFtlEccOutputS=${trimFtlEccOutputS#?}
+   rmTrimOutputS=${rmTrimOutputS#?}
+   rmTrimFtlOutputS=${rmTrimFtlOutputS#?}
+   #Error Correction
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   #Delete intermediate files after pre-processing
+   rm ${rmTrimOutput1} ${rmTrimFtlOutput} ${rmTrimOutput2} ${rmTrimFtlOutputS}
+   if [ "$constructGraph" = "Y" ] ; then
+      
+      ${exePath}/buildG -pe ${trimFtlEccOutput} -se ${trimFtlEccOutputS} -f $outGraphPrefix -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  &> ${logFile}
+   fi
+   if [ "$simplifyGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fp ${trimFtlEccOutput} -fs ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
+   fi
 else
    echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired file or two separate paired files not both. Any number of comma seperated single end files can be provided. Exiting..."
    exit 1
