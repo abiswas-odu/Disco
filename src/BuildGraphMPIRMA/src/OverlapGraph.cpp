@@ -379,7 +379,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 	}
 	hashTable->unLockAll();
 	hashTable->endEpoch();
-	cout<<endl<<"Graph Construction Complete"<<endl;
+	cout<<endl<<"Graph Construction and Initial Simplification Complete."<<endl;
 	cout<<"Process:"<<myProcID<<" RMA OPS:"<<hashTable->getRMACount()<<endl;
 	CLOCKSTOP;
 	return true;

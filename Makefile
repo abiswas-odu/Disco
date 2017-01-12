@@ -35,6 +35,7 @@ openmp:
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
+		cp -r bbmap Disco
 		tar -cvzf Disco_omp_x86-Linux.tar.gz Disco
 		rm -rf Disco
 mpi-dist-comp:
@@ -56,6 +57,7 @@ mpi-dist-comp:
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
+		cp -r bbmap Disco
 		tar -cvzf Disco_MPI_DC_x86-Linux.tar.gz Disco
 		rm -rf Disco
 mpi-dist-mem:
@@ -77,6 +79,7 @@ mpi-dist-mem:
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
+		cp -r bbmap Disco
 		tar -cvzf Disco_MPI_DM_x86-Linux.tar.gz Disco
 		rm -rf Disco
 all:
@@ -105,6 +108,7 @@ all:
 		cp README.md Disco
 		cp OUTPUT.md Disco
 		cp LICENSE Disco
+		cp -r bbmap Disco
 		tar -cvzf Disco_All_x86-Linux.tar.gz Disco
 		rm -rf Disco
 clean:
