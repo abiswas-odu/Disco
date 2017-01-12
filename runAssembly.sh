@@ -361,7 +361,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${trimFtlEccOutputP} -fs ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
    fi
-elif [ -z "$readFileP" ] ; then
+elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple SE file as input
    #BBTools Preprocessing
    # Process pair reads
    OLDIFS=$IFS

@@ -397,7 +397,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefixGraph,string
 			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
 									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(1) ;
 			//Perform the first partial graph simplification
-			int retStatus = system(runSimplifyExeStr.c_str());
+			system(runSimplifyExeStr.c_str());
 		}
 	}
 	delete[] allMarked;

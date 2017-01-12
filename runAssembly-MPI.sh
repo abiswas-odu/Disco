@@ -224,7 +224,6 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then   
    done
    trimFtlEccOutput=${trimFtlEccOutput#?}
    if [ "$constructGraph" = "Y" ] ; then
-<<<<<<< HEAD
       mpirun -np $numProcs --map-by ppr:1:node:pe=${numThreads} ${BUILDGEXE} -pe ${trimFtlEccOutput} -f $outGraphPrefix -s ${outSimplifyPrefix} -simPth ${exePath} -p ${asmParaFileP} -t ${numThreads} -m ${maxMem}  > ${logFile}
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
@@ -377,6 +376,46 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    fi
    if [ "$simplifyGraph" = "Y" ] ; then
       ${exePath}/fullsimplify -fpi ${trimFtlEccOutputP} -fs ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+   fi
+elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple SE file as input
+   #BBTools Preprocessing
+   # Process pair reads
+   OLDIFS=$IFS
+   IFS=',' 
+   array1=($readFile1)
+   array2=($readFile2)
+   arrayS=($readFileS)
+   IFS=$OLDIFS
+   trimFtlEccOutput="" #File list for error corrected output
+   i=0
+   for element in "${array1[@]}"
+   do
+      fullName1="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fullName2="$(echo -e "${array2[$i]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName1=`basename $fullName1`
+      fName2=`basename $fullName2`
+      trimFtlEccOutput="${trimFtlEccOutput},tecc.int.ftl.trm.${fName1}"      #File list for error corrected output
+      i=$(( $i+1 ))
+   done
+   trimFtlEccOutput=${trimFtlEccOutput#?}
+
+   trimFtlEccOutputS="" #File list for error corrected output
+   for element in "${arrayS[@]}"
+   do
+      fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
+      fName=`basename $fullName`
+      trimFtlEccOutputS="${trimFtlEccOutputS},tecc.ftl.trm.${fName}" 
+   done
+   trimFtlEccOutputS=${trimFtlEccOutputS#?}
+   if [ "$constructGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fp ${trimFtlEccOutput} -se ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+   fi
+   if [ "$simplifyGraph" = "Y" ] ; then
+      ${exePath}/fullsimplify -fp ${trimFtlEccOutput} -fs ${trimFtlEccOutputS} -e ${edgeFiles} -crd ${containedReads} -simPth ${exePath} -p ${asmParaFileP} -p2 ${asmParaFileP2} -p3 ${asmParaFileP3} -o $outSimplifyPrefix -t ${numThreads} -log DEBUG4 >> ${logFile} 2>&1
+      `cat ${outSimplifyPrefix}_contigsFinal_*.fasta > ${outSimplifyPrefix}_contigsFinalCombined.fasta`
+      `cat ${outSimplifyPrefix}_scaffoldsFinal_*.fasta > ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta`
+      `cp ${outSimplifyPrefix}_contigsFinalCombined.fasta ${dataOutPath}`
+      `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 else
    echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired file or two separate paired files not both. Any number of comma seperated single end files can be provided. Exiting..."
