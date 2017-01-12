@@ -24,65 +24,29 @@ openmp:
 		cp $(BUILD_GRAPH_CODE_DIR)/buildG .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
-		mkdir Disco
-		cp buildG Disco
-		cp fullsimplify Disco
-		cp parsimplify Disco
-		cp disco.cfg Disco
-		cp disco_2.cfg Disco
-		cp disco_3.cfg Disco
-		cp runDisco.sh Disco
-		cp README.md Disco
-		cp OUTPUT.md Disco
-		cp LICENSE Disco
-		cp -r bbmap Disco
-		tar -cvzf Disco_omp_x86-Linux.tar.gz Disco
-		rm -rf Disco
 mpi-dist-comp:
 		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) READGZ=$(GZOPTS)
 		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
 		cp $(BUILD_GRAPH_MPI_CODE_DIR)/buildG-MPI .
-		mkdir Disco
-		cp buildG-MPI Disco
-		cp fullsimplify Disco
-		cp parsimplify Disco
-		cp disco.cfg Disco
-		cp disco_2.cfg Disco
-		cp disco_3.cfg Disco
-		cp runDisco-MPI.sh Disco
-		cp runDisco-MPI-ALPS.sh Disco
-		cp runDisco-MPI-SLURM.sh Disco
-		cp README.md Disco
-		cp OUTPUT.md Disco
-		cp LICENSE Disco
-		cp -r bbmap Disco
-		tar -cvzf Disco_MPI_DC_x86-Linux.tar.gz Disco
-		rm -rf Disco
 mpi-dist-mem:
 		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) READGZ=$(GZOPTS)
 		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
 		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
 		cp $(BUILD_GRAPH_MPIRMA_CODE_DIR)/buildG-MPIRMA .
-		mkdir Disco
-		cp buildG-MPIRMA Disco
-		cp fullsimplify Disco
-		cp parsimplify Disco
-		cp disco.cfg Disco
-		cp disco_2.cfg Disco
-		cp disco_3.cfg Disco
-		cp runDisco-MPI.sh Disco
-		cp runDisco-MPI-ALPS.sh Disco
-		cp runDisco-MPI-SLURM.sh Disco
-		cp README.md Disco
-		cp OUTPUT.md Disco
-		cp LICENSE Disco
-		cp -r bbmap Disco
-		tar -cvzf Disco_MPI_DM_x86-Linux.tar.gz Disco
-		rm -rf Disco
 all:
+		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) READGZ=$(GZOPTS)
+		$(MAKE) -C $(SIMPLIFY_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
+		cp $(BUILD_GRAPH_CODE_DIR)/buildG .
+		cp $(SIMPLIFY_GRAPH_CODE_DIR)/fullsimplify .
+		cp $(SIMPLIFY_GRAPH_CODE_DIR)/parsimplify .
+		cp $(BUILD_GRAPH_MPI_CODE_DIR)/buildG-MPI .
+		cp $(BUILD_GRAPH_MPIRMA_CODE_DIR)/buildG-MPIRMA .
+release:
 		$(MAKE) -C $(BUILD_GRAPH_CODE_DIR) READGZ=$(GZOPTS)
 		$(MAKE) -C $(BUILD_GRAPH_MPI_CODE_DIR) READGZ=$(GZOPTS)
 		$(MAKE) -C $(BUILD_GRAPH_MPIRMA_CODE_DIR) READGZ=$(GZOPTS)

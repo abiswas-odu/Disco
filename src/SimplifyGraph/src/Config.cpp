@@ -41,7 +41,7 @@ string Config::paramFileName3="disco_3.cfg";
 unsigned int minOvl=40;
 
 unsigned int minReadsCountInEdgeToBeNotDeadEnd = 2;
-unsigned int minEdgeLengthToBeNotDeadEnd = 200;
+unsigned int minEdgeLengthToBeNotDeadEnd = 500;
 
 unsigned int minReadsCountToHave0Flow = 2;
 unsigned int minEdgeLengthToHave0Flow = 200;
