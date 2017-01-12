@@ -40,25 +40,25 @@ string Config::paramFileName3="disco_3.cfg";
 // global variables with default value
 unsigned int minOvl=40;
 
-unsigned int minReadsCountInEdgeToBeNotDeadEnd = 5;
-unsigned int minEdgeLengthToBeNotDeadEnd = 500;
+unsigned int minReadsCountInEdgeToBeNotDeadEnd = 2;
+unsigned int minEdgeLengthToBeNotDeadEnd = 200;
 
-unsigned int minReadsCountToHave0Flow = 10;
-unsigned int minEdgeLengthToHave0Flow = 1000;
+unsigned int minReadsCountToHave0Flow = 2;
+unsigned int minEdgeLengthToHave0Flow = 200;
 
-unsigned int minReadsCountInEdgeToBe1MinFlow = 20;
-unsigned int minEdgeLengthToBe1MinFlow = 1000;
+unsigned int minReadsCountInEdgeToBe1MinFlow = 5;
+unsigned int minEdgeLengthToBe1MinFlow = 500;
 
-unsigned int minOvlDiffToClip = 25;
+unsigned int minOvlDiffToClip = 10;
 unsigned int minFoldToBeShortBranch = 5;
-unsigned int minSizeToBeShortBranch = 5000;
+unsigned int minSizeToBeShortBranch = 200;
 
 unsigned int minUinqSupport=20;
 unsigned int minNonUniqSupport=0;
 
-unsigned int minContigLengthTobeReported = 500;
+unsigned int minContigLengthTobeReported = 300;
 
-unsigned int minNumberofReadsTobePrinted = 5;
+unsigned int minNumberofReadsTobePrinted = 2;
 
 double maxReadsUsed = 0.7;
 
