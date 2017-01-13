@@ -369,16 +369,19 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(HashTable *ht, string fnamePre
 					}
 				}
 			}
-			string edge_file=fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(threadID) + "_parGraph.txt" ;
-			string prev_composite_out_edge_file = fnamePrefixSimplify + "_" + SSTR((myProcID*(parallelThreadPoolSize-1))+(threadID-1)) +"_ParSimpleEdges.txt";
-			string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
-									+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(1) ;
-			//Perform the first partial graph simplification
-			system(runSimplifyExeStr.c_str());
 		}
 	}
 	hashTable->unLockAll();
 	hashTable->endEpoch();
+	//Perform graph simplification
+	for(UINT64 i = 1; i< parallelThreadPoolSize; i++)
+	{
+		string edge_file=fnamePrefixGraph + "_" + SSTR(myProcID) + "_" + SSTR(i) + "_parGraph.txt" ;
+		string prev_composite_out_edge_file = fnamePrefixSimplify + "_" + SSTR((myProcID*(parallelThreadPoolSize-1))+(i-1)) +"_ParSimpleEdges.txt";
+		string runSimplifyExeStr = simplifyPartialPath + "/parsimplify " + edge_file + " " + prev_composite_out_edge_file
+			+ " " + SSTR(dataSet->getMinimumOverlapLength()) + " " + SSTR(parallelThreadPoolSize) ;
+		system(runSimplifyExeStr.c_str());
+	}
 	cout<<endl<<"Graph Construction and Initial Simplification Complete."<<endl;
 	cout<<"Process:"<<myProcID<<" RMA OPS:"<<hashTable->getRMACount()<<endl;
 	CLOCKSTOP;
