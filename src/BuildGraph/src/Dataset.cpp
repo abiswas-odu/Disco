@@ -91,7 +91,7 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	                "TAAGGCCGGGGC","TTAGCCCCGGGCC","TAGCCCGGCCG","TCAGGCCGGGGC","TACGGCCGGGC","TTAGGGGCGCGGCC","TAGCCCGGCGGCGG",
 	                "TGCGGCCGGGC","AGCCCGGCCGC","TGAGGCCCGGGC","TAGCCTCGGGCGGGCC","TAAGGCCGCGCCCCA","TTATGGGGCGCGGCC","TCGGCCCCAGCC",
 	                "TAAGGCCGCCCCGCCGGGGCC","TTAGGCCCCGGCGGGGCGGCC","TTACGGGGCCGGGCC","AGGGCCGGGCG","AGGGCCGGGCC","TCGGGGGCGCGGCC",
-					"TGAGGCCCCGGGC","AAGGCCGGGGC","TAACGGCCGGGC"};
+					"TGAGGCCCCGGGC","AAGGCCGGGGC","TAACGGCCGGGC","TGAGGGCCGGGC","AAGGCCGGGCG","TTCGCCCGGCCT","TGAAGGCCGGGC"};
 
 	parallelThreadPoolSize=maxThreads;
 
@@ -416,11 +416,11 @@ bool Dataset::testRead(const string & read)
 			return false;
 		if(filterStrings[i] == read.substr(0,len))
 			return false;
-		if(filterStrings[i] == read.substr(read.length()-len))
+		if(filterStrings[i] == read.substr(readLength-len))
 			return false;
 	}
 	//Check if dimers or trimers exist in very large numbers
-	threshold = read.length()*.5;	// 50% of the length.
+	threshold = readLength*.5;	// 50% of the length.
 	for(size_t i=0;i<merCheckStrings.size();i++)
 	{
 		size_t repeatCtr = countSubstring(read, merCheckStrings[i]);
@@ -428,6 +428,18 @@ bool Dataset::testRead(const string & read)
 		if(repeatCtr >= threshold)		//Check if repeat appears over more than 50% of the read's sequence
 			return false;				//One of the dimers/trimers exist in large micro repeats
 	}
+//	//Check if some longer k-mers exist in very large numbers
+//	for(size_t k=4;k < minimumOverlapLength;k++) //for substring upto overlap len
+//	{
+//		for(UINT64 j = 0; j < readLength - k; j++) //for each substring
+//		{
+//			string subString = read.substr(j,k); // Get the substring
+//			size_t repeatLenCtr = countSubstring(read, subString);
+//			repeatLenCtr = repeatLenCtr * k;
+//			if(repeatLenCtr >= threshold)		//Check if repeat appears over more than 50% of the read's sequence
+//				return false;				//One of the k-mers exist in large micro repeats
+//		}
+//	}
 	return true;
 }
 
