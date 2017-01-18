@@ -792,7 +792,7 @@ UINT64 OverlapGraph::removeLowOvlEdges(void)
 			for(UINT64 j = 0; j < it->second->size(); j++){
 				Edge* e = it->second->at(j);
 				// Find the first overlap length
-				ovl = e->getOverlapLen();
+				UINT64 ovl = e->getOverlapLen();
 				if(ovl<minOvl)
 				{
 					t_edge_vec sub_edges = e->breakEdge(0,m_dataset);
