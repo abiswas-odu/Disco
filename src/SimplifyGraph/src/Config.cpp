@@ -38,7 +38,7 @@ string Config::paramFileName2="disco_2.cfg";
 string Config::paramFileName3="disco_3.cfg";
 
 // global variables with default value
-unsigned int minOvl=40;
+unsigned int minOvl=20;
 
 unsigned int minReadsCountInEdgeToBeNotDeadEnd = 2;
 unsigned int minEdgeLengthToBeNotDeadEnd = 500;
@@ -48,6 +48,8 @@ unsigned int minEdgeLengthToHave0Flow = 200;
 
 unsigned int minReadsCountInEdgeToBe1MinFlow = 5;
 unsigned int minEdgeLengthToBe1MinFlow = 500;
+
+unsigned int minOvlToClip = 30;
 
 unsigned int minOvlDiffToClip = 10;
 unsigned int minFoldToBeShortBranch = 5;
@@ -130,6 +132,8 @@ void Config::setParameters(string pFile)
 					minOvlDiffToClip=stoi(parVal);
 				else if(parName== "minFoldToBeShortBranch")
 					minFoldToBeShortBranch=stoi(parVal);
+				else if(parName== "MinOverlap4Clip")
+					minOvlToClip=stoi(parVal);
 				else if(parName== "minUniquePEsupport")
 					minUinqSupport=stoi(parVal);
 				else if(parName== "minNonUniquePEsupport")

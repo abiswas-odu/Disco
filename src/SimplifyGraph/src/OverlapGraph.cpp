@@ -793,7 +793,7 @@ UINT64 OverlapGraph::removeLowOvlEdges(void)
 				Edge* e = it->second->at(j);
 				// Find the first overlap length
 				UINT64 ovl = e->getOverlapLen();
-				if(ovl<minOvl)
+				if(ovl<minOvlToClip)
 				{
 					t_edge_vec sub_edges = e->breakEdge(0,m_dataset);
 					removeEdge(e);
@@ -1177,7 +1177,7 @@ void OverlapGraph::graphPathFindInitial()
 	// Composite edge contraction with remove dead end nodes
 	CLOCKSTART;
 	double prev = omp_get_wtime();
-	//removeLowOvlEdges();
+	removeLowOvlEdges();
 	UINT64 counter(0);
 	do {
 		removeDeadEndNodes();
