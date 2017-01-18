@@ -703,7 +703,7 @@ UINT64 OverlapGraph::removeSimilarEdges(void)
 /* 
  * ===  FUNCTION  ======================================================================
  *         Name:  clipBranches
- *  Description:  When a noqde has multiple in- or out- edges, clip the edges with small
+ *  Description:  When a node has multiple in- or out- edges, clip the edges with small
  *  		  overlap lengths
  * =====================================================================================
  */
@@ -779,8 +779,8 @@ UINT64 OverlapGraph::clipBranches(void)
 /*
  * ===  FUNCTION  ======================================================================
  *         Name:  removeLowOvlEdges
- *  Description:  When a noqde has multiple in- or out- edges, clip the edges with small
- *  		  overlap lengths
+ *  Description:  When a node has small overlap, clip the edges with small
+ *  		      overlap lengths
  * =====================================================================================
  */
 UINT64 OverlapGraph::removeLowOvlEdges(void)
