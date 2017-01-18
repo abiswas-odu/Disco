@@ -81,7 +81,7 @@ extern unsigned int minReadsCountInEdgeToBe1MinFlow;
 extern unsigned int minEdgeLengthToBe1MinFlow;			
 
 // Minimum overlap length (bp) edges that are kept during graph simplification (default: 30)
-unsigned int minOvlToClip;
+extern unsigned int minOvlToClip;
 // Minimum overlap length difference to clip branches (default: 15)
 extern unsigned int minOvlDiffToClip;	
 // Minimum fold difference to consider branches to be short (default: 5)

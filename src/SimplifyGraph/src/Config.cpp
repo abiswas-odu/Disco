@@ -105,10 +105,10 @@ void Config::setParameters(string pFile)
 	else {
 		string par_text="";
 		while(getline(filePointer,par_text)) {
-
-			if(par_text.find("=") != std::string::npos)
+			string par_text_trm = Utils::trimmed(par_text);
+			if(par_text_trm.find("=") != std::string::npos && par_text_trm.at(0)!='#')
 			{
-				vector<string> tok = Utils::split(par_text,'=');
+				vector<string> tok = Utils::split(par_text_trm,'=');
 				string parName = Utils::trimmed(tok[0]);
 				string parVal = Utils::trimmed(tok[1]);
 
