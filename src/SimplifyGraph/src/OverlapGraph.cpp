@@ -1177,7 +1177,7 @@ void OverlapGraph::graphPathFindInitial()
 	// Composite edge contraction with remove dead end nodes
 	CLOCKSTART;
 	double prev = omp_get_wtime();
-	removeLowOvlEdges();
+	//removeLowOvlEdges();
 	UINT64 counter(0);
 	do {
 		removeDeadEndNodes();
