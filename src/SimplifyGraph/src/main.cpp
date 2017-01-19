@@ -137,7 +137,6 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 			contig_file, edge_file, edge_cov_file,usedReadFileName,"unitig",ctgCount);
-		MYEXIT("\n\nControlled stop for PacBio assembly.");
 	}
 	else											//Simple edges already processed into composite graph; load global graph
 	{
