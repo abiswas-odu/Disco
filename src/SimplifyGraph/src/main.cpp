@@ -131,15 +131,12 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
 		Utils::writeCheckPointFile(outputFilenamePrefix,"ParSimplify=1");
 
-		string edge_file = outputFilenamePrefix+"_untigEdgesFinal_"+SSTR(interationCount)+".txt";
-		string edge_cov_file = outputFilenamePrefix+"_untigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
-		string contig_file = outputFilenamePrefix+"_untigsFinal_"+SSTR(interationCount)+".fasta";
+		string edge_file = outputFilenamePrefix+"_unitigEdgesFinal_"+SSTR(interationCount)+".txt";
+		string edge_cov_file = outputFilenamePrefix+"_unitigEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
+		string contig_file = outputFilenamePrefix+"_unitigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-			contig_file, edge_file, edge_cov_file,usedReadFileName,"untig",ctgCount);
-				//Write checkpoint graph
-		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
-		Utils::writeCheckPointFile(outputFilenamePrefix,"PrintCtg="+SSTR(ctgCount));
+			contig_file, edge_file, edge_cov_file,usedReadFileName,"unitig",ctgCount);
 		MYEXIT("\n\nControlled stop for PacBio assembly.");
 	}
 	else											//Simple edges already processed into composite graph; load global graph
