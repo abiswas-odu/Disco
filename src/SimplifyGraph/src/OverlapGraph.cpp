@@ -2226,20 +2226,20 @@ void OverlapGraph::populate_read(const UINT64 &readID, const std::string & read_
 	if(srcIt != m_graph->end() && !srcIt->second->empty()) // if this read has some edge(s).
 	{
 		for (auto it = srcIt->second->begin(); it != srcIt->second->end(); ++it){
-			if((*it)->isSmallerEdge()){
+			//if((*it)->isSmallerEdge()){
 				Edge *edge = *it;
 				if (((edge->getOrientation() >> 1) & 1))
 					edge->loadReadString(read_str, -1);
 				else
 					edge->loadReadString(read_str_reverse, -1);
-			}
-			else{
-				Edge *edge = (*it)->getReverseEdge();
+			//}
+			//else{
+				edge = (*it)->getReverseEdge();
 				if ((edge->getOrientation() & 1))
 					edge->loadReadString(read_str, -2);
 				else
 					edge->loadReadString(read_str_reverse, -2);
-			}
+			//}
 		}
 	}
 	// Edges with read on it
@@ -2307,7 +2307,7 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
-		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
+		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted){
 			string contigString = (*it)->getEdgeString();
 			#pragma omp critical
 			{
@@ -2336,6 +2336,128 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	CLOCKSTOP;
 }
 
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  printUnitigs
+ *  Description:  Print seed unitigs for all the edges in the graph, by streaming all the reads files.
+ * =====================================================================================
+ */
+void OverlapGraph::streamUnitigs(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+		const vector<std::string> &read_PairInterFiles, string unitig_file, string namePrefix, UINT64 &printed_unitigs)
+{
+	CLOCKSTART;
+	//streaming reads
+	UINT64 readID = 1;
+	for(auto it = read_PairFiles.cbegin(); it != read_PairFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+	for(auto it = read_PairInterFiles.cbegin(); it != read_PairInterFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+	for(auto it = read_SingleFiles.cbegin(); it != read_SingleFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+
+	t_edge_vec contigEdges;
+	getEdges(contigEdges);
+
+	//Open unitig file
+	ofstream unitigFilePointer;
+	unitigFilePointer.open(unitig_file.c_str());
+	if(!unitigFilePointer)
+		MYEXIT("Unable to open file: "+unitig_file);
+	UINT64 seedUnitigCtr=0;
+	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
+	{
+		if((*it)->getEdgeLength() >= 1000){
+			seedUnitigCtr++;
+			vector<unitigExt> unitigEntensions;
+			getUnitigExtensions(*it, unitigEntensions);
+			for(UINT64 i=0; i < unitigEntensions.size(); ++i)
+			{
+				++printed_unitigs;
+				unitigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_unitigs
+						        <<"_"<<unitigEntensions[i].seedSource
+								<<"_"<<unitigEntensions[i].seedDest
+								<<"_"<<unitigEntensions[i].extDest<<"\n";
+				string fullExtSeq=(*it)->getEdgeString()+unitigEntensions[i].extSeq;
+				UINT32 start=0;
+				do
+				{
+					unitigFilePointer << fullExtSeq.substr(start, 100) << "\n";  // save 100 BP in each line.
+					start+=100;
+				} while (start < fullExtSeq.length());
+			}
+		}
+	}
+	unitigFilePointer.close();
+	FILE_LOG(logINFO) << "Total number of seed unitigs: " << seedUnitigCtr << "\n";
+	FILE_LOG(logINFO) << "Total number of unitigs printed: " << printed_unitigs << "\n";
+	CLOCKSTOP;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  getUnitigExtentions
+ *  Description:  Print all 1000bp extensions for an edge
+ * =====================================================================================
+ */
+void OverlapGraph::getUnitigExtensions(Edge *seedEdge, vector<unitigExt> &unitigEntensions)
+{
+	UINT64 source = seedEdge->getSourceRead()->getReadID();
+	UINT64 destination = seedEdge->getDestinationRead()->getReadID();
+	// Get edges with the destination read as source
+	auto srcIt = m_graph->find(destination);
+	if(srcIt != m_graph->end() && !srcIt->second->empty()) // if this read has some edge(s).
+	{
+		for (auto it = srcIt->second->begin(); it != srcIt->second->end(); ++it){
+			//Check if out edge (downstream)
+			string extString = (*it)->getEdgeStringWithoutSource();
+			if((((*it)->getOrientation() >> 1) & 1) && extString!=""){
+				UINT64 nextSrc = (*it)->getDestinationRead()->getReadID();
+			    cout<<"Explotr:"<<nextSrc<<","<<extString<<endl;
+				exploreUnitigExtensions(nextSrc, nextSrc, unitigEntensions,extString);
+			}
+		}
+		for(UINT64 i=0; i < unitigEntensions.size(); ++i)
+		{
+			unitigEntensions[i].seedSource=source;
+			unitigEntensions[i].seedDest=destination;
+		}
+	}
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  exploreUnitigExtensions
+ *  Description:  Recursively obtain all 1000bp extensions for an edge
+ * =====================================================================================
+ */
+void OverlapGraph::exploreUnitigExtensions(UINT64 firstSrc, UINT64 nextSrc, vector<unitigExt> &unitigEntensions, string seq)
+{
+	// Get edges with the destination read as source
+	auto srcIt = m_graph->find(nextSrc);
+	if(srcIt != m_graph->end() && !srcIt->second->empty()) // if this read has some edge(s).
+	{
+		for (auto it = srcIt->second->begin(); it != srcIt->second->end(); ++it){
+			//Check if out edge (downstream)
+			if(((*it)->getOrientation() >> 1) & 1){
+				string extString = (*it)->getEdgeStringWithoutSource();
+				UINT64 nextSrc = (*it)->getDestinationRead()->getReadID();
+				seq = seq+extString;
+				if(seq.length()>=1000)
+				{
+					unitigExt newExt;
+					newExt.extDest=firstSrc;
+					newExt.extSeq=seq;
+					unitigEntensions.push_back(newExt);
+					return;
+				}
+				exploreUnitigExtensions(firstSrc, nextSrc, unitigEntensions, seq);
+			}
+		}
+	}
+}
 
 /*
  * ===  FUNCTION  ======================================================================

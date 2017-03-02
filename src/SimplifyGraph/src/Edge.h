@@ -192,6 +192,8 @@ class Edge{
 
 		std::string getEdgeString() const {return m_string;}
 
+		std::string getEdgeStringWithoutSource() const;
+
 		bool isSmallerEdge() const 
 		{
 			if(m_source->getReadID() < m_destination->getReadID())

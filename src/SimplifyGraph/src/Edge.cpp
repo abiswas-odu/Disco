@@ -150,6 +150,10 @@ UINT32 Edge::getLastOverlapOffset() const
 	return (m_overlapOffset - overlap_sum);
 }
 
+std::string Edge::getEdgeStringWithoutSource() const
+{
+	return m_string.substr(m_source->getReadLength());
+}
 /* 
  * ===  FUNCTION  ======================================================================
  *         Name:  breakForwardEdge
@@ -549,9 +553,9 @@ void Edge::loadReadString(const std::string read_str, int index)
 	// If this edge is not smaller edge ( source smaller than the destination ID)
 	// or its length is smaller than the reporting threshold,
 	// do not load string in this edge.
-	if (!isSmallerEdge() || getEdgeLength() < minContigLengthTobeReported){
-		return;
-	}
+	//if (!isSmallerEdge()){
+	//	return;
+	//}
 	// TODO: need to update the mismatch base count
 	assert(index >= -2);
 	if(m_listOfReads)
@@ -687,3 +691,4 @@ void Read::setEdge(Edge *edge, UINT32 readIndx, UINT32 orient)
 		edgeOriIndex = newEdgeIndexArray;
 	}
 }
+

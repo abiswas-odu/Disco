@@ -24,15 +24,11 @@
 
 extern char **environ;
 
-
-
-
 // This structure is used to store list of pair of edges and their support. Used in two function: 1. when we find path by mate-pairs 2. scaffolder.
 // When it's used in the findSupportByMatePairs function, these two edges are adjacent edges supported by all paths between several matepairs
 // When it's used in the scaffolder function, these two edges are linked by multiple matepairs and they are not necesarrily adjacent edges, but they can be
 struct pairedEdges
 {
-
 		/*
 		 *  edge 1 is in front of edge 2 in the sequence
 		 *  -----edge1----		-----edge2---
@@ -49,6 +45,14 @@ struct pairedEdges
 		       return uniqSupport > rhs.uniqSupport;
 		}
 
+};
+
+struct unitigExt
+{
+	UINT64 seedSource;		//Source readID of the seed edge
+	UINT64 seedDest;        //Destination readID of the seed edge
+	UINT64 extDest;         //Destination readID of the extension sequence
+	string extSeq;
 };
 
 typedef vector<Edge *> t_edge_vec;	// vector of pointers to Edge
@@ -258,6 +262,11 @@ class OverlapGraph
 		void loadStringFromReadsFile(const std::string &read_file, UINT64 & readID);
 
 		UINT64 removeLowOvlEdges(void);
+
+		void streamUnitigs(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+				const vector<std::string> &read_PairInterFiles, string unitig_file, string namePrefix, UINT64 &printed_contigs);
+		void getUnitigExtensions(Edge *seedEdge, vector<unitigExt> &unitigEntensions);
+		void exploreUnitigExtensions(UINT64 firstSrc, UINT64 nextSrc, vector<unitigExt> &unitigEntensions,string seq);
 };
 
 void createRevList(Edge *fwdEdge, UINT64 **returnListReads, UINT64 &lSize);
