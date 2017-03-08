@@ -2369,7 +2369,7 @@ void OverlapGraph::streamUnitigs(const vector<std::string> &read_SingleFiles,con
 	UINT64 seedUnitigCtr=0;
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
-		if((*it)->getEdgeLength() >= 1000){
+		if((*it)->getEdgeLength() >= 500){
 			seedUnitigCtr++;
 			vector<unitigExt> unitigEntensions;
 			getUnitigExtensions(*it, unitigEntensions);
@@ -2415,8 +2415,7 @@ void OverlapGraph::getUnitigExtensions(Edge *seedEdge, vector<unitigExt> &unitig
 			string extString = (*it)->getEdgeStringWithoutSource();
 			if((((*it)->getOrientation() >> 1) & 1) && extString!=""){
 				UINT64 nextSrc = (*it)->getDestinationRead()->getReadID();
-			    cout<<"Explotr:"<<nextSrc<<","<<extString<<endl;
-				exploreUnitigExtensions(nextSrc, nextSrc, unitigEntensions,extString);
+			    exploreUnitigExtensions(nextSrc, nextSrc, unitigEntensions,extString);
 			}
 		}
 		for(UINT64 i=0; i < unitigEntensions.size(); ++i)
