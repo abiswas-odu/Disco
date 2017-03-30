@@ -14,26 +14,26 @@ DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multip
 3. zlib/1.2.8 is optional for reading gzipped fasta/fastq files.
  
 ### Installation Steps
-1. Download the tarball with compiled executables for Linux with GCC 4.9 and above from  [https://github.com/abiswas-odu/Disco/releases](https://github.com/abiswas-odu/Disco/releases). The code has been tested only on Linux.
+1. Download the tarball with compiled executables for Linux with GCC 4.9 and above from  [https://github.com/abiswas-odu/Disco/releases](https://github.com/abiswas-odu/Disco/releases). The code has been tested only on Linux and compiled with GCC4.9 and opemnpi 1.8.4.
 2. If you decide to download the source code, use the following commands to build:
   1. OpenMP version "make openmp". This is also the default make option.  
   2. MPI distributed computing version "make mpi-dist-comp" 
   3. MPI distributed memory version "make mpi-dist-mem"
   4. All the versions can be built with "make all"
-3. The assembler can be built with the make option "READGZ=1". 
+3. The assembler can be built with the make option "READGZ=1" to read gzipped files. 
 If compiled successfully, the required executables will be built and the various `runDisco...` scripts can be used to run the assembler. 
 
 ### Quickly Running The Assembler
 
 There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster.  
 
-* __Single Machine Version:__ This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runDisco.sh`. Make sure the RAM on the machine is more than the disk space size of the reads. The quick start command as shown below will be used in a batch job submission script or directly typed on the commandline terminal.   
+* __Single Machine Version:__ This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runDisco.sh`. Make sure the RAM on the machine is more than the disk space size of the uncompressed reads. The quick start command as shown below will be used in a batch job submission script or directly typed on the commandline terminal.   
 
 ```
 #!/bin/bash
 
 # Seperated mate pair reads
-runDisco.sh -d ${output_dir} -in1 readA_1.fastq  -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
+runDisco.sh -d ${output_dir} -in1 readA_1.fastq -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
 
 # Interleaved mate pair reads
 runDisco.sh -d ${output_dir} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OP_PREFIX} 
@@ -64,7 +64,7 @@ Use `runDisco-MPI.sh -h` for help information.
 
 ### Guide to Assembly of Raw Metagenomic Illumina data
 
-The raw Illumina sequences need to be preprocessed before assembly with Disco. Disco provides wrapper scripts to perform preprocessing with BBTools. Please see user manual for more details: [http://disco.omicsbio.org/user-manual](http://disco.omicsbio.org/user-manual)
+The raw Illumina sequences need to be preprocessed before assembly with Disco. Disco provides wrapper scripts to perform preprocessing with BBTools. Please see user manual for more details: [http://disco.omicsbio.org/user-manual](http://disco.omicsbio.org/user-manual). We package BBtools inside our release for ease of use. The BBtools scripts shown below are available in the bbmap directory.
 
 #### Preprocessing of the Illumina data
 
@@ -91,8 +91,8 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 # 11. ref=$adapters, adapters shipped with bbnorm tools
 # 12. –Xmx8g, use 8G memory
 # 13. 1>trim.o 2>&1, redirect stderr to stdout, and save both to file *trim.o*
-adapters= bbmap_dir/resources/adapters.fa
-phiX_adapters= bbmap_dir/resources/phix174_ill.ref.fa.gz
+adapters= bbmap/resources/adapters.fa
+phiX_adapters= bbmap/resources/phix174_ill.ref.fa.gz
 bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=10
 bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=31
 ```

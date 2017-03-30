@@ -703,7 +703,7 @@ UINT64 OverlapGraph::removeSimilarEdges(void)
 /* 
  * ===  FUNCTION  ======================================================================
  *         Name:  clipBranches
- *  Description:  When a noqde has multiple in- or out- edges, clip the edges with small
+ *  Description:  When a node has multiple in- or out- edges, clip the edges with small
  *  		  overlap lengths
  * =====================================================================================
  */
@@ -768,6 +768,40 @@ UINT64 OverlapGraph::clipBranches(void)
 				}
 			}
 //			FILE_LOG(logDEBUG1) << "Node " << i << " done with clipBranches" << "\n" << "\n";
+		}
+	}
+	FILE_LOG(logINFO) << "Short overlap branches clipped: " << num_clip_branches << "\n";
+	CLOCKSTOP;
+	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
+	return num_clip_branches;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  removeLowOvlEdges
+ *  Description:  When a node has small overlap, clip the edges with small
+ *  		      overlap lengths
+ * =====================================================================================
+ */
+UINT64 OverlapGraph::removeLowOvlEdges(void)
+{
+	CLOCKSTART;
+	UINT64 num_clip_branches = 0;
+	for(map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++){
+		if(it->second->size() > 1){
+			for(UINT64 j = 0; j < it->second->size(); j++){
+				Edge* e = it->second->at(j);
+				// Find the first overlap length
+				UINT64 ovl = e->getOverlapLen();
+				if(ovl<minOvlToClip)
+				{
+					t_edge_vec sub_edges = e->breakEdge(0,m_dataset);
+					removeEdge(e);
+					for(auto it = sub_edges.begin(); it != sub_edges.end(); ++it)
+						insertEdge(*it);
+					++num_clip_branches;
+				}
+			}
 		}
 	}
 	FILE_LOG(logINFO) << "Short overlap branches clipped: " << num_clip_branches << "\n";
@@ -1143,6 +1177,7 @@ void OverlapGraph::graphPathFindInitial()
 	// Composite edge contraction with remove dead end nodes
 	CLOCKSTART;
 	double prev = omp_get_wtime();
+	removeLowOvlEdges();
 	UINT64 counter(0);
 	do {
 		removeDeadEndNodes();

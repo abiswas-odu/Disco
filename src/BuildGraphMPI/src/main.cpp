@@ -26,8 +26,8 @@ int main(int argc, char **argv)
 	double start, end;
 	char name[MPI_MAX_PROCESSOR_NAME];
 
-	MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
-	if (provided < MPI_THREAD_SERIALIZED)
+	MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+	if (provided < MPI_THREAD_FUNNELED)
 	{
 	   printf("Error: the MPI library doesn't provide the required thread level\n");
 	   MPI_Abort(MPI_COMM_WORLD, 0);

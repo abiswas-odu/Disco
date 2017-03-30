@@ -256,6 +256,8 @@ class OverlapGraph
 
 		void populate_read(const UINT64 &readID, const std::string & read_str);
 		void loadStringFromReadsFile(const std::string &read_file, UINT64 & readID);
+
+		UINT64 removeLowOvlEdges(void);
 };
 
 void createRevList(Edge *fwdEdge, UINT64 **returnListReads, UINT64 &lSize);
