@@ -89,6 +89,11 @@ extern unsigned int minFoldToBeShortBranch;
 // Minimum size to consider branches to be short (default: 5)
 extern unsigned int minSizeToBeShortBranch;
 
+//Min fraction of reads used to mark edge as used (default: 0.7)
+extern double minReadUsed;
+//Min fraction of unused mate reads used to mark edge as unused (default: 0.9)
+extern double minMateReadUnused;
+
 //Minumum unique mate pair support to join edge (default: 3)
 extern unsigned int minUinqSupport;
 //Minumum non-unique mate pair support to join edge (default: 0)
