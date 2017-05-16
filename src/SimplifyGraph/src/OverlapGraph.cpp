@@ -2226,20 +2226,20 @@ void OverlapGraph::populate_read(const UINT64 &readID, const std::string & read_
 	if(srcIt != m_graph->end() && !srcIt->second->empty()) // if this read has some edge(s).
 	{
 		for (auto it = srcIt->second->begin(); it != srcIt->second->end(); ++it){
-			//if((*it)->isSmallerEdge()){
+			if((*it)->isSmallerEdge()){
 				Edge *edge = *it;
 				if (((edge->getOrientation() >> 1) & 1))
 					edge->loadReadString(read_str, -1);
 				else
 					edge->loadReadString(read_str_reverse, -1);
-			//}
-			//else{
-				edge = (*it)->getReverseEdge();
+			}
+			else{
+				Edge *edge = (*it)->getReverseEdge();
 				if ((edge->getOrientation() & 1))
 					edge->loadReadString(read_str, -2);
 				else
 					edge->loadReadString(read_str_reverse, -2);
-			//}
+			}
 		}
 	}
 	// Edges with read on it
@@ -2369,8 +2369,25 @@ void OverlapGraph::streamUnitigs(const vector<std::string> &read_SingleFiles,con
 	UINT64 seedUnitigCtr=0;
 	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
 	{
-		if((*it)->getEdgeLength() >= 500){
+		//If seed greater that 1 KB do not extend just print
+		if((*it)->getEdgeLength() >= 100){
 			seedUnitigCtr++;
+			++printed_unitigs;
+			unitigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_unitigs
+							<<"_"<<(*it)->getSourceRead()->getReadID()
+							<<"_"<<(*it)->getDestinationRead()->getReadID()<<"\n";
+			string fullExtSeq=(*it)->getEdgeString();
+			UINT32 start=0;
+			do
+			{
+				unitigFilePointer << fullExtSeq.substr(start, 100) << "\n";  // save 100 BP in each line.
+				start+=100;
+			} while (start < fullExtSeq.length());
+		}
+		/*else
+		{
+			seedUnitigCtr++;
+			FILE_LOG(logINFO) << "Processing seed unitig: "<<seedUnitigCtr<<" seed length:"<<(*it)->getEdgeLength()<<endl;
 			vector<unitigExt> unitigEntensions;
 			getUnitigExtensions(*it, unitigEntensions);
 			for(UINT64 i=0; i < unitigEntensions.size(); ++i)
@@ -2388,7 +2405,7 @@ void OverlapGraph::streamUnitigs(const vector<std::string> &read_SingleFiles,con
 					start+=100;
 				} while (start < fullExtSeq.length());
 			}
-		}
+		}*/
 	}
 	unitigFilePointer.close();
 	FILE_LOG(logINFO) << "Total number of seed unitigs: " << seedUnitigCtr << "\n";
@@ -2444,7 +2461,7 @@ void OverlapGraph::exploreUnitigExtensions(UINT64 firstSrc, UINT64 nextSrc, vect
 				string extString = (*it)->getEdgeStringWithoutSource();
 				UINT64 nextSrc = (*it)->getDestinationRead()->getReadID();
 				seq = seq+extString;
-				if(seq.length()>=1000)
+				if(seq.length()>=300)
 				{
 					unitigExt newExt;
 					newExt.extDest=firstSrc;

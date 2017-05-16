@@ -138,16 +138,15 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 						minOvl, threadPoolSize);
 	}
 
-	UINT64 uniCount=1;
-	string untig_file = outputFilenamePrefix+"_unitigs_"+SSTR(interationCount)+".fasta";
-	string untig_aln1_file = outputFilenamePrefix+"_unitigAln1.sam";
-	overlapGraph->streamUnitigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-			untig_file, "unitig",uniCount);
+	UINT64 uniCount=0;
+	//string untig_file = outputFilenamePrefix+"_unitigs_"+SSTR(interationCount)+".fasta";
+	//string untig_aln1_file = outputFilenamePrefix+"_unitigAln1.sam";
+	//overlapGraph->streamUnitigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,untig_file, "unitig",uniCount);
 	//string runBlasr="blasr -noRefineAlign -advanceHalf -noSplitSubreads -minMatch 10 -sdpTupleSize 7 " \
 			"-minPctIdentity 70 -bestn 10 -sam -clipping soft -nproc 16 -header ";
 	//runBlasr += untig_file + " pbio-523.5374.fasta -out " + untig_aln1_file;
     //system(runBlasr.c_str());
-	MYEXIT("Unitig printed and stopped.");
+	//MYEXIT("Unitig printed and stopped.");
 	//Initial Simplification
 	if(checkPointParams[interationCount-1][1]==0)		//Check if initial simplification complete
 	{
