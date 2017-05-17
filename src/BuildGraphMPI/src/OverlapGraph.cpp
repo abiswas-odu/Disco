@@ -521,7 +521,6 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				MYEXIT("Unable to open contained read file: +"+containedReadFile);
 			filePointerList.push_back(filePointer);
 		}
-
 		UINT64 numReadsPerProc = (dataSet->getNumberOfUniqueReads()/numprocs);
 		UINT64 startIndex = (numReadsPerProc*myProcID) +1;
 		UINT64 endIndex = dataSet->getNumberOfUniqueReads();
@@ -632,7 +631,7 @@ void OverlapGraph::markContainedReads(string fnamePrefix, map<UINT64, UINT64> *f
 				delete[] recvIDBuf;
 				cout<<"Proc:"<<myProcID<<" Main communication thread complete!!!"<<endl;
 			}
-			else
+			else if(threadID!=0)
 			{
 				UINT64 currIndex = startIndex+(threadID-1);
 				if(currIndex<=endIndex)

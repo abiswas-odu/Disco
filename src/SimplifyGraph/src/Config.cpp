@@ -55,8 +55,11 @@ unsigned int minOvlDiffToClip = 10;
 unsigned int minFoldToBeShortBranch = 5;
 unsigned int minSizeToBeShortBranch = 200;
 
-unsigned int minUinqSupport=20;
+unsigned int minUinqSupport=3;
 unsigned int minNonUniqSupport=0;
+
+double minReadUsed = 0.3;
+double minMateReadUnused=0.9;
 
 unsigned int minContigLengthTobeReported = 300;
 

@@ -1989,8 +1989,8 @@ void OverlapGraph::printAllEdges(string edge_file) const
 
 /*
  * ===  FUNCTION  ======================================================================
- *         Name:  printContigs
- *  Description:  Print all the edges in the graph
+ *         Name:  readParEdges
+ *  Description:  Read and load the edges in the graph
  * =====================================================================================
  */
 void OverlapGraph::readParEdges(string edge_file)
@@ -2066,7 +2066,7 @@ void OverlapGraph::readParEdges(string edge_file)
 bool OverlapGraph::isUsedEdge(UINT64 lFSize, UINT64 usedReadCtr,UINT64 unUsedMate, Read *source, Read *destination)
 {
 	//Removed used edges; If all the inner reads, source, destination have been used in previous assembly; do not load this edge
-	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize*0.5) && unUsedMate < (usedReadCtr*0.5))	//Composite edge
+	if(lFSize > 0 && usedReadCtr>0 && usedReadCtr > (lFSize*minReadUsed) && unUsedMate < (usedReadCtr*minMateReadUnused))	//Composite edge
 	{
 		return true;
 	}
