@@ -19,8 +19,6 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string>
-#include <seqan/file.h>
-#include <seqan/sequence.h>
 
 #include "Config.h"
 // for getting current working directory
