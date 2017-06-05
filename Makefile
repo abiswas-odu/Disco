@@ -86,3 +86,4 @@ clean:
 		-$(RM) -rf buildG buildG-MPI buildG-MPIRMA fullsimplify parsimplify 
 		-$(RM) -rf Disco_omp_x86-Linux.tar.gz Disco_MPI_DC_x86-Linux.tar.gz 
 		-$(RM) -rf Disco_All_x86-Linux.tar.gz Disco_MPI_DM_x86-Linux.tar.gz Disco
+		
