@@ -154,7 +154,7 @@ fi
 if [ -d $dataOutPath ] ; then
    echo "Output directory exists."
 else
-   echo "Cresting output directory: $dataOutPath"
+   echo "Creating output directory: $dataOutPath"
    `mkdir $dataOutPath`
 fi
  
