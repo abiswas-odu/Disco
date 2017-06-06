@@ -32,10 +32,10 @@ case $key in
     echo -e "Usage: For clusters using Application Level Placement Scheduler (ALPS) \n"
     echo -e "   runDisco.sh [OPTION]...<PARAM>...\n\n"
     echo -e "<PARAMS>\n"
-    echo -e "   -inS\t single read filenames (comma seperated fasta/fastq/fastq.gz files).\n"
+    echo -e "   -inS\t single read filenames (comma separated fasta/fastq/fastq.gz files).\n"
     echo -e "   -in1\t forward paired read filename (single fasta/fastq/fastq.gz file).\n"
     echo -e "   -in2\t reverse paired read filename (single fasta/fastq/fastq.gz file).\n"
-    echo -e "   -inP\t interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz files).\n"
+    echo -e "   -inP\t interleaved paired read filenames (comma separated fasta/fastq/fastq.gz files).\n"
     echo -e "   -d\t output directory path.\n"
     echo -e "   -o\t output filename prefix.\n"
     echo -e "<OPTIONS>\n"
@@ -265,7 +265,7 @@ elif [ -z "$readFileP" ] ; then
       `cp ${outSimplifyPrefix}_scaffoldsFinalCombined.fasta ${dataOutPath}`
    fi
 else
-   echo "Invalid combination of input files. You can specify either a set of comma seperated interleaved paired end files or two separate paired end files not both. Any number of comma seperated single end files can be provided. Exiting..."
+   echo "Invalid combination of input files. You can specify either a set of comma separated interleaved paired end files or two separate paired end files not both. Any number of comma separated single end files can be provided. Exiting..."
    exit 1
 fi
 

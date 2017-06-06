@@ -32,10 +32,10 @@ There are two basic versions of the assembler one for running on a single machin
 ```
 #!/bin/bash
 
-# Seperated mate pair reads
+# Separated paired end reads
 runDisco.sh -d ${output_dir} -in1 readA_1.fastq -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
 
-# Interleaved mate pair reads
+# Interleaved paired end reads
 runDisco.sh -d ${output_dir} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OP_PREFIX} 
 
 ```
@@ -52,11 +52,11 @@ For the basic MPI version make sure the RAM on the nodes is more than the disk s
 #!/bin/bash
 
 ### MPI Verion 
-### Seperated paired end reads
+### Separated paired end reads
 runDisco-MPI.sh -d ${output_dir} -in1 {read_1.fastq} -in2 ${read2_2.fastq} -o ${OP_PREFIX} 
 
 ### MPI Remote Memory Access(RMA) Verion 
-### Seperated paired end reads
+### Separated paired end reads
 runDisco-MPI.sh -d ${output_directory} -in1 {read_1.fastq}  -in2 ${read2_2.fastq} -o ${OP_PREFIX} -rma 
 
 ```
@@ -144,13 +144,13 @@ Usage:
 
 <PARAMS>
 
-   -inS	 single read filenames (comma seperated fasta/fastq/fastq.gz file).
+   -inS	 single read filenames (comma separated fasta/fastq/fastq.gz file).
 
    -in1	 forward paired read filename (single fasta/fastq/fastq.gz file).
 
    -in2	 reverse paired read filename (single fasta/fastq/fastq.gz file).
 
-   -inP	 interleaved paired read filenames (comma seperated fasta/fastq/fastq.gz file).
+   -inP	 interleaved paired read filenames (comma separated fasta/fastq/fastq.gz file).
 
    -d	 output directory path (DEFAULT: current directory).
 
