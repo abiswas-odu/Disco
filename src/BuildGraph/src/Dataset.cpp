@@ -135,6 +135,9 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	numberOfUniqueReads=reads->size();
 	reads->shrink_to_fit();
 
+	if(numberOfUniqueReads<=0)						//Exit of no reads found...
+		MYEXIT("No reads found in the read files provided! Please check if the filename(s) and path(s) are correct.");
+
 	//Create a file index to readID lookup table. Used to load previous partial results in case of a restart...
 	fIndxReadIDMap = new map<UINT64, UINT64>;
 	for(UINT64 i = 1; i <= getNumberOfUniqueReads(); i++)
