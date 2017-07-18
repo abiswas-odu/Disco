@@ -198,8 +198,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    do
       fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName=`basename $fullName`
-      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=15
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutput="${trimFtlOutput},ftl.trm.${fName}"       
       rmTrimOutput="${rmTrimOutput} trm.${fName}"		
       rmTrimFtlOutput="${rmTrimFtlOutput} ftl.trm.${fName}"     
@@ -209,7 +209,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
    if [ "$constructGraph" = "Y" ] ; then
@@ -232,8 +232,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    do
       fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName=`basename $fullName`
-      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=11 mink=07 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=15
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutput="${trimFtlOutput},ftl.trm.${fName}"       
       rmTrimOutput="${rmTrimOutput} trm.${fName}"		
       rmTrimFtlOutput="${rmTrimFtlOutput} ftl.trm.${fName}"     
@@ -243,7 +243,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
    if [ "$constructGraph" = "Y" ] ; then

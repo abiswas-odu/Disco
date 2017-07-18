@@ -93,8 +93,8 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 # 13. 1>trim.o 2>&1, redirect stderr to stdout, and save both to file *trim.o*
 adapters= bbmap/resources/adapters.fa
 phiX_adapters= bbmap/resources/phix174_ill.ref.fa.gz
-bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=10
-bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=31
+bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=11 mink=23 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=15
+bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=23
 ```
 
 ##### Error correction with Tadpole
@@ -104,9 +104,9 @@ Tarpole is a memory efficient error correction tool from the bbtools package tha
 #!bash
 # 1. mode=correct, use tadpole for correction
 # 2. ecc=t, error correct via kmer counts
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=1 prealloc k=31
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=1 prealloc k=23
 #If the above goes out of memory, try
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=31
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=23
 ```
 
 ### Assembly of Error Corrected Data
