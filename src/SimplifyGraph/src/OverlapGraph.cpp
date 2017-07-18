@@ -596,7 +596,7 @@ UINT64 OverlapGraph::removeShortBranches(void)
 				// overlap is small 
 				// edge is not already in the deleting list
 				// edge is smaller than its reverse edge
-				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out) && one_length < minSizeToBeShortBranch){
+				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out)){ // && one_length < minSizeToBeShortBranch){
 					removeEdge(one_edge);
 					++num_nodes_rm;
 					FILE_LOG(logDEBUG1) << "Delete this edge, length: " << one_length << " and " << long_brlens_map.at(neighbor).at(in_out) << "\n";
