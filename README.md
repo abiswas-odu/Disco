@@ -79,14 +79,14 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 
 # Use bbduk.sh to quality and length trim the Illumina reads and remove adapter sequences
 # 1. ftm = 5, right trim read length to a multiple of 5
-# 2. k = 23, Kmer length used for finding contaminants
+# 2. k = 11, Kmer length used for finding contaminants
 # 3. ktrim=r, Trim reads to remove bases matching reference kmers to the right
-# 4. mink=11, look for shorter kmers at read tips down to 11 bps
+# 4. mink=7, look for shorter kmers at read tips down to 7 bps
 # 5. qhdist=1, hamming distance for query kmers
 # 6. tbo, trim adapters based on where paired reads overlap
 # 7. tpe, when kmer right-trimming, trim both reads to the minimum length of either
 # 8. qtrim=r, trim read right ends to remove bases with low quality
-# 9. trimq=10, regions with average quality below 10 will be trimmed.
+# 9. trimq=15, regions with average quality below 10 will be trimmed.
 # 10. minlength=70, reads shorter than 70bps after trimming will be discarded.
 # 11. ref=$adapters, adapters shipped with bbnorm tools
 # 12. –Xmx8g, use 8G memory
@@ -97,16 +97,18 @@ bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=11 mink=23 hdist=1 tpe tbo ref=${ada
 bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=$phiX_adapters hdist=1 k=23
 ```
 
-##### Error correction with Tadpole
+##### Error correction with BBMerge and Tadpole
 
-Tarpole is a memory efficient error correction tool from the bbtools package that runs within reasonable time. We suggest using this for error correction. 
+Tarpole is a memory efficient error correction tool from the bbtools package that runs within reasonable time. We also use the bbmerge tool from the same package to error correct the overlapping paired end reads. We suggest using the following commands for error correction. 
 ```
 #!bash
-# 1. mode=correct, use tadpole for correction
-# 2. ecc=t, error correct via kmer counts
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=1 prealloc k=23
+# 1. ecco mode of bbmerge for correction of overlapping paired end reads without merging
+# 2. mode=correct, use tadpole for correction
+# 3. k=23, error correct via kmer size of 23
+bbmerge.sh in=filter.fq.gz out=ecc.fq.gz ecco mix adapters=default
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct ordered prefilter=1 prealloc k=23
 #If the above goes out of memory, try
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct prefilter=2 prealloc k=23
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct ordered prefilter=2 prealloc k=23
 ```
 
 ### Assembly of Error Corrected Data

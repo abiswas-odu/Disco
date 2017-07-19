@@ -209,7 +209,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
    if [ "$constructGraph" = "Y" ] ; then
@@ -243,7 +244,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
    if [ "$constructGraph" = "Y" ] ; then
@@ -294,7 +296,8 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as
    rmTrimFtlOutput2=${rmTrimFtlOutput2#?}
    trimFtlEccOutput=${trimFtlEccOutput#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlBBMEccOutput1} out2=${trimFtlBBMEccOutput2} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput1} in2=${trimFtlBBMEccOutput2} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput1} ${rmTrimFtlOutput1} ${rmTrimOutput2} ${rmTrimFtlOutput2}
    if [ "$constructGraph" = "Y" ] ; then
@@ -352,7 +355,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    rmTrimOutputP=${rmTrimOutputP#?}
    rmTrimFtlOutputP=${rmTrimFtlOutputP#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutputP},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutputS} ${rmTrimFtlOutputS} ${rmTrimOutputP} ${rmTrimFtlOutputP}
    if [ "$constructGraph" = "Y" ] ; then
@@ -420,7 +424,8 @@ elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple 
    rmTrimOutputS=${rmTrimOutputS#?}
    rmTrimFtlOutputS=${rmTrimFtlOutputS#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput1} ${rmTrimFtlOutput} ${rmTrimOutput2} ${rmTrimFtlOutputS}
    if [ "$constructGraph" = "Y" ] ; then

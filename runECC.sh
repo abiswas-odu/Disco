@@ -237,9 +237,10 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
-   rm ${rmTrimOutput} ${rmTrimFtlOutput}
+   rm ${rmTrimOutput} ${rmTrimFtlOutput} ${trimFtlBBMEccOutput}
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as input
    #BBTools Preprocessing
    # Process pair R1
