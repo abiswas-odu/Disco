@@ -209,7 +209,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileS" ] ; then		#
    trimFtlEccOutput=${trimFtlEccOutput#?}
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput}
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#Multiple SE file as input
@@ -238,7 +239,7 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] && [ -z "$readFileP" ] ; then		#
    rmTrimOutput=${rmTrimOutput#?}
    rmTrimFtlOutput=${rmTrimFtlOutput#?}
    ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc k=23 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput} out=${trimFtlEccOutput} ecc prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput} ${rmTrimFtlOutput} ${trimFtlBBMEccOutput}
 elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as input
@@ -263,8 +264,8 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as
       fullName2="$(echo -e "${array2[$i]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName1=`basename $fullName1`
       fName2=`basename $fullName2`
-       ${exePath}/bbmap/bbduk.sh in=${fullName1} in2=${fullName2} out=trm.${fName1} out2=trm.${fName2} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-   ${exePath}/bbmap/bbduk.sh in=trm.${fName1} in2=trm.${fName2} out=ftl.trm.${fName1} out2=ftl.trm.${fName2} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+       ${exePath}/bbmap/bbduk.sh in=${fullName1} in2=${fullName2} out=trm.${fName1} out2=trm.${fName2} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+   ${exePath}/bbmap/bbduk.sh in=trm.${fName1} in2=trm.${fName2} out=ftl.trm.${fName1} out2=ftl.trm.${fName2} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutput1="${trimFtlOutput1},ftl.trm.${fName1}"
       trimFtlOutput2="${trimFtlOutput2},ftl.trm.${fName2}"       
       rmTrimOutput1="${rmTrimOutput1} trm.${fName1}"		
@@ -283,7 +284,8 @@ elif [ -z "$readFileS" ] && [ -z "$readFileP" ] ; then		#Multiple P1/P2 files as
    rmTrimFtlOutput2=${rmTrimFtlOutput2#?}
    trimFtlEccOutput=${trimFtlEccOutput#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlEccOutput} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput1} in2=${trimFtlOutput2} out=${trimFtlBBMEccOutput1} out=${trimFtlBBMEccOutput2} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput1} in2=${trimFtlBBMEccOutput2} out=${trimFtlEccOutput} ecc prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput1} ${rmTrimFtlOutput1} ${rmTrimOutput2} ${rmTrimFtlOutput2}
 elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE file and a Multiple SE file as input
@@ -302,8 +304,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    do
       fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName=`basename $fullName`
-      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutputS="${trimFtlOutputS},ftl.trm.${fName}"       
       rmTrimOutputS="${rmTrimOutputS} trm.${fName}"		
       rmTrimFtlOutputS="${rmTrimFtlOutputS} ftl.trm.${fName}"     
@@ -323,8 +325,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    do
       fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName=`basename $fullName`
-      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutputP="${trimFtlOutputP},ftl.trm.${fName}"       
       rmTrimOutputP="${rmTrimOutputP} trm.${fName}"		
       rmTrimFtlOutputP="${rmTrimFtlOutputP} ftl.trm.${fName}"     
@@ -335,7 +337,8 @@ elif [ -z "$readFile1" ] && [ -z "$readFile2" ] ; then		#Multiple Interleaved PE
    rmTrimOutputP=${rmTrimOutputP#?}
    rmTrimFtlOutputP=${rmTrimFtlOutputP#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutputP},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput},${trimFtlOutputS} out=${trimFtlEccOutputP},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutputS} ${rmTrimFtlOutputS} ${rmTrimOutputP} ${rmTrimFtlOutputP}
 elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple SE file as input
@@ -361,8 +364,8 @@ elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple 
       fullName2="$(echo -e "${array2[$i]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName1=`basename $fullName1`
       fName2=`basename $fullName2`
-       ${exePath}/bbmap/bbduk.sh in=${fullName1} in2=${fullName2} out=trm.${fName1} out2=trm.${fName2} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-   ${exePath}/bbmap/bbduk.sh in=trm.${fName1} in2=trm.${fName2} out=int.ftl.trm.${fName1} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+       ${exePath}/bbmap/bbduk.sh in=${fullName1} in2=${fullName2} out=trm.${fName1} out2=trm.${fName2} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+   ${exePath}/bbmap/bbduk.sh in=trm.${fName1} in2=trm.${fName2} out=int.ftl.trm.${fName1} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutput="${trimFtlOutput},int.ftl.trm.${fName1}"
       rmTrimOutput1="${rmTrimOutput1} trm.${fName1}"		
       rmTrimOutput2="${rmTrimOutput2} trm.${fName2}"		
@@ -385,8 +388,8 @@ elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple 
    do
       fullName="$(echo -e "${element}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"	#Remove any leading or trailing spaces
       fName=`basename $fullName`
-      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=23 mink=11 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
-      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=31 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
+      ${exePath}/bbmap/bbduk.sh in=${fullName} out=trm.${fName} ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${exePath}/bbmap/resources/adapters.fa ftm=5 qtrim=r trimq=10
+      ${exePath}/bbmap/bbduk.sh in=trm.${fName} out=ftl.trm.${fName} k=23 hdist=1 ref=${exePath}/bbmap/resources/sequencing_artifacts.fa.gz,${exePath}/bbmap/resources/phix174_ill.ref.fa.gz
       trimFtlOutputS="${trimFtlOutputS},ftl.trm.${fName}"       
       rmTrimOutputS="${rmTrimOutputS} trm.${fName}"		
       rmTrimFtlOutputS="${rmTrimFtlOutputS} ftl.trm.${fName}"     
@@ -397,7 +400,8 @@ elif [ -z "$readFileP" ] ; then			#Multiple sepatate P1/P2 files and a Multiple 
    rmTrimOutputS=${rmTrimOutputS#?}
    rmTrimFtlOutputS=${rmTrimFtlOutputS#?}
    #Error Correction
-   ${exePath}/bbmap/tadpole.sh in=${trimFtlOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
+   ${exePath}/bbmap/bbmerge.sh in=${trimFtlOutput} out=${trimFtlBBMEccOutput} ecco mix adapters=default
+   ${exePath}/bbmap/tadpole.sh in=${trimFtlBBMEccOutput},${trimFtlOutputS} out=${trimFtlEccOutput},${trimFtlEccOutputS} ecc k=31 prealloc prefilter=2 tossjunk
    #Delete intermediate files after pre-processing
    rm ${rmTrimOutput1} ${rmTrimFtlOutput} ${rmTrimOutput2} ${rmTrimFtlOutputS}
 else

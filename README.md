@@ -94,8 +94,8 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 adapters= bbmap/resources/adapters.fa
 artifacts= bbmap/resources/sequencing_artifacts.fa.gz
 phiX_adapters= bbmap/resources/phix174_ill.ref.fa.gz
-bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=11 mink=23 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=15
-bbduk.sh in=trim.fq.gz out=filter.fq.gz ref=${artifacts},${phiX_adapters} hdist=1 k=23
+bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=15
+bbduk.sh in=trim.fq.gz out=filter.fq.gz k=23 hdist=1 ref=${artifacts},${phiX_adapters}
 ```
 
 ##### Error correction with BBMerge and Tadpole
@@ -105,11 +105,10 @@ Tarpole is a memory efficient error correction tool from the bbtools package tha
 #!bash
 # 1. ecco mode of bbmerge for correction of overlapping paired end reads without merging
 # 2. mode=correct, use tadpole for correction
-# 3. k=23, error correct via kmer size of 23
 bbmerge.sh in=filter.fq.gz out=ecc.fq.gz ecco mix adapters=default
-tadpole.sh in=ecc.fq.gz out=tecc.fq.gz mode=correct ordered prefilter=1 prealloc k=23
+tadpole.sh in=ecc.fq.gz out=tecc.fq.gz ecc ordered prefilter=1
 #If the above goes out of memory, try
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz mode=correct ordered prefilter=2 prealloc k=23
+tadpole.sh in=filter.fq.gz out=ecc.fq.gz ecc ordered prefilter=2
 ```
 
 ### Assembly of Error Corrected Data
