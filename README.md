@@ -108,7 +108,7 @@ Tarpole is a memory efficient error correction tool from the bbtools package tha
 bbmerge.sh in=filter.fq.gz out=ecc.fq.gz ecco mix adapters=default
 tadpole.sh in=ecc.fq.gz out=tecc.fq.gz ecc ordered prefilter=1
 #If the above goes out of memory, try
-tadpole.sh in=filter.fq.gz out=ecc.fq.gz ecc ordered prefilter=2
+tadpole.sh in=ecc.fq.gz out=tecc.fq.gz ecc ordered prefilter=2
 ```
 
 ### Assembly of Error Corrected Data
