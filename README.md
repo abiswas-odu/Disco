@@ -24,9 +24,39 @@ DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multip
 3. The assembler can be built with the make option "READGZ=1" to read gzipped files. 
 If compiled successfully, the required executables will be built and the various `runDisco...` scripts can be used to run the assembler. 
 
-### Quickly Running The Assembler 
+### Quickly Running An Assembly 
 
-There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster.  
+There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster. Both versions require data pre-processing of raw illumina reads. We provide two scripts to perform data pre-processing. The details of the pre-processing are provided in the "Preprocessing of the Illumina data" section below. If your data is pre-processed please continue to the "Quickly Running DISCO" section. 
+
+* __Data Pre-processing and Assembly:__ The following commands show the usage of the script for running data pre-processing and assembly on a single machine with multiple cores.  
+
+```
+#!/bin/bash
+
+# Pre-processing and assembly of separated paired end reads
+runAssembly.sh -d ${output_dir} -in1 readA_1.fastq -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
+
+# Pre-processing and assembly of interleaved paired end reads
+runAssembly.sh -d ${output_dir} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OP_PREFIX} 
+
+```
+
+* __Data Pre-processing:__ The following commands show the usage of the script for running data pre-processing on a single machine with multiple cores. The pre-processed data thus produced can be assembled with the distributed version of DISCO. 
+
+```
+#!/bin/bash
+
+# Pre-processing and assembly of separated paired end reads
+runECC.sh -d ${output_dir} -in1 readA_1.fastq -in2 readA_2.fastq -n ${num_threads} -o ${OP_PREFIX} 
+
+# Pre-processing and assembly of interleaved paired end reads
+runECC.sh -d ${output_dir} -inP readA.fastq.gz,readB.fastq.gz -n ${num_threads} -o ${OP_PREFIX} 
+
+```
+
+### Quickly Running DISCO 
+
+There are two versions of the assembler for running on a single machine and for running with MPI on a cluster.
 
 * __Single Machine Version:__ This version of the assembler should be used if you are going to run the assembler on a single machine with one or more cores. The assembler is invoked through a run script `./runDisco.sh`. Make sure the RAM on the machine is more than the disk space size of the uncompressed reads. The quick start command as shown below will be used in a batch job submission script or directly typed on the commandline terminal.   
 

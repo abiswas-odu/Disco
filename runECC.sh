@@ -40,11 +40,6 @@ case $key in
     echo -e "   -h\t help.\n"
     echo -e "   -m\t maximum memory to be used (DEFAULT: $maxMem GB).\n"
     echo -e "   -n\t number of threads (DEFAULT: $numThreads).\n"
-    echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
-    echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
-    echo -e "   -p\t assembly parameter file for 1st assembly iteration.\n"
-    echo -e "   -p2\t assembly parameter file for 2nd assembly iteration.\n"
-    echo -e "   -p3\t assembly parameter file for 3rd assembly iteration.\n"
     exit 1
     ;;
     -p|--parameterFile)     # parameter file for first interation of assembly
