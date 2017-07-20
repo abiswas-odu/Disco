@@ -26,7 +26,7 @@ If compiled successfully, the required executables will be built and the various
 
 ### Quickly Running An Assembly 
 
-There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster. Both versions require data pre-processing of raw illumina reads. We provide two scripts to perform data pre-processing. The details of the pre-processing are provided in the "Preprocessing of the Illumina data" section below. If your data is pre-processed please continue to the "Quickly Running DISCO" section. 
+There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster. Both versions require data pre-processing of raw illumina reads. We provide two scripts to perform data pre-processing. The details of the pre-processing are provided in the **Preprocessing of the Illumina data** section below. If your data is pre-processed please continue to the **Quickly Running DISCO** section. 
 
 * __Data Pre-processing and Assembly:__ The following commands show the usage of the script for running data pre-processing and assembly on a single machine with multiple cores.  
 
