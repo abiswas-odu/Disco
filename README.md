@@ -12,6 +12,7 @@ DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multip
 1. GNU GCC with C++11 support i.e. gcc4.9+ or above
 2. MPI Library with MPI-3 support i.e. OpenMPI 1.8 and above or cray-mpich/7.4.0 and above. By default the mpic++ wrapper is needed. If you are on a Cray cluster and the wrapper is "CC". You will need to edit the compiler.mk file. Uncomment the line "CC := CC" and comment out "CC := mpic++".   
 3. zlib/1.2.8 is optional for reading gzipped fasta/fastq files.
+4. Java Runtime Environment (build 1.7) is optional for trimming, filtering and error correction of reads using BBtools.  
  
 ### Installation Steps
 1. Download the tarball with compiled executables for Linux with GCC 4.9 and above from  [https://github.com/abiswas-odu/Disco/releases](https://github.com/abiswas-odu/Disco/releases). The code has been tested only on Linux and compiled with GCC4.9 and opemnpi 1.8.4.
@@ -23,7 +24,7 @@ DISCO, Distributed Co-assembly of Overlap graphs, is a multi threaded and multip
 3. The assembler can be built with the make option "READGZ=1" to read gzipped files. 
 If compiled successfully, the required executables will be built and the various `runDisco...` scripts can be used to run the assembler. 
 
-### Quickly Running The Assembler
+### Quickly Running The Assembler 
 
 There are two basic versions of the assembler one for running on a single machine and another for running with MPI on a cluster.  
 
@@ -94,7 +95,7 @@ We have tested Brian Bushnell's suite of tools [BBTools](http://sourceforge.net/
 adapters= bbmap/resources/adapters.fa
 artifacts= bbmap/resources/sequencing_artifacts.fa.gz
 phiX_adapters= bbmap/resources/phix174_ill.ref.fa.gz
-bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=11 mink=7 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=15
+bbduk.sh in=$reads out=trim.fq.gz ktrim=r k=23 mink=7 hdist=1 tpe tbo ref=${adapters} ftm=5 qtrim=r trimq=15
 bbduk.sh in=trim.fq.gz out=filter.fq.gz k=23 hdist=1 ref=${artifacts},${phiX_adapters}
 ```
 

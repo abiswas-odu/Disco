@@ -144,7 +144,6 @@ void OverlapGraph::removeFwdEdge(Edge *edge)
 	}
 	// If the current edge contains some reads. We have to update their location formation.
 	updateReadsLocations(edge, DELETION, m_dataset);
-
 	removeEdgeFromSourceRead(edge);
 
 }
@@ -447,7 +446,7 @@ UINT64 OverlapGraph::removeDeadEndNodes(void)
 				UINT64 inEdge = 0; 	// number of incoming edges to this node
 				UINT64 outEdge = 0; 	// number of outgoing edges from this node
 
-				// Find number of in- ane out- edges
+				// Find number of in- and out- edges
 				for(UINT64 j=0; j < it->second->size(); j++)
 				{
 					Edge * edge = it->second->at(j);
