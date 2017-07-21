@@ -119,14 +119,29 @@ void OverlapGraph::removeEdgeFromSourceRead(Edge *edge)
  *  		  This removes and deletes from memory both the edge and its twin edge
  * =====================================================================================
  */
-void OverlapGraph::removeEdge(Edge *edge){
+void OverlapGraph::removeEdge(Edge *edge, bool save_contig){
 	if(edge == nullptr)
 		return;
 	removeFwdEdge(edge->getReverseEdge());
 	removeFwdEdge(edge);
-	delete edge->getReverseEdge();
-	delete edge;
-
+    //Save edge as contig
+	if (edge->getEdgeLength()>minContigLengthTobeReported && save_contig){
+		// Between the edge and its reverse edge, only save the one with smaller source read number
+		if(edge->isSmallerEdge()) {
+			m_deletedEdges->push_back(edge);
+			delete edge->getReverseEdge();
+		}
+		else{
+			m_deletedEdges->push_back(edge->getReverseEdge());
+			delete edge;
+		}
+		FILE_LOG(logDEBUG) << "Insert deleted edge "
+				<< *(m_deletedEdges->back()) << " to vector m_deletedEdges" << "\n";
+	}
+	else{
+		delete edge->getReverseEdge();
+		delete edge;
+	}
 }
 /* 
  * ===  FUNCTION  ======================================================================
@@ -319,7 +334,7 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 		{
 			if(it->second->at(i)->isInvalid())
 			{
-				removeEdge(it->second->at(i));
+				removeEdge(it->second->at(i),false);
 				delEdges++;
 			}
 			else
@@ -389,9 +404,9 @@ UINT64 OverlapGraph::contractCompositeEdges(void)
 				Edge *new_edge = Add(edge1, edge2);
 				insertEdge(new_edge);
 				if(edge2 != edge1->getReverseEdge()){
-					removeEdge(edge2);
+					removeEdge(edge2,false);
 				}
-				removeEdge(edge1);
+				removeEdge(edge1,false);
 				++counter;	// Counter how many edges merged.
 			}
 		}
@@ -502,7 +517,7 @@ UINT64 OverlapGraph::removeDeadEndNodes(void)
 			dead_nodes++;
 			while(!(eList->empty()))
 			{
-				removeEdge(eList->front());
+				removeEdge(eList->front(),true);
 				++deleted_edges;
 			}
 		}
@@ -596,7 +611,7 @@ UINT64 OverlapGraph::removeShortBranches(void)
 				// edge is not already in the deleting list
 				// edge is smaller than its reverse edge
 				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out)){ // && one_length < minSizeToBeShortBranch){
-					removeEdge(one_edge);
+					removeEdge(one_edge, true);
 					++num_nodes_rm;
 					FILE_LOG(logDEBUG1) << "Delete this edge, length: " << one_length << " and " << long_brlens_map.at(neighbor).at(in_out) << "\n";
 				}
@@ -683,7 +698,7 @@ UINT64 OverlapGraph::removeSimilarEdges(void)
 				Edge * e1 = it->second->at(j);
 				if(e1->isInvalid())
 				{
-					removeEdge(e1);
+					removeEdge(e1,false);
 				}
 				else{
 					j++;
@@ -747,7 +762,7 @@ UINT64 OverlapGraph::clipBranches(void)
 					if((inOvls.at(k) + minOvlDiffToClip) < max_in_ovl){
 //						FILE_LOG(logDEBUG1) << "Break edge " << *(inEdges.at(k)) << " with overlap length " << inOvls.at(k) << " comparing to " << max_in_ovl << "\n";
 						t_edge_vec sub_edges = inEdges.at(k)->breakEdge(0,m_dataset);
-						removeEdge(inEdges.at(k));
+						removeEdge(inEdges.at(k),false);
 						for(auto it = sub_edges.begin(); it != sub_edges.end(); ++it)
 							insertEdge(*it);
 						++num_clip_branches;
@@ -759,7 +774,7 @@ UINT64 OverlapGraph::clipBranches(void)
 					if((outOvls.at(k) + minOvlDiffToClip) < max_out_ovl){
 //						FILE_LOG(logDEBUG1) << "Break edge " << *(outEdges.at(k)) << " with overlap length " << outOvls.at(k) << " comparing to " << max_out_ovl << "\n";
 						t_edge_vec sub_edges = outEdges.at(k)->breakEdge(0,m_dataset);
-						removeEdge(outEdges.at(k));
+						removeEdge(outEdges.at(k),false);
 						for(auto it = sub_edges.begin(); it != sub_edges.end(); ++it)
 							insertEdge(*it);
 						++num_clip_branches;
@@ -795,7 +810,7 @@ UINT64 OverlapGraph::removeLowOvlEdges(void)
 				if(ovl<minOvlToClip)
 				{
 					t_edge_vec sub_edges = e->breakEdge(0,m_dataset);
-					removeEdge(e);
+					removeEdge(e,false);
 					for(auto it = sub_edges.begin(); it != sub_edges.end(); ++it)
 						insertEdge(*it);
 					++num_clip_branches;
@@ -867,21 +882,21 @@ UINT64 OverlapGraph::reduceLoops(void)
 					++counter;
 					Edge *new_edge = Add(ab,  bb->getReverseEdge());
 					insertEdge(new_edge);
-					removeEdge(ab);
-					removeEdge(bb);
+					removeEdge(ab,false);
+					removeEdge(bb,false);
 				}
 				else if(bb->getOrientation() == 3)
 				{
 					++counter;
 					Edge *new_edge = Add(ab, bb);
 					insertEdge(new_edge);
-					removeEdge(ab);
-					removeEdge(bb);
+					removeEdge(ab,false);
+					removeEdge(bb,false);
 				}
 				else{
 					FILE_LOG(logDEBUG1) << "Loop has wrong orientation, cannot be used to reduce the graph" << "\n";
 					++remove_counter;
-					removeEdge(bb);
+					removeEdge(bb,false);
 				}
 			}
 			/* two in the loop and two incoming
@@ -890,8 +905,8 @@ UINT64 OverlapGraph::reduceLoops(void)
 				counter++;
 				Edge *new_edge = Add(ab, bb);
 				insertEdge(new_edge);
-				removeEdge(ab);
-				removeEdge(bb);
+				removeEdge(ab,false);
+				removeEdge(bb,false);
 			}
 			/* two in the loop and two incoming
 			 * reduce in the case: *---<b<--->b>---* */
@@ -899,13 +914,13 @@ UINT64 OverlapGraph::reduceLoops(void)
 				counter++; 
 				Edge *new_edge = Add(bb, bc);
 				insertEdge(new_edge);
-				removeEdge(bc);
-				removeEdge(bb);
+				removeEdge(bc,false);
+				removeEdge(bb,false);
 			}
 			/* Cannot reduce graph */
 			else if (loopCount == 2){
 				remove_counter++;
-				removeEdge(bb);
+				removeEdge(bb,false);
 			}
 		}
 	}
@@ -1024,6 +1039,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	m_dataset=dataSet;
 
 	m_graph = new map<UINT64, t_edge_vec* >;
+	m_deletedEdges = new t_edge_vec;
 	// loop edgeFilenameList and load partially simplified graphs
 	if(edge_files.size()>0)
 	{
@@ -1149,6 +1165,7 @@ OverlapGraph::OverlapGraph(const string parGlobalGraph, string simplifyPartialPa
 	m_flowComputed 	= false;
 	m_dataset=dataSet;
 	m_graph = new map<UINT64, t_edge_vec* >;
+	m_deletedEdges = new t_edge_vec;
 	// loop partial global graph and load it
 	FILE_LOG(logINFO) << "Loading partially simplified graph...\n";
 	readParEdges(parGlobalGraph);
@@ -1206,16 +1223,16 @@ void OverlapGraph::graphPathFindInitial()
 OverlapGraph::~OverlapGraph()
 {
 	// Free the memory used by the overlap graph.
-//	if (m_deletedEdges != nullptr){
-//		for(UINT64 i = 0 ; i < m_deletedEdges->size(); ++i){
-//			if (m_deletedEdges->at(i) != nullptr){
-//				delete m_deletedEdges->at(i);
-//				m_deletedEdges->at(i) = nullptr;
-//			}
-//		}
-//		delete m_deletedEdges;
-//		m_deletedEdges = nullptr;
-//	}
+	if (m_deletedEdges != nullptr){
+		for(UINT64 i = 0 ; i < m_deletedEdges->size(); ++i){
+			if (m_deletedEdges->at(i) != nullptr){
+				delete m_deletedEdges->at(i);
+				m_deletedEdges->at(i) = nullptr;
+			}
+		}
+		delete m_deletedEdges;
+		m_deletedEdges = nullptr;
+	}
 	if (m_graph!= nullptr){
 		for(map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++){
 			for(UINT64 j = 0; j< it->second->size(); j++) {
@@ -1590,7 +1607,7 @@ UINT64 OverlapGraph::removeAllEdgesWithoutFlow()
 				//the edges formed by loops that do not contain many reads will not be used.
 				if(edge->m_flow == 0 && !edge->isLoop()) {// && edge->getListofReadsSize() <= minReadsCountToHave0Flow &&
 					//	edge->getEdgeLength() < minEdgeLengthToHave0Flow) {
-					removeEdge(edge);
+					removeEdge(edge,false);
 					++num_edge_rm;
 				}
 			}
@@ -2486,9 +2503,9 @@ void OverlapGraph::merge2Edges(Edge *edge1, Edge *edge2)
 	edge2->getReverseEdge()->m_flow = edge2->m_flow;	// Remove the used flow from the reverse of edge2.
 
 	if(edge2 != edge1->getReverseEdge() && (edge2->m_flow == 0 || flow == 0))
-		removeEdge(edge2);
+		removeEdge(edge2,false);
 	if(edge1->m_flow == 0 || flow == 0)				// If no flow left in edge1
-		removeEdge(edge1);							// edge1 is deleted from the graph.
+		removeEdge(edge1,false);							// edge1 is deleted from the graph.
 }
 
 
@@ -3437,9 +3454,9 @@ bool OverlapGraph::mergeEdgesDisconnected(Edge *edge1, Edge *edge2, INT64 gapLen
 //	edge2->getReverseEdge()->coverageDepth = edge2->getReverseEdge()->coverageDepth - coverage;
 
 	if(edge2 != edge1->getReverseEdge() && (edge2->m_flow == 0 || flow == 0))
-			removeEdge(edge2);
+			removeEdge(edge2,false);
 	if(edge1->m_flow == 0 || flow == 0)				// If no flow left in edge1
-		removeEdge(edge1);							// edge1 is deleted from the graph.
+		removeEdge(edge1,false);							// edge1 is deleted from the graph.
 
 	return true;
 }

@@ -58,6 +58,7 @@ class OverlapGraph
 		/* ====================  DATA MEMBERS  ======================================= */
 		DataSet 		*m_dataset;
 		map<UINT64, t_edge_vec*> 	*m_graph;
+		t_edge_vec 		*m_deletedEdges;	// For saving deleted edges
 		UINT64 			m_numberOfNodes;
 		UINT64 			m_numberOfEdges;
 		UINT64 			m_minOvl;
@@ -80,7 +81,7 @@ class OverlapGraph
 		void removeEdgeFromSourceRead(Edge *edge);
 
 		// Remove an edge from the overlap graph.
-		void removeEdge(Edge *edge);
+		void removeEdge(Edge *edge, bool save_contig);
 
 		void removeFwdEdge(Edge *edge);
 		// Contract composite paths in the overlap graph.
