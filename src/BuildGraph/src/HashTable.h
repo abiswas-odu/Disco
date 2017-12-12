@@ -64,6 +64,7 @@ class HashTable{
 		void populateReadLengths();												//Populate the read lengths in the hash table for future offset calculation
 		void populateReadData();												//Populate the read sequence in the hash data
 		void readReadSequenceFromFile(string fileName, UINT64 minOverlap, UINT64 *hashDataLengths, UINT64 &fileIndex);
+		void printDataset(string fileName);
 
 };
 

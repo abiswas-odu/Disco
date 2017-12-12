@@ -25,11 +25,12 @@ Read::Read(void)
 /**********************************************************************************************************************
 	Another constructor with file index
 **********************************************************************************************************************/
-Read::Read(UINT64 fIndx)
+Read::Read(UINT64 fIndx,int len)
 {
 	readNumber = 0;
 	superReadID = 0;
 	fileIndex=fIndx;
+	readCoverage.insert(readCoverage.end(), len, 0);
 }
 
 /**********************************************************************************************************************
@@ -72,5 +73,14 @@ void Read::setSuperReadID(UINT64 id)
 	superReadID=id;
 }
 
+void Read::incrementReadCoverage(int indx)
+{
+	readCoverage.at(indx)=readCoverage.at(indx)+1;
+}
+
+UINT64 Read::getReadCoverage(int indx)
+{
+	return readCoverage.at(indx);
+}
 
 

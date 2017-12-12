@@ -320,6 +320,7 @@ bool OverlapGraph::buildOverlapGraphFromHashTable(string fnamePrefix, bool conta
 	}
 	delete[] allMarked;
 	cout<<endl<<"Graph construction complete."<<endl;
+	hashTable->printDataset(fnamePrefix + "_Coverage.txt");
 	CLOCKSTOP;
 	return true;
 }
@@ -790,7 +791,7 @@ UINT8 OverlapGraph::twinEdgeOrientation(UINT8 orientation)
 bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * exploredReads,map<UINT64, vector<Edge*> * > *parGraph)
 {
 	//CLOCKSTART;
-	ostringstream strstream;
+	//ostringstream strstream;
 	for (map<UINT64, vector<Edge*> * >::iterator it=parGraph->begin(); it!=parGraph->end();)
 	{
 		UINT64 readID = it->first;
@@ -818,11 +819,14 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 						list.push_back(srcLen);
 						list.push_back(e->getOverlapOffset());
 						list.push_back(srcLen-1);
+						for(int k=e->getOverlapOffset();k<=srcLen-1;k++)
+							e->getSourceRead()->incrementReadCoverage(k);
 						//Destination Read (len,start,stop)
 						list.push_back(hashTable->getReadLength(e->getDestinationRead()->getReadHashOffset()));
 						list.push_back(0);
 						list.push_back(srcLen - e->getOverlapOffset()-1);
-
+						for(int k=0;k<=(srcLen - e->getOverlapOffset()-1);k++)
+							e->getDestinationRead()->incrementReadCoverage(k);
 						//Check if destination is also marked by this thread.
 						// 0: Only source is marked
 						// 1: Only destination is marked
@@ -845,10 +849,14 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 						list.push_back(srcLen);
 						list.push_back(twinEdge->getOverlapOffset());
 						list.push_back(srcLen-1);
+						for(int k=twinEdge->getOverlapOffset();k<=srcLen-1;k++)
+							e->getDestinationRead()->incrementReadCoverage(k);
 						//Destination Read (len,start,stop)
 						list.push_back(hashTable->getReadLength(twinEdge->getDestinationRead()->getReadHashOffset()));
 						list.push_back(0);
 						list.push_back(srcLen - twinEdge->getOverlapOffset()-1);
+						for(int k=0;k<=(srcLen - twinEdge->getOverlapOffset()-1);k++)
+							e->getSourceRead()->incrementReadCoverage(k);
 						//Check if destination is also marked by this thread.
 						// 0: Only source is marked
 						// 1: Only destination is marked
@@ -859,13 +867,13 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 							list.push_back(1);
 					}
 					//write to file
-					if(list.size()>0)
-					{
-						strstream<<list.at(0)<<"\t"<<list.at(1)<<"\t";
-						for(UINT64 i = 2; i < list.size()-1; i++)	// store in a file for future use.
-							strstream<<list.at(i)<<",";
-						strstream<<"NA,"<<list.at(list.size()-1)<<'\n';
-					}
+					//if(list.size()>0)
+					//{
+					//	strstream<<list.at(0)<<"\t"<<list.at(1)<<"\t";
+					//	for(UINT64 i = 2; i < list.size()-1; i++)	// store in a file for future use.
+					//		strstream<<list.at(i)<<",";
+					//	strstream<<"NA,"<<list.at(list.size()-1)<<'\n';
+					//}
 					//remove twin edges
 					UINT64 twinID = twinEdge->getSourceRead()->getReadNumber();
 					for(UINT64 index1 = 0; index1 < parGraph->at(twinID)->size(); index1++) 	// Get the reverse edge first
@@ -895,13 +903,13 @@ bool OverlapGraph::saveParGraphToFile(string fileName, map<UINT64,nodeType> * ex
 		else
 			++it;
 	}
-	ofstream filePointer;
-	filePointer.open(fileName.c_str(), std::ios_base::app);
-	if(!filePointer)
-		MYEXIT("Unable to open file: "+fileName);
-	filePointer<<strstream.str();
-	filePointer.flush();
-	filePointer.close();
+	//ofstream filePointer;
+	//filePointer.open(fileName.c_str(), std::ios_base::app);
+	//if(!filePointer)
+	//	MYEXIT("Unable to open file: "+fileName);
+	//filePointer<<strstream.str();
+	//filePointer.flush();
+	//filePointer.close();
 	//CLOCKSTOP;
 	return true;
 }
