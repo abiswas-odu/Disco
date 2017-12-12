@@ -106,26 +106,26 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	if(!filePointer)
 		MYEXIT("Unable to open file: " + fileName);
 
-	for(UINT64 i = 0; i < pairedEndDatasetFileNames.size(); i++)						// Read the paired-end datasets.
-	{
-		UINT64 startReadID=fileIndex;
-		readDataset(pairedEndDatasetFileNames.at(i), minimumOverlapLength, counter++, fileIndex);
-		if(fileIndex <= startReadID)
-			MYEXIT("File empty. No reads loaded from "+ pairedEndDatasetFileNames.at(i));
-		filePointer<<pairedEndDatasetFileNames.at(i)<<": Paired-end file "<<i+1<<"\nReadID Range: ("<<startReadID+1<<",";
-		filePointer<<fileIndex<<")\n";
-	}
 
-	for(UINT64 i = 0; i < singleEndDatasetFileNames.size(); i++)						// Read the single-end datasets.
-	{
-		UINT64 startReadID=fileIndex;
-		readDataset(singleEndDatasetFileNames.at(i), minimumOverlapLength, counter++, fileIndex);
+	UINT64 startReadID=rQStart=fileIndex;
+	readDataset(singleEndDatasetFileNames.at(0), minimumOverlapLength, counter++, fileIndex);
 
-		if(fileIndex <= startReadID)
-			MYEXIT("File empty. No reads loaded from "+ singleEndDatasetFileNames.at(i));
-		filePointer<<singleEndDatasetFileNames.at(i)<<": Singleton file "<<i+1<<"\nReadID Range: ("<<startReadID+1<<",";
-		filePointer<<fileIndex<<")\n";
-	}
+	if(fileIndex <= startReadID)
+		MYEXIT("File empty. No reads loaded from "+ singleEndDatasetFileNames.at(0));
+	filePointer<<singleEndDatasetFileNames.at(0)<<": Singleton file "<<1<<"\nReadID Range: ("<<startReadID+1<<",";
+	filePointer<<fileIndex<<")\n";
+	rQEnd=fileIndex-1;
+
+
+	UINT64 startReadID=rSStart=fileIndex;
+	readDataset(singleEndDatasetFileNames.at(1), minimumOverlapLength, counter++, fileIndex);
+
+	if(fileIndex <= startReadID)
+		MYEXIT("File empty. No reads loaded from "+ singleEndDatasetFileNames.at(1));
+	filePointer<<singleEndDatasetFileNames.at(1)<<": Singleton file "<<2<<"\nReadID Range: ("<<startReadID+1<<",";
+	filePointer<<fileIndex<<")\n";
+	rSEnd=fileIndex-1;
+
 	filePointer.close();
 	cout << endl << "Shortest read length in all datasets: " << setw(5) << shortestReadLength<<endl;
 	cout << " Longest read length in all datasets: " << setw(5) << longestReadLength <<endl;

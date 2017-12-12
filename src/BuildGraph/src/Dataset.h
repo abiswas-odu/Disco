@@ -35,6 +35,10 @@ class Dataset
 		vector<string> singleEndDatasetFileNames;
 		UINT64 shortestReadLength;
 		UINT64 longestReadLength;
+		UINT64 rQStart;					//Start ReadID of this dataset
+		UINT64 rQEnd;					//Ending ReadID of this dataset
+		UINT64 rSStart;					//Start ReadID of this dataset
+		UINT64 rSEnd;					//Ending ReadID of this dataset
 
 		bool testRead(const string & read); 				// Test if the read is good. Contains only {A,C,G,T} and does not contain more than 80% of same base.
 
