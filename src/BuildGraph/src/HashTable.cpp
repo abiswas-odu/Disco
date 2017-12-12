@@ -647,7 +647,7 @@ void HashTable::printDataset(string fileName)
 	for(int i=1;i<dataSet->getNumberOfUniqueReads();i++){
 		filePointer<<">"<<dataSet->getReadFromID(i)->getFileIndex()<<"\n";
 		filePointer<<getStringForward(dataSet->getReadFromID(i)->getReadHashOffset())<<'\n';
-		for(int j=0;i<dataSet->getReadFromID(i)->getLength();j++){
+		for(int j=0;j<dataSet->getReadFromID(i)->getLength();j++){
 			filePointer<<dataSet->getReadFromID(i)->getReadCoverage(j)<<" ";
 		}
 		filePointer<<"\n";
