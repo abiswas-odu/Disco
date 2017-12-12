@@ -117,7 +117,7 @@ Dataset::Dataset(vector<string> pairedEndFileNames, vector<string> singleEndFile
 	rQEnd=fileIndex-1;
 
 
-	UINT64 startReadID=rSStart=fileIndex;
+	startReadID=rSStart=fileIndex;
 	readDataset(singleEndDatasetFileNames.at(1), minimumOverlapLength, counter++, fileIndex);
 
 	if(fileIndex <= startReadID)
