@@ -644,7 +644,7 @@ void HashTable::printDataset(string fileName)
 	filePointer.open(fileName.c_str(), std::ios_base::app);
 	if(!filePointer)
 		MYEXIT("Unable to open file: "+fileName);
-	for(int i=0;i<dataSet->reads->size();i++){
+	for(int i=0;i<dataSet->getNumberOfUniqueReads();i++){
 		filePointer<<">"<<dataSet->getReadFromID(i)->getFileIndex()<<"\n";
 		filePointer<<getStringForward(dataSet->getReadFromID(i)->getReadHashOffset())<<'\n';
 		for(int j=0;i<dataSet->getReadFromID(i)->getLength();j++){
