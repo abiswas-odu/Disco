@@ -645,10 +645,10 @@ void HashTable::printDataset(string fileName)
 	if(!filePointer)
 		MYEXIT("Unable to open file: "+fileName);
 	for(int i=0;i<dataSet->reads->size();i++){
-		filePointer<<">"<<dataSet->reads->at(i)->getFileIndex()<<"\n";
-		filePointer<<getStringForward(dataSet->reads->at(i)->getReadHashOffset())<<'\n';
-		for(int j=0;i<dataSet->reads->at(j)->getLength();j++){
-			filePointer<<dataSet->reads->at(i)->getReadCoverage(j)<<" ";
+		filePointer<<">"<<dataSet->getReadFromID(i)->getFileIndex()<<"\n";
+		filePointer<<getStringForward(dataSet->getReadFromID(i)->getReadHashOffset())<<'\n';
+		for(int j=0;i<dataSet->getReadFromID(i)->getLength();j++){
+			filePointer<<dataSet->getReadFromID(i)->getReadCoverage(j)<<" ";
 		}
 		filePointer<<"\n";
 	}
