@@ -108,6 +108,200 @@ UINT64 OverlapGraphSimple::contractParCompositeEdges_Serial(map<UINT64, t_edge_v
 	return counter;
 }
 
+
+
+//Checks if an edge already exists in partial graph
+bool OverlapGraphSimple::existsParEdge(EdgeSimple *checkEdge, map<UINT64, t_edge_vec* > *parGraph)
+{
+	UINT64 sourceID = checkEdge->getSourceRead();
+	map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->find(sourceID);
+	if(it != parGraph->end())
+	{
+		for(size_t i=0;i<it->second->size();i++)
+		{
+			EdgeSimple *e = it->second->at(i);
+			if(*e==*checkEdge)
+				return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  removeDeadEndNodes
+ *  Description:  remove dead end nodes and their incident edges
+ * =====================================================================================
+ */
+UINT64 OverlapGraphSimple::removeParDeadEndNodes(map<UINT64, t_edge_vec* > *parGraph, set<UINT64> &markedNodes, vector<UINT64> &nodeList)
+{
+	CLOCKSTART;
+	vector<UINT64> nodes_to_remove;
+	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
+	for(size_t i=0; i<nodeList.size(); i++)
+	{
+		map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->find(nodeList[i]);
+		if(!it->second->empty())	// If the read has some edges.
+		{
+			bool isDeadEnd = true;	// flag for dead end edge
+			UINT64 inEdge = 0; 	// number of incoming edges to this node
+			UINT64 outEdge = 0; 	// number of outgoing edges from this node
+
+			// Find number of in- and out- edges
+			for(UINT64 j=0; j < it->second->size(); j++)
+			{
+				EdgeSimple * edge = it->second->at(j);
+
+				//If edge points to a node not marked in this partition donot assume dead end delete it.
+				UINT64 destID = edge->getDestinationRead();
+				if(markedNodes.find(destID) == markedNodes.end())
+				{
+					isDeadEnd = false;
+					break;
+				}
+				/* Break case:
+				 * 0. edge already marked as not dead end
+				 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (deafult: 10)
+				 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
+				 * 3. the edge is loop for the current node
+				 * Then flag=1 and exit the loop
+				 */
+
+				if (edge->isNotDeadEnd()){
+					isDeadEnd = false;
+					break;
+				}
+				if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
+					edge->markNotDeadEnd();
+					isDeadEnd = false;
+					break;
+				}
+				if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
+					edge->markNotDeadEnd();
+					isDeadEnd = false;
+					break;
+				}
+				if(edge->isLoop())
+				{
+					edge->markNotDeadEnd();
+					isDeadEnd = false;
+					break;
+				}
+
+				if((edge->getOrientation() >> 1) & 1)
+					++outEdge;
+				else
+					++inEdge;
+			}
+			// no good edges incident to the node and only in-edges or out-edges
+			if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
+				#pragma omp critical(updateNodeList)
+				{
+					nodes_to_remove.push_back(it->first);
+				}
+			}
+		}
+
+	}
+	FILE_LOG(logINFO) << "number of dead end nodes found: " << nodes_to_remove.size() << "\n";
+
+	UINT64 deleted_edges(0);
+	// Now delete the edges incident to these nodes
+	for(auto it = nodes_to_remove.cbegin(); it != nodes_to_remove.cend(); ++it){
+		UINT64 nodeID = *it;
+		while(!(parGraph->at(nodeID)->empty()))
+		{
+			removeParEdge(parGraph->at(nodeID)->front(),parGraph);
+			++deleted_edges;
+		}
+	}
+	FILE_LOG(logINFO) << "number of edges deleted: " << deleted_edges << "\n";
+
+	CLOCKSTOP;
+	return deleted_edges;
+}
+
+OverlapGraphSimple::OverlapGraphSimple(string edge_file, string composite_out_edge_file,
+		UINT64 minOvl = 0, UINT64 parallelThreadPoolSize = 0)
+	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
+{
+	CLOCKSTART;
+	m_numberOfNodes	= 0;
+	m_numberOfEdges	= 0;
+
+	// loop edgeFilenameList
+	// Composite edge contraction with remove dead end nodes
+
+	map<UINT64, t_edge_vec* > *parGraph = new map<UINT64, t_edge_vec* >;			//Partial graph
+	set<UINT64> markedNodes;
+	vector<UINT64> nodeList;
+	loadParEdgesFromEdgeFile(edge_file, parGraph, markedNodes);
+	sortParEdgesByDestID(parGraph);
+	nodeList.assign( markedNodes.begin(), markedNodes.end() );
+	// Composite edge contraction with remove dead end nodes from partial graph
+	//Do only one round in parallel. Others can be done serial for speed...
+	contractParCompositeEdges(parGraph, markedNodes);
+	//removeParDeadEndNodes(parGraph, markedNodes, nodeList);
+	UINT64 counter(0);
+	do {
+		counter = contractParCompositeEdges_Serial(parGraph, markedNodes);
+		counter += removeParDeadEndNodes(parGraph, markedNodes, nodeList);
+	} while (counter > 0);
+
+	//Write partial simplified graph to file
+	//Print all edges file
+	printParEdges(composite_out_edge_file, parGraph);
+	//Delete partial graph structure
+	for (map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
+	{
+		UINT64 readID = it->first, j=0;
+		UINT64 edgeVecSize = parGraph->at(readID)->size();
+		while(j < edgeVecSize)
+		{
+			EdgeSimple *e = parGraph->at(readID)->at(j);
+			delete e;
+			j++;
+		}
+		delete parGraph->at(readID);
+	}
+	delete parGraph;
+
+	CLOCKSTOP;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  sortEdgesByLength
+ *  Description:  For each node, sort its incident edges by their lengths in increasing order
+ * =====================================================================================
+ */
+void OverlapGraphSimple::sortParEdgesByDestID(map<UINT64, t_edge_vec* > *parGraph)
+{
+
+	for (map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
+	{
+		sort(it->second->begin(), it->second->end(), compareParEdgesByDestID);
+	}
+}
+
+//=============================================================================
+// Function to compare two edges by the destination read number.
+// The read number was determined by the read std::string lexicographically.
+// Used for sorting.
+//=============================================================================
+bool compareParEdgesByDestID (const EdgeSimple *edge1, const EdgeSimple* edge2)
+{
+	if (edge1->getDestinationRead() < edge2->getDestinationRead())
+	{
+		return true;
+	}
+	else if (edge1->getDestinationRead() == edge2->getDestinationRead()){
+		return (compareParEdgesByLength(edge1, edge2));
+	}
+	else
+		return false;
+}
+
 /* 
  * ===  FUNCTION  ======================================================================
  *         Name:  contractCompositeEdges
@@ -303,198 +497,6 @@ UINT64 OverlapGraphSimple::contractParCompositeEdges(map<UINT64, t_edge_vec* > *
 	FILE_LOG(logINFO) << setw(10) << delEdges-counter << " composite Edges merged." << "\n";
 	CLOCKSTOP;
 	return counter;
-}
-
-//Checks if an edge already exists in partial graph
-bool OverlapGraphSimple::existsParEdge(EdgeSimple *checkEdge, map<UINT64, t_edge_vec* > *parGraph)
-{
-	UINT64 sourceID = checkEdge->getSourceRead();
-	map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->find(sourceID);
-	if(it != parGraph->end())
-	{
-		for(size_t i=0;i<it->second->size();i++)
-		{
-			EdgeSimple *e = it->second->at(i);
-			if(*e==*checkEdge)
-				return true;
-		}
-	}
-	return false;
-}
-
-/*
- * ===  FUNCTION  ======================================================================
- *         Name:  removeDeadEndNodes
- *  Description:  remove dead end nodes and their incident edges
- * =====================================================================================
- */
-UINT64 OverlapGraphSimple::removeParDeadEndNodes(map<UINT64, t_edge_vec* > *parGraph, set<UINT64> &markedNodes, vector<UINT64> &nodeList)
-{
-	CLOCKSTART;
-	vector<UINT64> nodes_to_remove;
-	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
-	for(size_t i=0; i<nodeList.size(); i++)
-	{
-		map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->find(nodeList[i]);
-		if(!it->second->empty())	// If the read has some edges.
-		{
-			bool isDeadEnd = true;	// flag for dead end edge
-			UINT64 inEdge = 0; 	// number of incoming edges to this node
-			UINT64 outEdge = 0; 	// number of outgoing edges from this node
-
-			// Find number of in- and out- edges
-			for(UINT64 j=0; j < it->second->size(); j++)
-			{
-				EdgeSimple * edge = it->second->at(j);
-
-				//If edge points to a node not marked in this partition donot assume dead end delete it.
-				UINT64 destID = edge->getDestinationRead();
-				if(markedNodes.find(destID) == markedNodes.end())
-				{
-					isDeadEnd = false;
-					break;
-				}
-				/* Break case:
-				 * 0. edge already marked as not dead end
-				 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (deafult: 10)
-				 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
-				 * 3. the edge is loop for the current node
-				 * Then flag=1 and exit the loop
-				 */
-
-				if (edge->isNotDeadEnd()){
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
-				}
-				if(edge->isLoop())
-				{
-					edge->markNotDeadEnd();
-					isDeadEnd = false;
-					break;
-				}
-
-				if((edge->getOrientation() >> 1) & 1)
-					++outEdge;
-				else
-					++inEdge;
-			}
-			// no good edges incident to the node and only in-edges or out-edges
-			if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
-				#pragma omp critical(updateNodeList)
-				{
-					nodes_to_remove.push_back(it->first);
-				}
-			}
-		}
-
-	}
-	FILE_LOG(logINFO) << "number of dead end nodes found: " << nodes_to_remove.size() << "\n";
-
-	UINT64 deleted_edges(0);
-	// Now delete the edges incident to these nodes
-	for(auto it = nodes_to_remove.cbegin(); it != nodes_to_remove.cend(); ++it){
-		UINT64 nodeID = *it;
-		while(!(parGraph->at(nodeID)->empty()))
-		{
-			removeParEdge(parGraph->at(nodeID)->front(),parGraph);
-			++deleted_edges;
-		}
-	}
-	FILE_LOG(logINFO) << "number of edges deleted: " << deleted_edges << "\n";
-
-	CLOCKSTOP;
-	return deleted_edges;
-}
-
-OverlapGraphSimple::OverlapGraphSimple(string edge_file, string composite_out_edge_file,
-		UINT64 minOvl = 0, UINT64 parallelThreadPoolSize = 0)
-	: m_minOvl(minOvl), p_ThreadPoolSize(parallelThreadPoolSize)
-{
-	CLOCKSTART;
-	m_numberOfNodes	= 0;
-	m_numberOfEdges	= 0;
-
-	// loop edgeFilenameList
-	// Composite edge contraction with remove dead end nodes
-
-	map<UINT64, t_edge_vec* > *parGraph = new map<UINT64, t_edge_vec* >;			//Partial graph
-	set<UINT64> markedNodes;
-	vector<UINT64> nodeList;
-	loadParEdgesFromEdgeFile(edge_file, parGraph, markedNodes);
-	sortParEdgesByDestID(parGraph);
-	nodeList.assign( markedNodes.begin(), markedNodes.end() );
-	// Composite edge contraction with remove dead end nodes from partial graph
-	//Do only one round in parallel. Others can be done serial for speed...
-	contractParCompositeEdges(parGraph, markedNodes);
-	//removeParDeadEndNodes(parGraph, markedNodes, nodeList);
-	UINT64 counter(0);
-	do {
-		counter = contractParCompositeEdges_Serial(parGraph, markedNodes);
-		counter += removeParDeadEndNodes(parGraph, markedNodes, nodeList);
-	} while (counter > 0);
-
-	//Write partial simplified graph to file
-	//Print all edges file
-	printParEdges(composite_out_edge_file, parGraph);
-	//Delete partial graph structure
-	for (map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
-	{
-		UINT64 readID = it->first, j=0;
-		UINT64 edgeVecSize = parGraph->at(readID)->size();
-		while(j < edgeVecSize)
-		{
-			EdgeSimple *e = parGraph->at(readID)->at(j);
-			delete e;
-			j++;
-		}
-		delete parGraph->at(readID);
-	}
-	delete parGraph;
-
-	CLOCKSTOP;
-}
-
-/* 
- * ===  FUNCTION  ======================================================================
- *         Name:  sortEdgesByLength
- *  Description:  For each node, sort its incident edges by their lengths in increasing order
- * =====================================================================================
- */
-void OverlapGraphSimple::sortParEdgesByDestID(map<UINT64, t_edge_vec* > *parGraph)
-{
-
-	for (map<UINT64, vector<EdgeSimple*> * >::iterator it=parGraph->begin(); it!=parGraph->end();it++)
-	{
-		sort(it->second->begin(), it->second->end(), compareParEdgesByDestID);
-	}
-}
-
-//=============================================================================
-// Function to compare two edges by the destination read number. 
-// The read number was determined by the read std::string lexicographically.
-// Used for sorting.
-//=============================================================================
-bool compareParEdgesByDestID (const EdgeSimple *edge1, const EdgeSimple* edge2)
-{
-	if (edge1->getDestinationRead() < edge2->getDestinationRead())
-	{
-		return true;
-	}
-	else if (edge1->getDestinationRead() == edge2->getDestinationRead()){
-		return (compareParEdgesByLength(edge1, edge2));
-	}
-	else
-		return false;
 }
 
 

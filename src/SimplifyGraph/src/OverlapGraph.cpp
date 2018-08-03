@@ -422,116 +422,6 @@ bool OverlapGraph::existsEdge(Edge *checkEdge)
 	}
 	return false;
 }
-/*
- * ===  FUNCTION  ======================================================================
- *         Name:  removeDeadEndNodes
- *  Description:  remove dead end nodes and their incident edges
- * =====================================================================================
- */
-UINT64 OverlapGraph::removeDeadEndNodes(void)
-{
-	CLOCKSTART;
-	vector< vector<UINT64>* > nodes_to_remove;
-
-	#pragma omp parallel num_threads(p_ThreadPoolSize)
-	{
-		vector<UINT64> *nodes_to_remove_local = new vector<UINT64>;
-		#pragma omp for schedule(dynamic)
-		for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
-		{
-			auto it = m_graph->find(i);
-			if(it != m_graph->end() && !it->second->empty())	// If the read has some edges.
-			{
-				bool isDeadEnd = true;	// flag for dead end edge
-				UINT64 inEdge = 0; 	// number of incoming edges to this node
-				UINT64 outEdge = 0; 	// number of outgoing edges from this node
-
-				// Find number of in- and out- edges
-				for(UINT64 j=0; j < it->second->size(); j++)
-				{
-					Edge * edge = it->second->at(j);
-					/* Break case:
-					 * 0. edge already marked as not dead end
-					 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (default: 10)
-					 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
-					 * 3. the edge is loop for the current node
-					 * Then flag=1 and exit the loop
-					 */
-					if (edge->isNotDeadEnd()){
-						isDeadEnd = false;
-						break;
-					}
-					if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
-						edge->markNotDeadEnd();
-						isDeadEnd = false;
-						break;
-					}
-					if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
-						edge->markNotDeadEnd();
-						isDeadEnd = false;
-						break;
-					}
-					if(edge->isLoop())
-					{
-						edge->markNotDeadEnd();
-						isDeadEnd = false;
-						break;
-					}
-					if((edge->getOrientation() >> 1) & 1)
-						++outEdge;
-					else
-						++inEdge;
-				}
-				// no good edges incident to the node and only in-edges or out-edges
-				if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
-						nodes_to_remove_local->push_back(it->first);
-				}
-			}
-		}
-		#pragma omp critical
-		{
-			nodes_to_remove.push_back(nodes_to_remove_local);
-		}
-	}
-	UINT64 deleted_edges(0), dead_nodes(0);
-	// Now delete the edges incident to these nodes
-	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
-		for(auto it = (*itOuter)->cbegin(); it != (*itOuter)->cend(); ++it){
-			UINT64 nodeID = *it;
-			t_edge_vec* eList = m_graph->at(nodeID);
-			dead_nodes++;
-			while(!(eList->empty()))
-			{
-				removeEdge(eList->front());
-				++deleted_edges;
-			}
-		}
-	}
-	FILE_LOG(logDEBUG) << "number of dead end nodes found: " << dead_nodes << "\n";
-	//Delete heal allocated vector for each thread
-	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
-		delete (*itOuter);
-	}
-
-	//Delete nodes in the graph that have no edges anymore
-	map<UINT64, t_edge_vec* >::iterator it=m_graph->begin();
-	while(it!=m_graph->end())
-	{
-		if(it->second->empty())
-		{
-			delete it->second;
-			m_graph->erase(it);
-		}
-		else
-			it++;
-	}
-
-	FILE_LOG(logDEBUG) << "number of edges deleted: " << deleted_edges << "\n";
-
-	CLOCKSTOP;
-	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
-	return deleted_edges;
-}
 
 
 /* 
@@ -698,6 +588,119 @@ UINT64 OverlapGraph::removeSimilarEdges(void)
 	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
 	return counter;
 }
+
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  removeDeadEndNodes
+ *  Description:  remove dead end nodes and their incident edges
+ * =====================================================================================
+ */
+UINT64 OverlapGraph::removeDeadEndNodes(void)
+{
+	CLOCKSTART;
+	vector< vector<UINT64>* > nodes_to_remove;
+
+	#pragma omp parallel num_threads(p_ThreadPoolSize)
+	{
+		vector<UINT64> *nodes_to_remove_local = new vector<UINT64>;
+		#pragma omp for schedule(dynamic)
+		for(UINT64 i = 1; i <= m_dataset->size() ; i++) // For each read.
+		{
+			auto it = m_graph->find(i);
+			if(it != m_graph->end() && !it->second->empty())	// If the read has some edges.
+			{
+				bool isDeadEnd = true;	// flag for dead end edge
+				UINT64 inEdge = 0; 	// number of incoming edges to this node
+				UINT64 outEdge = 0; 	// number of outgoing edges from this node
+
+				// Find number of in- and out- edges
+				for(UINT64 j=0; j < it->second->size(); j++)
+				{
+					Edge * edge = it->second->at(j);
+					/* Break case:
+					 * 0. edge already marked as not dead end
+					 * 1. composite edge with more than minReadsCountInEdgeToBeNotDeadEnd (default: 10)
+					 * 2. composite edge longer than minEdgeLengthToBeNotDeadEnd (default: 500)
+					 * 3. the edge is loop for the current node
+					 * Then flag=1 and exit the loop
+					 */
+					if (edge->isNotDeadEnd()){
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->isListofReads() && edge->getListofReadsSize() >= minReadsCountInEdgeToBeNotDeadEnd) {
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->getEdgeLength() >= minEdgeLengthToBeNotDeadEnd) {
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if(edge->isLoop())
+					{
+						edge->markNotDeadEnd();
+						isDeadEnd = false;
+						break;
+					}
+					if((edge->getOrientation() >> 1) & 1)
+						++outEdge;
+					else
+						++inEdge;
+				}
+				// no good edges incident to the node and only in-edges or out-edges
+				if( isDeadEnd && inEdge*outEdge == 0 && inEdge + outEdge > 0){
+						nodes_to_remove_local->push_back(it->first);
+				}
+			}
+		}
+		#pragma omp critical
+		{
+			nodes_to_remove.push_back(nodes_to_remove_local);
+		}
+	}
+	UINT64 deleted_edges(0), dead_nodes(0);
+	// Now delete the edges incident to these nodes
+	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
+		for(auto it = (*itOuter)->cbegin(); it != (*itOuter)->cend(); ++it){
+			UINT64 nodeID = *it;
+			t_edge_vec* eList = m_graph->at(nodeID);
+			dead_nodes++;
+			while(!(eList->empty()))
+			{
+				removeEdge(eList->front());
+				++deleted_edges;
+			}
+		}
+	}
+	FILE_LOG(logDEBUG) << "number of dead end nodes found: " << dead_nodes << "\n";
+	//Delete heal allocated vector for each thread
+	for(auto itOuter = nodes_to_remove.cbegin(); itOuter != nodes_to_remove.cend(); ++itOuter){
+		delete (*itOuter);
+	}
+
+	//Delete nodes in the graph that have no edges anymore
+	map<UINT64, t_edge_vec* >::iterator it=m_graph->begin();
+	while(it!=m_graph->end())
+	{
+		if(it->second->empty())
+		{
+			delete it->second;
+			m_graph->erase(it);
+		}
+		else
+			it++;
+	}
+
+	FILE_LOG(logDEBUG) << "number of edges deleted: " << deleted_edges << "\n";
+
+	CLOCKSTOP;
+	FILE_LOG(logINFO) << "numberOfEdges = " << m_numberOfEdges << "\n";
+	return deleted_edges;
+}
+
 
 /* 
  * ===  FUNCTION  ======================================================================
