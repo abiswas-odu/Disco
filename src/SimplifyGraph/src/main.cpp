@@ -61,7 +61,6 @@ int main(int argc, char **argv) {
 	}
 	FILE_LOG(logINFO) << endl;
 	FILE_LOG(logINFO) << "Output file names' prefix is: " << outputFilenamePrefix << endl;
-
 	CLOCKSTART;
 	//Load reads before simplification...
 	DataSet *dataSet = new DataSet(readSingleFilenameList,readPairedFilenameList, readInterPairedFilenameList); // construct dataset from reads file(s)
@@ -70,9 +69,10 @@ int main(int argc, char **argv) {
 
 	FILE_LOG(logINFO) << "Total number of unique reads loaded from read file(s): "
 		<< dataSet->size() << "\n";
+
 	//Read checkpoint file and set checkpoint parameters
 	vector< vector<int> > checkPointParams;
-	int startItr=readCheckpointInfo(checkPointParams,ctgCount, scfCount);
+	int startItr = readCheckpointInfo(checkPointParams,ctgCount, scfCount);
 
 	//Do simplification iterations
 	bool continueSimplification= true;
@@ -147,6 +147,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 	}
 	else
 		FILE_LOG(logINFO) <<"Skipping initial simplification..."<<endl;
+
 	//ClipBranches and remove similar edges
 	if(checkPointParams[interationCount-1][2]==0)		//Check if aggressive simplification complete
 	{
@@ -171,6 +172,8 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 	if(checkPointParams[interationCount-1][4]==0)		//Check if post-flow analysis simplification complete
 	{
 		overlapGraph->simplifyGraph();
+		overlapGraph->removeParallelEdges();
+		overlapGraph->simplifyGraph();
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
 		Utils::writeCheckPointFile(outputFilenamePrefix,"PostFlowAnalysis=1");
@@ -186,8 +189,12 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
-		overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-				contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
+		if(overlapGraph->n50Thresh->find(dataSet->size())!=overlapGraph->n50Thresh->end())
+			overlapGraph->streamContigsN50Thresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
+				contig_file, edge_file, edge_cov_file,usedReadFileName,overlapGraph->n50Thresh->find(dataSet->size())->second,"contig",ctgCount);
+		else
+			overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
+							contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
 		Utils::writeCheckPointFile(outputFilenamePrefix,"PrintCtg="+SSTR(ctgCount));
@@ -251,8 +258,12 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-			overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-					contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
+			if(overlapGraph->n50Thresh->find(dataSet->size())!=overlapGraph->n50Thresh->end())
+				overlapGraph->streamContigsN50Thresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
+					contig_file, edge_file, edge_cov_file,usedReadFileName,overlapGraph->n50Thresh->find(dataSet->size())->second,"scaff",scfCount);
+			else
+				overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
+									contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 			//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 		}
 		//Write checkpoint graph

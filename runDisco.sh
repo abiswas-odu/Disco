@@ -19,6 +19,7 @@ asmParaFileP2="${exePath}/disco_2.cfg"
 asmParaFileP3="${exePath}/disco_3.cfg"
 constructGraph="Y"
 simplifyGraph="Y"
+redoSimplify="N"
 dataOutPath="."
 phymem=`grep MemTotal /proc/meminfo | awk '{print $2}'`
 maxMem=$((phymem/1048576))
@@ -42,6 +43,7 @@ case $key in
     echo -e "   -n\t number of threads (DEFAULT: $numThreads).\n"
     echo -e "   -obg\t only build overlap graph (DEFAULT: False).\n"
     echo -e "   -osg\t only simplify existing overlap graph (DEFAULT: False).\n"
+    echo -e "   -resimp\t redo simplification(DEFAULT: False).\n"
     echo -e "   -p\t assembly parameter file for 1st assembly iteration.\n"
     echo -e "   -p2\t assembly parameter file for 2nd assembly iteration.\n"
     echo -e "   -p3\t assembly parameter file for 3rd assembly iteration.\n"
@@ -91,11 +93,14 @@ case $key in
     maxMem="$2"
     shift # past argument
     ;;
-    -obg|--OnlyBuildGraph)                        # Maximum memory limit
+    -obg|--OnlyBuildGraph)
     simplifyGraph=""
     ;;
-    -osg|--OnlySimplifyGraph)                        # Maximum memory limit
+    -osg|--OnlySimplifyGraph)
     constructGraph=""
+    ;;
+    -resimp|--ReSimplifyGraph)
+    redoSimplify="Y"
     ;;
     *)
     echo "ERROR: Unidentified user variable $key"
@@ -175,7 +180,13 @@ else
 fi
 
 if [ -d "${dataOutPath}/assembly" ] ; then
-   echo "Previous result directory \"assembly\" exists. Will nuke previous run..."
+   if [ "$redoSimplify" = "Y" ] ; then
+      echo "Re-simplify flag set. Previous result directory \"assembly\" exists. Will nuke previous run..."
+      `rm -rf ${dataOutPath}/assembly`
+      `mkdir ${dataOutPath}/assembly`
+   else
+      echo "Previous result directory \"assembly\" exists. Will continue previous run..."
+   fi
 else
    `mkdir ${dataOutPath}/assembly`
 fi

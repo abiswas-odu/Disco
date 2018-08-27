@@ -40,7 +40,7 @@ string Config::paramFileName3="disco_3.cfg";
 // global variables with default value
 unsigned int minOvl=20;
 
-unsigned int minReadsCountInEdgeToBeNotDeadEnd = 2;
+unsigned int minReadsCountInEdgeToBeNotDeadEnd = 5;
 unsigned int minEdgeLengthToBeNotDeadEnd = 500;
 
 unsigned int minReadsCountToHave0Flow = 2;

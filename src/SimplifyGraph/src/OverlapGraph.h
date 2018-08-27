@@ -20,6 +20,8 @@
 #define EXPLORE_DEPTH 100
 #define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
 #define MAX_INNER_DIST_TRESH 100
+#define N50_THRESH 60000
+#define MIN_THRESH 15000
 
 
 extern char **environ;
@@ -138,12 +140,14 @@ class OverlapGraph
 		bool testRead(const string & read);
 
 	public:
+
 		/* ====================  DATA MEMBERS  ======================================= */
 		// Keep track of number of reads contained in the edges with 1 unit of flow assigned 
 		static int s_nReads_in_goodEdges; 
 
 		// keep track of number of edges with 1 unit of flow assigned 
-		static int s_nGoodEdges;        
+		static int s_nGoodEdges;
+		map<UINT64,UINT64> *n50Thresh;
 
 		/* ====================  LIFECYCLE     ======================================= */
 		OverlapGraph(void);
@@ -168,6 +172,9 @@ class OverlapGraph
 
 		// Remove all simple edges without flow
 		UINT64 removeAllEdgesWithoutFlow();
+
+		// Remove all parallel edges
+		UINT64 removeParallelEdges();
 
 		void populate_edge(Edge *edge);
 
@@ -253,6 +260,10 @@ class OverlapGraph
 		void streamContigs(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 				vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
 				string usedReadFileName, string namePrefix, UINT64 &printed_contigs);
+
+		void streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+				vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
+				string usedReadFileName, UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs);
 
 		void populate_read(const UINT64 &readID, const std::string & read_str);
 		void loadStringFromReadsFile(const std::string &read_file, UINT64 & readID);

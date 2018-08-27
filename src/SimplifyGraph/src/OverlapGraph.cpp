@@ -485,7 +485,7 @@ UINT64 OverlapGraph::removeShortBranches(void)
 				// overlap is small 
 				// edge is not already in the deleting list
 				// edge is smaller than its reverse edge
-				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out)){ // && one_length < minSizeToBeShortBranch){
+				if(one_length * minFoldToBeShortBranch < long_brlens_map.at(neighbor).at(in_out) && one_length < minSizeToBeShortBranch){
 					removeEdge(one_edge);
 					++num_nodes_rm;
 					FILE_LOG(logDEBUG1) << "Delete this edge, length: " << one_length << " and " << long_brlens_map.at(neighbor).at(in_out) << "\n";
@@ -939,7 +939,7 @@ void OverlapGraph::calculateBoundAndCost(const Edge *edge, INT64* FLOWLB, INT64*
 	{
 		// Case1: Composite Edge of at least minFlowReadCountThreshold (default: 20) reads. Must have at least one unit of flow.
 		// Case2: Composite Edge length is longer than minFlowEdgeLengthThreshold (default: 1000)
-		if(edge->getListofReadsSize() >= minReadsCountInEdgeToBe1MinFlow || edge->getEdgeLength() > minEdgeLengthToBe1MinFlow)
+		if(edge->getListofReadsSize() >= minReadsCountInEdgeToBe1MinFlow || edge->getEdgeLength() >= minEdgeLengthToBe1MinFlow)
 		{
 			s_nGoodEdges++;
 			s_nReads_in_goodEdges += edge->getListofReadsSize();
@@ -1023,6 +1023,15 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	m_numberOfNodes	= 0;
 	m_numberOfEdges	= 0;
 	m_flowComputed 	= false;
+
+	n50Thresh = new map<UINT64,UINT64>;
+	n50Thresh->insert(std::pair<UINT64,UINT64>(22286068,60000));//Ecoli
+	n50Thresh->insert(std::pair<UINT64,UINT64>(210652022,142900));//TC
+	n50Thresh->insert(std::pair<UINT64,UINT64>(106998276,62300));//LC
+	n50Thresh->insert(std::pair<UINT64,UINT64>(725740612,102100));//MC
+	n50Thresh->insert(std::pair<UINT64,UINT64>(128634598,2800));//HC1
+	n50Thresh->insert(std::pair<UINT64,UINT64>(128464178,3000));//HC2
+
 
 	m_dataset=dataSet;
 
@@ -1591,8 +1600,10 @@ UINT64 OverlapGraph::removeAllEdgesWithoutFlow()
 
 				//Also remove loops without flow. This means, by default, 
 				//the edges formed by loops that do not contain many reads will not be used.
-				if(edge->m_flow == 0 && !edge->isLoop()) {// && edge->getListofReadsSize() <= minReadsCountToHave0Flow &&
-					//	edge->getEdgeLength() < minEdgeLengthToHave0Flow) {
+				if(edge->m_flow == 0 && !edge->isLoop())
+						//&& edge->getListofReadsSize() <= minReadsCountToHave0Flow
+						//&& edge->getEdgeLength() <= minEdgeLengthToHave0Flow)
+				{
 					removeEdge(edge);
 					++num_edge_rm;
 				}
@@ -1613,6 +1624,51 @@ UINT64 OverlapGraph::removeAllEdgesWithoutFlow()
 			it++;
 	}
 	FILE_LOG(logINFO) <<"No flow edges removed: " << num_edge_rm << "\n";
+	CLOCKSTOP;
+	return num_edge_rm;
+}
+
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  removeParallelEdges
+ *  Description:  Remove all parallel edges
+ * =====================================================================================
+ */
+UINT64 OverlapGraph::removeParallelEdges()
+{
+	CLOCKSTART;
+	UINT64 num_edge_rm(0);
+	for (map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++) // For each read.
+	{
+		t_edge_vec parallelEdges;
+		if(!it->second->empty())	// If the read has some edges.
+		{
+			for(UINT64 j=0; j < it->second->size(); j++) // For each edge
+			{
+				Edge * edgej = it->second->at(j);
+				UINT64 destj=edgej->getDestinationRead()->getReadID();
+				for(UINT64 k=j+1; k < it->second->size(); k++) // For each edge
+				{
+					Edge * edgek = it->second->at(k);
+					UINT64 destk=edgek->getDestinationRead()->getReadID();
+					if(destj == destk)
+					{
+						if(edgej->getEdgeLength() >=  edgek->getEdgeLength())
+							parallelEdges.push_back(edgek);
+						else
+							parallelEdges.push_back(edgej);
+					}
+				}
+			}
+		}
+		for(UINT64 j=0; j < parallelEdges.size(); j++) // For each parallel edge
+		{
+			removeEdge(parallelEdges.at(j));
+			++num_edge_rm;
+		}
+
+	}
+	FILE_LOG(logINFO) <<"Parallel edges removed: " << num_edge_rm << "\n";
 	CLOCKSTOP;
 	return num_edge_rm;
 }
@@ -2338,6 +2394,140 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
 	CLOCKSTOP;
 }
 
+/*
+ * ===  FUNCTION  ======================================================================
+ *         Name:  printContigsN50Thresh
+ *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
+ * =====================================================================================
+ */
+void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+		vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
+		string usedReadFileName,UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs)
+{
+	CLOCKSTART;
+	//streaming reads
+	UINT64 readID = 1;
+	for(auto it = read_PairFiles.cbegin(); it != read_PairFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+	for(auto it = read_PairInterFiles.cbegin(); it != read_PairInterFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+	for(auto it = read_SingleFiles.cbegin(); it != read_SingleFiles.cend(); ++it){
+		loadStringFromReadsFile(*it, readID);
+	}
+
+	t_edge_vec contigEdges;
+	getEdges(contigEdges);
+
+	//Open contig file
+	ofstream contigFilePointer;
+	contigFilePointer.open(contig_file.c_str());
+	if(!contigFilePointer)
+		MYEXIT("Unable to open file: "+contig_file);
+
+	//Open edge file
+	ofstream edgeFilePointer;
+	edgeFilePointer.open(edge_file.c_str());
+	if(!edgeFilePointer)
+		MYEXIT("Unable to open file: "+edge_file);
+
+	//Open coverage file
+	ofstream fileCoveragePointer;
+	fileCoveragePointer.open(edge_cov_file.c_str());
+	if(!fileCoveragePointer)
+		MYEXIT("Unable to open file: "+edge_cov_file);
+
+	//Open used read file
+	ofstream fileUsedReadPointer;
+	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
+	if(!fileUsedReadPointer)
+		MYEXIT("Unable to open file: "+usedReadFileName);
+
+	vector<string> contigStrs, contigStrsFinal, subStrs;
+	vector<UINT64> covVals;
+	UINT64 totalLength=0, cumulativeLength=0;
+	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
+	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
+	{
+		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
+			string contigString = (*it)->getEdgeString();
+			#pragma omp critical
+			{
+				++printed_contigs;
+				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
+				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
+				(*it)->updateBaseByBaseCoverageStat(m_dataset);
+				contigStrs.push_back(contigString);
+				covVals.push_back((*it)->getCovDepth());
+				totalLength+=contigString.length();
+			}
+		}
+	}
+	Utils::compare c;
+	sort(contigStrs.begin(), contigStrs.end(), c);
+	int indexN50 = contigStrs.size() - 1;
+
+	for (; 0 <= indexN50; indexN50--)
+	{
+		if(contigStrs[indexN50].length()<n50Threshold)
+			break;
+		cumulativeLength += contigStrs[indexN50].length();
+		contigStrsFinal.push_back(contigStrs[indexN50]);
+    }
+	if(cumulativeLength >= (totalLength * 0.5))
+	{
+		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
+		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
+	}
+	else
+	{
+		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
+		do
+		{
+			UINT64 totSubLen = 0;
+			string subStr;
+			while(totSubLen<=contigStrsFinal.back().length())
+			{
+				int subIdx = rand() % contigStrs.size();
+				if(contigStrs[subIdx].length()>=MIN_THRESH)
+				{
+					totSubLen+=contigStrs[subIdx].length();
+					subStr+=contigStrs[subIdx];
+					contigStrs.erase(contigStrs.begin()+subIdx);
+				}
+			}
+			cumulativeLength+=totSubLen;
+			subStrs.push_back(subStr);
+
+		}while(cumulativeLength < (totalLength * 0.5));
+		contigStrsFinal.insert(contigStrsFinal.end(), subStrs.begin(), subStrs.end());
+		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
+	}
+	//Write to File
+	UINT64 covIndx=0;
+	for(auto it = contigStrsFinal.begin(); it < contigStrsFinal.end(); ++it)
+	{
+		contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << covIndx + 1
+							<<" Coverage: " << covVals[covIndx]
+							<<" Length: " << (*it).length() << "\n";
+		UINT32 start=0;
+		do
+		{
+			contigFilePointer << (*it).substr(start, 100) << "\n";  // save 100 BP in each line.
+			start+=100;
+		} while (start < (*it).length());
+
+		covIndx++;
+	}
+
+	edgeFilePointer.close();
+	fileCoveragePointer.close();
+	contigFilePointer.close();
+	fileUsedReadPointer.close();
+	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
+	CLOCKSTOP;
+}
 
 /*
  * ===  FUNCTION  ======================================================================

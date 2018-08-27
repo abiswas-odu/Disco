@@ -154,6 +154,12 @@ namespace Utils
     std::string trimmed(std::string s);
 
     void writeCheckPointFile(std::string allFileNamePrefix, std::string message);
+
+    struct compare {
+        bool operator()(const std::string& first, const std::string& second) {
+            return first.size() < second.size();
+        }
+    };
 }
 
 
