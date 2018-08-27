@@ -21,7 +21,7 @@
 #define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
 #define MAX_INNER_DIST_TRESH 100
 #define N50_THRESH 60000
-#define MIN_THRESH 15000
+#define MIN_THRESH 30000
 
 
 extern char **environ;
@@ -263,7 +263,7 @@ class OverlapGraph
 
 		void streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 				vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
-				string usedReadFileName, UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs);
+				string usedReadFileName,std::string simplifyPartialPath, UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs);
 
 		void populate_read(const UINT64 &readID, const std::string & read_str);
 		void loadStringFromReadsFile(const std::string &read_file, UINT64 & readID);

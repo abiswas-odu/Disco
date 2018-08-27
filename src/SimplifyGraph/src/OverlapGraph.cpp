@@ -2402,7 +2402,7 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
  */
 void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 		vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
-		string usedReadFileName,UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs)
+		string usedReadFileName,std::string simplifyPartialPath,UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs)
 {
 	CLOCKSTART;
 	//streaming reads
@@ -2444,7 +2444,7 @@ void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_Single
 	if(!fileUsedReadPointer)
 		MYEXIT("Unable to open file: "+usedReadFileName);
 
-	vector<string> contigStrs, contigStrsFinal, subStrs;
+	vector<string> contigStrs, contigStrsFinal, subStrs, misAsmStr;
 	vector<UINT64> covVals;
 	UINT64 totalLength=0, cumulativeLength=0;
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
@@ -2505,9 +2505,30 @@ void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_Single
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
 	//Write to File
+
+	//Read mis-assembly file
+	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+".txt");
+	std::string line;
+	while (std::getline(misAsmFile, line)) {
+		misAsmStr.push_back(line);
+	}
+
+	sort(contigStrsFinal.rbegin(),contigStrsFinal.rend(), c);
 	UINT64 covIndx=0;
 	for(auto it = contigStrsFinal.begin(); it < contigStrsFinal.end(); ++it)
 	{
+		int isMisAsmCtr=0;
+
+		for(int j=0;j<misAsmStr.size();j++)
+		{
+			if((*it).find(misAsmStr[j]) != std::string::npos){
+				isMisAsmCtr++;
+			}
+		}
+
+		if(isMisAsmCtr > 2)
+			continue;
+
 		contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << covIndx + 1
 							<<" Coverage: " << covVals[covIndx]
 							<<" Length: " << (*it).length() << "\n";

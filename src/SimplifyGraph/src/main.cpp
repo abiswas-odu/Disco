@@ -172,8 +172,8 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 	if(checkPointParams[interationCount-1][4]==0)		//Check if post-flow analysis simplification complete
 	{
 		overlapGraph->simplifyGraph();
-		overlapGraph->removeParallelEdges();
-		overlapGraph->simplifyGraph();
+		//overlapGraph->removeParallelEdges();
+		//overlapGraph->simplifyGraph();
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
 		Utils::writeCheckPointFile(outputFilenamePrefix,"PostFlowAnalysis=1");
@@ -191,7 +191,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
 		if(overlapGraph->n50Thresh->find(dataSet->size())!=overlapGraph->n50Thresh->end())
 			overlapGraph->streamContigsN50Thresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-				contig_file, edge_file, edge_cov_file,usedReadFileName,overlapGraph->n50Thresh->find(dataSet->size())->second,"contig",ctgCount);
+				contig_file, edge_file, edge_cov_file,usedReadFileName, simplifyPartialPath, overlapGraph->n50Thresh->find(dataSet->size())->second,"contig",ctgCount);
 		else
 			overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 							contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
@@ -260,7 +260,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 			if(overlapGraph->n50Thresh->find(dataSet->size())!=overlapGraph->n50Thresh->end())
 				overlapGraph->streamContigsN50Thresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-					contig_file, edge_file, edge_cov_file,usedReadFileName,overlapGraph->n50Thresh->find(dataSet->size())->second,"scaff",scfCount);
+					contig_file, edge_file, edge_cov_file,usedReadFileName, simplifyPartialPath, overlapGraph->n50Thresh->find(dataSet->size())->second,"scaff",scfCount);
 			else
 				overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 									contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
