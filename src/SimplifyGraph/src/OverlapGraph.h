@@ -21,7 +21,7 @@
 #define insertSizeRangeSD 3 	// 3 means mean +/- 3 SD
 #define MAX_INNER_DIST_TRESH 100
 #define N50_THRESH 60000
-#define MIN_THRESH 30000
+#define MIN_THRESH 15000
 
 
 extern char **environ;
@@ -147,7 +147,7 @@ class OverlapGraph
 
 		// keep track of number of edges with 1 unit of flow assigned 
 		static int s_nGoodEdges;
-		map<UINT64,UINT64> *n50Thresh;
+		map<UINT64,UINT64> *refThresh;
 
 		/* ====================  LIFECYCLE     ======================================= */
 		OverlapGraph(void);
@@ -261,7 +261,7 @@ class OverlapGraph
 				vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
 				string usedReadFileName, string namePrefix, UINT64 &printed_contigs);
 
-		void streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+		void streamContigsThresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 				vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
 				string usedReadFileName,std::string simplifyPartialPath, UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs);
 

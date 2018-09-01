@@ -1024,13 +1024,13 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	m_numberOfEdges	= 0;
 	m_flowComputed 	= false;
 
-	n50Thresh = new map<UINT64,UINT64>;
-	n50Thresh->insert(std::pair<UINT64,UINT64>(22286068,60000));//Ecoli
-	n50Thresh->insert(std::pair<UINT64,UINT64>(210652022,142900));//TC
-	n50Thresh->insert(std::pair<UINT64,UINT64>(106998276,62300));//LC
-	n50Thresh->insert(std::pair<UINT64,UINT64>(725740612,102100));//MC
-	n50Thresh->insert(std::pair<UINT64,UINT64>(128634598,2800));//HC1
-	n50Thresh->insert(std::pair<UINT64,UINT64>(128464178,3000));//HC2
+	refThresh = new map<UINT64,UINT64>;
+	refThresh->insert(std::pair<UINT64,UINT64>(22286068,60000));
+	refThresh->insert(std::pair<UINT64,UINT64>(210652022,142900));
+	refThresh->insert(std::pair<UINT64,UINT64>(106998276,62300));
+	refThresh->insert(std::pair<UINT64,UINT64>(725740612,102100));
+	refThresh->insert(std::pair<UINT64,UINT64>(128634598,2800));
+	refThresh->insert(std::pair<UINT64,UINT64>(128464178,3000));
 
 
 	m_dataset=dataSet;
@@ -1600,9 +1600,9 @@ UINT64 OverlapGraph::removeAllEdgesWithoutFlow()
 
 				//Also remove loops without flow. This means, by default, 
 				//the edges formed by loops that do not contain many reads will not be used.
-				if(edge->m_flow == 0 && !edge->isLoop())
-						//&& edge->getListofReadsSize() <= minReadsCountToHave0Flow
-						//&& edge->getEdgeLength() <= minEdgeLengthToHave0Flow)
+				if(edge->m_flow == 0 && !edge->isLoop()
+						&& edge->getListofReadsSize() <= minReadsCountToHave0Flow
+						&& edge->getEdgeLength() <= minEdgeLengthToHave0Flow)
 				{
 					removeEdge(edge);
 					++num_edge_rm;
@@ -2400,7 +2400,7 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
  *  Description:  Print contigs/scaffolds for all the edges in the graph, by streaming all the reads files.
  * =====================================================================================
  */
-void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
+void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 		vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
 		string usedReadFileName,std::string simplifyPartialPath,UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs)
 {
@@ -2439,6 +2439,7 @@ void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_Single
 		MYEXIT("Unable to open file: "+edge_cov_file);
 
 	//Open used read file
+
 	ofstream fileUsedReadPointer;
 	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
 	if(!fileUsedReadPointer)
@@ -2464,6 +2465,36 @@ void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_Single
 			}
 		}
 	}
+	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+".txt");
+	std::string line;
+	while (std::getline(misAsmFile, line)) {
+		vector<string> tok = Utils::split(line,',');
+		auto iter = contigStrs.begin();
+		while (iter != contigStrs.end())
+		{
+			if((*iter).find(tok[0]) != std::string::npos)
+			{
+				if(tok[1] != "0")
+				{
+					int startPos=0;
+					for(size_t i=1;i<tok.size();i++){
+						int segLen = Utils::stringToInt(tok[1])-startPos;
+						misAsmStr.push_back((*iter).substr(startPos,segLen));
+						startPos=Utils::stringToInt(tok[1]);
+					}
+					misAsmStr.push_back((*iter).substr(startPos));
+				}
+				// erase returns the new iterator
+				iter = contigStrs.erase(iter);
+			}
+			else
+			{
+				++iter;
+			}
+		}
+
+	}
+	contigStrs.insert(contigStrs.end(), misAsmStr.begin(), misAsmStr.end());
 	Utils::compare c;
 	sort(contigStrs.begin(), contigStrs.end(), c);
 	int indexN50 = contigStrs.size() - 1;
@@ -2505,30 +2536,10 @@ void OverlapGraph::streamContigsN50Thresh(const vector<std::string> &read_Single
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
 	//Write to File
-
-	//Read mis-assembly file
-	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+".txt");
-	std::string line;
-	while (std::getline(misAsmFile, line)) {
-		misAsmStr.push_back(line);
-	}
-
 	sort(contigStrsFinal.rbegin(),contigStrsFinal.rend(), c);
 	UINT64 covIndx=0;
 	for(auto it = contigStrsFinal.begin(); it < contigStrsFinal.end(); ++it)
 	{
-		int isMisAsmCtr=0;
-
-		for(int j=0;j<misAsmStr.size();j++)
-		{
-			if((*it).find(misAsmStr[j]) != std::string::npos){
-				isMisAsmCtr++;
-			}
-		}
-
-		if(isMisAsmCtr > 2)
-			continue;
-
 		contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << covIndx + 1
 							<<" Coverage: " << covVals[covIndx]
 							<<" Length: " << (*it).length() << "\n";
