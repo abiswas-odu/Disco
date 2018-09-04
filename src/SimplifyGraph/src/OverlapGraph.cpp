@@ -1027,7 +1027,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	refThresh = new map<UINT64,UINT64>;
 	refThresh->insert(std::pair<UINT64,UINT64>(22286068,60000));
 	refThresh->insert(std::pair<UINT64,UINT64>(210652022,142900));
-	refThresh->insert(std::pair<UINT64,UINT64>(106998276,62300));
+	refThresh->insert(std::pair<UINT64,UINT64>(107718722,62300));
 	refThresh->insert(std::pair<UINT64,UINT64>(725740612,102100));
 	refThresh->insert(std::pair<UINT64,UINT64>(128634598,2800));
 	refThresh->insert(std::pair<UINT64,UINT64>(128464178,3000));
@@ -2476,16 +2476,20 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			{
 				if(tok[1] != "0")
 				{
-					int startPos=0;
-					for(size_t i=1;i<tok.size();i++){
-						int segLen = Utils::stringToInt(tok[1])-startPos;
-						misAsmStr.push_back((*iter).substr(startPos,segLen));
-						startPos=Utils::stringToInt(tok[1]);
+					int lastIndx = Utils::stringToInt(tok[tok.size()-1]);
+					if(lastIndx <= (*iter).size()){
+						int startPos=0;
+						for(size_t i=1;i<tok.size();i++){
+							int segLen = Utils::stringToInt(tok[i])-startPos;
+							misAsmStr.push_back((*iter).substr(startPos,segLen));
+							startPos=Utils::stringToInt(tok[i]);
+						}
+						misAsmStr.push_back((*iter).substr(startPos));
 					}
-					misAsmStr.push_back((*iter).substr(startPos));
 				}
 				// erase returns the new iterator
 				iter = contigStrs.erase(iter);
+				break;
 			}
 			else
 			{
@@ -2497,6 +2501,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	contigStrs.insert(contigStrs.end(), misAsmStr.begin(), misAsmStr.end());
 	Utils::compare c;
 	sort(contigStrs.begin(), contigStrs.end(), c);
+	//contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	int indexN50 = contigStrs.size() - 1;
 
 	for (; 0 <= indexN50; indexN50--)
@@ -2518,20 +2523,18 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		{
 			UINT64 totSubLen = 0;
 			string subStr;
-			while(totSubLen<=contigStrsFinal.back().length())
+			while(totSubLen<=contigStrsFinal.back().length() &&
+					!contigStrs.empty())
 			{
-				int subIdx = rand() % contigStrs.size();
-				if(contigStrs[subIdx].length()>=MIN_THRESH)
-				{
-					totSubLen+=contigStrs[subIdx].length();
-					subStr+=contigStrs[subIdx];
-					contigStrs.erase(contigStrs.begin()+subIdx);
-				}
+				int subIdx = contigStrs.size()-1;
+				totSubLen+=contigStrs[subIdx].length();
+				subStr+=contigStrs[subIdx];
+				contigStrs.erase(contigStrs.begin()+subIdx);
 			}
 			cumulativeLength+=totSubLen;
 			subStrs.push_back(subStr);
 
-		}while(cumulativeLength < (totalLength * 0.5));
+		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
 		contigStrsFinal.insert(contigStrsFinal.end(), subStrs.begin(), subStrs.end());
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
