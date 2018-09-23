@@ -19,8 +19,7 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string>
-
-#include "Config.h"
+#include <map>
 // for getting current working directory
 #ifdef WINDOWS
 	#include <direct.h>
@@ -32,14 +31,36 @@
 
 #define	BUFFER_SIZE 100			/* buffer size for reading/writing a stream */
 
+//============================================================================
+// variables typedef
+//============================================================================
+typedef unsigned char UINT8;
+typedef signed char INT8;
+typedef unsigned short UINT16;
+typedef short INT16;
+typedef unsigned long UINT32;
+typedef long INT32;
+typedef unsigned long long UINT64;
+typedef long long INT64;
+
+//============================================================================
+//	Exit code that displays the place of exit and message.
+//============================================================================
+#define MYEXIT(a) { std::cerr << std::endl << "Exit from File: " << __FILE__ << " Line: " << __LINE__ << " Function: " << __FUNCTION__ << "()" << std::endl << "Message: " << a << std::endl; exit(0);}
+
+
 /**
  * utils: utility functions for file (directory) path, filename,
  *        base filename without extension, and format changing.
  */
 namespace Utils
 {
+
     /** get path separator **/
     std::string getPathSeparator();
+
+    /**get thresholds**/
+    void populateThresh(std::map<UINT64,UINT64> *ref);
 
     /** check file exist **/
     bool isFileExist(const std::string & filename);

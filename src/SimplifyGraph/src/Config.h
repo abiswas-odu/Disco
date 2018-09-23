@@ -123,26 +123,6 @@ extern bool printGFA2;
 
 //============================================================================
 
-
-//============================================================================
-// variables typedef
-//============================================================================
-typedef unsigned char UINT8;
-typedef signed char INT8;
-typedef unsigned short UINT16;
-typedef short INT16;
-typedef unsigned long UINT32;
-typedef long INT32;
-typedef unsigned long long UINT64;
-typedef long long INT64;
-
-
-//============================================================================
-//	Exit code that displays the place of exit and message.
-//============================================================================
-#define MYEXIT(a) { cerr << endl << "Exit from File: " << __FILE__ << " Line: " << __LINE__ << " Function: " << __FUNCTION__ << "()" << endl << "Message: " << a << endl; exit(0);}
-
-
 //============================================================================
 // Clock logging for debugging
 //============================================================================

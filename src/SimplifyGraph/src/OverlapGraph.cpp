@@ -1025,14 +1025,7 @@ OverlapGraph::OverlapGraph(const vector<std::string> &edge_files, string simplif
 	m_flowComputed 	= false;
 
 	refThresh = new map<UINT64,UINT64>;
-	refThresh->insert(std::pair<UINT64,UINT64>(22286068,60000));
-	refThresh->insert(std::pair<UINT64,UINT64>(210652022,142900));
-	refThresh->insert(std::pair<UINT64,UINT64>(107718722,62300));
-	refThresh->insert(std::pair<UINT64,UINT64>(725740612,102100));
-	refThresh->insert(std::pair<UINT64,UINT64>(128634598,2800));
-	refThresh->insert(std::pair<UINT64,UINT64>(128464178,3000));
-
-
+	Utils::populateThresh(refThresh);
 	m_dataset=dataSet;
 
 	m_graph = new map<UINT64, t_edge_vec* >;

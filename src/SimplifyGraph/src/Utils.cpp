@@ -673,5 +673,11 @@ namespace Utils
 		filePointer<<message<<std::endl;
 		filePointer.close();
     }
-
+    void populateThresh(std::map<UINT64,UINT64> *ref)
+    {
+    	ref->insert(std::pair<UINT64,UINT64>(22286068,60000));
+    	ref->insert(std::pair<UINT64,UINT64>(107718722,62300));
+    	ref->insert(std::pair<UINT64,UINT64>(770370712,102100));
+    	ref->insert(std::pair<UINT64,UINT64>(146001066,2800));
+    }
 }
