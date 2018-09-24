@@ -2519,7 +2519,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			UINT64 totSubLen = 0;
 			string subStr;
 
-			if(std::getline(joinCtgFile, line))
+			if(joinCtgFile.good() && std::getline(joinCtgFile, line))
 			{
 				vector<string> tok = Utils::split(line,',');
 				vector<UINT64> indicesToDelete;
