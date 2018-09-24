@@ -2460,43 +2460,44 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	}
 	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+".txt");
 	std::string line;
-	while (std::getline(misAsmFile, line)) {
-		vector<string> tok = Utils::split(line,',');
-		auto iter = contigStrs.begin();
-		while (iter != contigStrs.end())
-		{
-			if((*iter).find(tok[0]) != std::string::npos)
+	if(misAsmFile.good())
+	{
+		while (std::getline(misAsmFile, line)) {
+			vector<string> tok = Utils::split(line,',');
+			auto iter = contigStrs.begin();
+			while (iter != contigStrs.end())
 			{
-				if(tok[1] != "0")
+				if((*iter).find(tok[0]) != std::string::npos)
 				{
-					int lastIndx = Utils::stringToInt(tok[tok.size()-1]);
-					if(lastIndx <= (*iter).size()){
-						int startPos=0;
-						for(size_t i=1;i<tok.size();i++){
-							int segLen = Utils::stringToInt(tok[i])-startPos;
-							misAsmStr.push_back((*iter).substr(startPos,segLen));
-							startPos=Utils::stringToInt(tok[i]);
+					if(tok[1] != "0")
+					{
+						int lastIndx = Utils::stringToInt(tok[tok.size()-1]);
+						if(lastIndx <= (*iter).size()){
+							int startPos=0;
+							for(size_t i=1;i<tok.size();i++){
+								int segLen = Utils::stringToInt(tok[i])-startPos;
+								misAsmStr.push_back((*iter).substr(startPos,segLen));
+								startPos=Utils::stringToInt(tok[i]);
+							}
+							misAsmStr.push_back((*iter).substr(startPos));
 						}
-						misAsmStr.push_back((*iter).substr(startPos));
 					}
+					// erase returns the new iterator
+					iter = contigStrs.erase(iter);
+					break;
 				}
-				// erase returns the new iterator
-				iter = contigStrs.erase(iter);
-				break;
-			}
-			else
-			{
-				++iter;
+				else
+				{
+					++iter;
+				}
 			}
 		}
-
 	}
+	misAsmFile.close();
 	contigStrs.insert(contigStrs.end(), misAsmStr.begin(), misAsmStr.end());
 	Utils::compare c;
 	sort(contigStrs.begin(), contigStrs.end(), c);
-	//contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	int indexN50 = contigStrs.size() - 1;
-
 	for (; 0 <= indexN50; indexN50--)
 	{
 		if(contigStrs[indexN50].length()<n50Threshold)
@@ -2512,17 +2513,49 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	else
 	{
 		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
+		std::ifstream joinCtgFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+"_join.txt");
 		do
 		{
 			UINT64 totSubLen = 0;
 			string subStr;
-			while(totSubLen<=contigStrsFinal.back().length() &&
-					!contigStrs.empty())
+
+			if(std::getline(joinCtgFile, line))
 			{
-				int subIdx = contigStrs.size()-1;
-				totSubLen+=contigStrs[subIdx].length();
-				subStr+=contigStrs[subIdx];
-				contigStrs.erase(contigStrs.begin()+subIdx);
+				vector<string> tok = Utils::split(line,',');
+				vector<UINT64> indicesToDelete;
+				for(size_t i=0;i<tok.size();i++)
+				{
+					for(size_t j=0;j<contigStrs.size();j++)
+					{
+						if(contigStrs[j].find(tok[i]) != std::string::npos)
+						{
+							indicesToDelete.push_back(j);
+							break;
+						}
+					}
+				}
+				if(indicesToDelete.size()==tok.size())
+				{
+					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
+					{
+						subStr+=contigStrs[subIdx];
+						totSubLen+=contigStrs[subIdx].length();
+					}
+					std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
+					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
+						contigStrs.erase(contigStrs.begin()+subIdx);
+				}
+			}
+			else
+			{
+				while(totSubLen<=contigStrsFinal.back().length() &&
+						!contigStrs.empty())
+				{
+					int subIdx = contigStrs.size()-1;
+					totSubLen+=contigStrs[subIdx].length();
+					subStr+=contigStrs[subIdx];
+					contigStrs.erase(contigStrs.begin()+subIdx);
+				}
 			}
 			cumulativeLength+=totSubLen;
 			subStrs.push_back(subStr);
