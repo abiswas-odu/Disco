@@ -2492,12 +2492,12 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 				}
 			}
 		}
+		misAsmFile.close();
+		contigStrs.insert(contigStrs.end(), misAsmStr.begin(), misAsmStr.end());
 	}
-	misAsmFile.close();
-	contigStrs.insert(contigStrs.end(), misAsmStr.begin(), misAsmStr.end());
 	Utils::compare c;
 	sort(contigStrs.begin(), contigStrs.end(), c);
-	int indexN50 = contigStrs.size() - 1;
+	int indexN50 = contigStrs.size() - 1, n50CtgLen;
 	for (; 0 <= indexN50; indexN50--)
 	{
 		if(contigStrs[indexN50].length()<n50Threshold)
@@ -2505,6 +2505,12 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		cumulativeLength += contigStrs[indexN50].length();
 		contigStrsFinal.push_back(contigStrs[indexN50]);
     }
+
+	if(contigStrsFinal.size()>0)
+		n50CtgLen = contigStrsFinal.back().length();
+	else
+		n50CtgLen=n50Threshold;
+
 	if(cumulativeLength >= (totalLength * 0.5))
 	{
 		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
@@ -2514,6 +2520,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	{
 		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
 		std::ifstream joinCtgFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+"_join.txt");
+		int joinCtr=0, foundCtr=0;
 		do
 		{
 			UINT64 totSubLen = 0;
@@ -2523,32 +2530,48 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			{
 				vector<string> tok = Utils::split(line,',');
 				vector<UINT64> indicesToDelete;
+				vector<bool> oriOfCtg;
 				for(size_t i=0;i<tok.size();i++)
 				{
+					string fingerStr = tok[i];
+					bool oriFlag=true;
+					if(tok[i][0]=='('){
+						oriFlag=false;
+						fingerStr = fingerStr.substr(1,fingerStr.size()-2);
+					}
 					for(size_t j=0;j<contigStrs.size();j++)
 					{
-						if(contigStrs[j].find(tok[i]) != std::string::npos)
+						if(contigStrs[j].find(fingerStr) != std::string::npos)
 						{
+							foundCtr++;
 							indicesToDelete.push_back(j);
+							oriOfCtg.push_back(oriFlag);
 							break;
 						}
 					}
 				}
 				if(indicesToDelete.size()==tok.size())
 				{
+					joinCtr++;
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
 					{
-						subStr+=contigStrs[subIdx];
+						if(oriOfCtg[subIdx])
+							subStr+=contigStrs[subIdx];
+						else
+							subStr+=Utils::reverseComplement(contigStrs[subIdx]);
+
 						totSubLen+=contigStrs[subIdx].length();
 					}
 					std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
 						contigStrs.erase(contigStrs.begin()+subIdx);
 				}
+				else
+					cout<<"Not Found:"<<line<<endl;
 			}
 			else
 			{
-				while(totSubLen<=contigStrsFinal.back().length() &&
+				while(totSubLen<=n50CtgLen &&
 						!contigStrs.empty())
 				{
 					int subIdx = contigStrs.size()-1;
@@ -2561,6 +2584,8 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			subStrs.push_back(subStr);
 
 		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
+		cout<<"Contigs found:"<<foundCtr<<endl;
+		cout<<"Contigs joined:"<<joinCtr<<endl;
 		contigStrsFinal.insert(contigStrsFinal.end(), subStrs.begin(), subStrs.end());
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
@@ -2590,81 +2615,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	CLOCKSTOP;
 }
 
-/*
- * ===  FUNCTION  ======================================================================
- *         Name:  printContigs
- *  Description:  Print contigs/scaffolds for all the edges in the graph, from already loaded read files.
- * =====================================================================================
- */
-/*void OverlapGraph::printContigs(string contig_file, string edge_file,string edge_cov_file,
-		string usedReadFileName, string namePrefix, UINT64 &printed_contigs)
-{
-	CLOCKSTART;
 
-	t_edge_vec contigEdges;
-	getEdges(contigEdges);
-
-	//Open contig file
-	ofstream contigFilePointer;
-	contigFilePointer.open(contig_file.c_str());
-	if(!contigFilePointer)
-		MYEXIT("Unable to open file: "+contig_file);
-
-	//Open edge file
-	ofstream edgeFilePointer;
-	edgeFilePointer.open(edge_file.c_str());
-	if(!edgeFilePointer)
-		MYEXIT("Unable to open file: "+edge_file);
-
-	//Open coverage file
-	ofstream fileCoveragePointer;
-	fileCoveragePointer.open(edge_cov_file.c_str());
-	if(!fileCoveragePointer)
-			MYEXIT("Unable to open file: "+edge_cov_file);
-
-	//Open used read file
-	ofstream fileUsedReadPointer;
-	fileUsedReadPointer.open(usedReadFileName.c_str(), std::ofstream::trunc);
-	if(!fileUsedReadPointer)
-			MYEXIT("Unable to open file: "+usedReadFileName);
-
-	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
-	for(auto it = contigEdges.begin(); it < contigEdges.end(); ++it)
-	{
-		if((*it)->getEdgeLength() >= minContigLengthTobeReported && (*it)->getListofReadsSize() >= minNumberofReadsTobePrinted ){
-			populate_edge(*it);
-			string contigString = (*it)->getEdgeString();
-			#pragma omp critical
-			{
-				++printed_contigs;
-				printEdge(*it,edgeFilePointer,fileUsedReadPointer,printed_contigs);
-				printEdgeCoverage(*it,fileCoveragePointer,printed_contigs);
-				//contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
-				//<< " Edge ("  << (*it)->getSourceRead()->getReadID() << ", "
-				//<< (*it)->getDestinationRead()->getReadID()
-				//<< ") String Length: " << contigString.length() << "\n";
-				(*it)->updateBaseByBaseCoverageStat(m_dataset);
-				contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << printed_contigs
-				<<" Coverage: " << (*it)->getCovDepth()
-				<<" Length: " << contigString.length() << "\n";
-
-				UINT32 start=0;
-				do
-				{
-					contigFilePointer << contigString.substr(start, 100) << "\n";  // save 100 BP in each line.
-					start+=100;
-				} while (start < contigString.length());
-			}
-		}
-	}
-	edgeFilePointer.close();
-	fileCoveragePointer.close();
-	contigFilePointer.close();
-	fileUsedReadPointer.close();
-	FILE_LOG(logINFO) << "Total number of contigs printed: " << printed_contigs << "\n";
-	CLOCKSTOP;
-}
-*/
 /**********************************************************************************************************************
 	Returns true if the read contains only {A,C,G,T} and does not contain more than 80% of the same nucleotide
 **********************************************************************************************************************/
@@ -2679,44 +2630,6 @@ bool OverlapGraph::testRead(const string & read)
 	return true;
 }
 
-
-/*
- * ===  FUNCTION  ======================================================================
- *         Name:  populate_edge
- *  Description:  Given a edge in the graph, populate the string for
- *   		  the edge.
- * =====================================================================================
- */
-/*void OverlapGraph::populate_edge(Edge *edge)
-{
-	string srcReadStr = edge->getSourceRead()->getStringForward();
-	if (((edge->getOrientation() >> 1) & 1))
-		edge->loadReadString(srcReadStr, -1);
-	else
-	{
-		std::string srcReadStr_rev = Utils::reverseComplement(srcReadStr);
-		edge->loadReadString(srcReadStr_rev, -1);
-	}
-
-	string destReadStr = edge->getDestinationRead()->getStringForward();
-	if ((edge->getOrientation() & 1))
-		edge->loadReadString(destReadStr, -2);
-	else
-	{
-		std::string destReadStr_rev = Utils::reverseComplement(destReadStr);
-		edge->loadReadString(destReadStr_rev, -2);
-	}
-
-	for(size_t i=0;i<edge->getListofReadsSize();i++)
-	{
-		string read_str = m_dataset->at(edge->getInnerReadID(i))->getStringForward();
-		UINT64 orient = edge->getInnerOrientation(i);
-		if(orient==0)
-			read_str = Utils::reverseComplement(read_str);
-		edge->loadReadString(read_str, i);
-	}
-}
-*/
 
 /**********************************************************************************************************************
 	Merge two edges in the overlap graph.
