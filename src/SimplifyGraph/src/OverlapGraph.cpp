@@ -2524,7 +2524,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		do
 		{
 			UINT64 totSubLen = 0;
-			string subStr;
+			string subStr="";
 
 			if(joinCtgFile.good() && std::getline(joinCtgFile, line))
 			{
@@ -2556,11 +2556,11 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
 					{
 						if(oriOfCtg[subIdx])
-							subStr+=contigStrs[subIdx];
+							subStr+=contigStrs[indicesToDelete[subIdx]];
 						else
-							subStr+=Utils::reverseComplement(contigStrs[subIdx]);
+							subStr+=Utils::reverseComplement(contigStrs[indicesToDelete[subIdx]]);
 
-						totSubLen+=contigStrs[subIdx].length();
+						totSubLen+=contigStrs[indicesToDelete[subIdx]].length();
 					}
 					std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
@@ -2571,6 +2571,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			}
 			else
 			{
+				break;
 				while(totSubLen<=n50CtgLen &&
 						!contigStrs.empty())
 				{
@@ -2580,8 +2581,10 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 					contigStrs.erase(contigStrs.begin()+subIdx);
 				}
 			}
-			cumulativeLength+=totSubLen;
-			subStrs.push_back(subStr);
+			if(totSubLen>0){
+				cumulativeLength+=totSubLen;
+				subStrs.push_back(subStr);
+			}
 
 		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
 		cout<<"Contigs found:"<<foundCtr<<endl;
