@@ -2564,7 +2564,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 					}
 					std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
-						contigStrs.erase(contigStrs.begin()+subIdx);
+						contigStrs.erase(contigStrs.begin()+indicesToDelete[subIdx]);
 				}
 				else
 					cout<<"Not Found:"<<line<<endl;
@@ -2572,23 +2572,40 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			else
 			{
 				break;
-				while(totSubLen<=n50CtgLen &&
-						!contigStrs.empty())
-				{
-					int subIdx = contigStrs.size()-1;
-					totSubLen+=contigStrs[subIdx].length();
-					subStr+=contigStrs[subIdx];
-					contigStrs.erase(contigStrs.begin()+subIdx);
-				}
 			}
 			if(totSubLen>0){
-				cumulativeLength+=totSubLen;
 				subStrs.push_back(subStr);
+				if(totSubLen>n50Threshold)
+					cumulativeLength+=totSubLen;
+
 			}
 
 		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
-		cout<<"Contigs found:"<<foundCtr<<endl;
 		cout<<"Contigs joined:"<<joinCtr<<endl;
+		contigStrs.insert(contigStrs.end(), subStrs.begin(), subStrs.end());
+		subStrs.clear();
+		cout<<"Contigs found:"<<contigStrs.size()<<endl;
+		sort(contigStrs.begin(), contigStrs.end(), c);
+		do
+		{
+			UINT64 totSubLen = 0;
+			string subStr="";
+			joinCtr=0;
+			while(totSubLen <= n50CtgLen &&
+					!contigStrs.empty())
+			{
+				int subIdx = contigStrs.size()-1;
+				totSubLen+=contigStrs[subIdx].length();
+				subStr+=contigStrs[subIdx];
+				contigStrs.erase(contigStrs.begin()+subIdx);
+				joinCtr++;
+			}
+			subStrs.push_back(subStr);
+			if(joinCtr>1) //otherwise this contig has been counted in before
+				cumulativeLength+=totSubLen;
+			cout<<"Added Contigs:"<<joinCtr<<endl;
+		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
+		cout<<"Contigs joined:"<<subStrs.size()<<endl;
 		contigStrsFinal.insert(contigStrsFinal.end(), subStrs.begin(), subStrs.end());
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
