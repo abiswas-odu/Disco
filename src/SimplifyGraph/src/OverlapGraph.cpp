@@ -2622,7 +2622,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		UINT32 start=0;
 		do
 		{
-			contigFilePointer << (*it).substr(start, 100) << "\n";  // save 100 BP in each line.
+			contigFilePointer << contigSequence.substr(start, 100) << "\n";  // save 100 BP in each line.
 			start+=100;
 		} while (start < (*it).length());
 
