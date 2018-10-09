@@ -2550,7 +2550,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 						}
 					}
 				}
-				if(indicesToDelete.size()==tok.size())
+				if(indicesToDelete.size()>1)
 				{
 					joinCtr++;
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
@@ -2617,6 +2617,8 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		contigFilePointer << ">"<<namePrefix<<"_" << setfill('0') << setw(10) << covIndx + 1
 							<<" Coverage: " << covVals[covIndx]
 							<<" Length: " << (*it).length() << "\n";
+		string contigSequence = (*it);
+		replace( contigSequence.begin(), contigSequence.end(), 'J', 'N' );
 		UINT32 start=0;
 		do
 		{

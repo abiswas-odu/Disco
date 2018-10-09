@@ -189,7 +189,8 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		string contig_file = outputFilenamePrefix+"_contigsFinal_"+SSTR(interationCount)+".fasta";
 		string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
 		//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"contig",ctgCount);
-		if(overlapGraph->refThresh->find(dataSet->size())!=overlapGraph->refThresh->end())
+		if(overlapGraph->refThresh->find(dataSet->size())!=overlapGraph->refThresh->end() ||
+				overlapGraph->refThresh->find((int)(dataSet->size()/1000000))!=overlapGraph->refThresh->end())
 			overlapGraph->streamContigsThresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 				contig_file, edge_file, edge_cov_file,usedReadFileName, simplifyPartialPath, overlapGraph->refThresh->find(dataSet->size())->second,"contig",ctgCount);
 		else
