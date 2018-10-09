@@ -2550,7 +2550,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 						}
 					}
 				}
-				if(indicesToDelete.size()>1)
+				if(indicesToDelete.size()==tok.size())
 				{
 					joinCtr++;
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
@@ -2566,8 +2566,6 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 					for(size_t subIdx=0;subIdx<indicesToDelete.size();subIdx++)
 						contigStrs.erase(contigStrs.begin()+indicesToDelete[subIdx]);
 				}
-				else
-					cout<<"Not Found:"<<line<<endl;
 			}
 			else
 			{
@@ -2581,10 +2579,8 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			}
 
 		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
-		cout<<"Contigs joined:"<<joinCtr<<endl;
 		contigStrs.insert(contigStrs.end(), subStrs.begin(), subStrs.end());
 		subStrs.clear();
-		cout<<"Contigs found:"<<contigStrs.size()<<endl;
 		sort(contigStrs.begin(), contigStrs.end(), c);
 		do
 		{
@@ -2603,9 +2599,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			subStrs.push_back(subStr);
 			if(joinCtr>1) //otherwise this contig has been counted in before
 				cumulativeLength+=totSubLen;
-			cout<<"Added Contigs:"<<joinCtr<<endl;
 		}while(cumulativeLength < (totalLength * 0.5) && !contigStrs.empty());
-		cout<<"Contigs joined:"<<subStrs.size()<<endl;
 		contigStrsFinal.insert(contigStrsFinal.end(), subStrs.begin(), subStrs.end());
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
