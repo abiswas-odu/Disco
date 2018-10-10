@@ -13,7 +13,7 @@
 #include "Edge.h"
 #include "HashTable.h"
 
-#define MIN_LOG_SIZE 4 			//Min size of graph to write log entry
+#define MIN_LOG_SIZE 100 			//Min size of graph to write log entry
 
 /**********************************************************************************************************************
 	Class to store the overlap graph.
