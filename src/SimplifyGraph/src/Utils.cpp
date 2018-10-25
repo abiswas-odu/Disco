@@ -554,6 +554,23 @@ namespace Utils
 	    return true;
     }
 
+    /* Get ref sequence names and length, save them in a vector of strings and vector of unsigned integers, from stream */
+	bool getRefNames(std::fstream &stream, std::vector<std::string> & refSeqs)
+	{
+		std::string line = "", seq="";
+
+		while (std::getline(stream, line)) {
+			if(line.at(0)=='>')
+			{
+				refSeqs.push_back(seq);
+				seq="";
+			}
+			else
+				seq+=line;
+		}
+		return true;
+	}
+
     /* Get current working directory */
     std::string get_cwd()
     {
@@ -679,7 +696,7 @@ namespace Utils
     	ref->insert(std::pair<UINT64,UINT64>(107718722,62300));
     	ref->insert(std::pair<UINT64,UINT64>(107,62300));
     	ref->insert(std::pair<UINT64,UINT64>(106998276,62300));
-    	ref->insert(std::pair<UINT64,UINT64>(770370712,102100));
-    	ref->insert(std::pair<UINT64,UINT64>(146001066,2800));
+    	ref->insert(std::pair<UINT64,UINT64>(770,102100));
+    	ref->insert(std::pair<UINT64,UINT64>(146,2800));
     }
 }

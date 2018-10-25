@@ -232,7 +232,6 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 								//Invalidate edge to be combined
 								nextFwdEdge->setInvalid();
 								nextFwdEdge->getReverseEdge()->setInvalid();
-								//currFwdEdge->updateEdge(nextFwdEdge);
 								Edge *temp_edge = Add(currFwdEdge, nextFwdEdge);
 								//Delete previous composite path created
 								delete currFwdEdge->getReverseEdge();
@@ -268,7 +267,6 @@ UINT64 OverlapGraph::contractCompositeEdgesPar(void)
 								visitedNodes.push_back(nextRevRead);
 								nextRevEdge->setInvalid();
 								nextRevEdge->getReverseEdge()->setInvalid();
-								//currRevEdge->getReverseEdge()->updateEdge(nextRevEdge->getReverseEdge());
 								Edge *temp_edge = Add(nextRevEdge, currRevEdge);
 								//Delete previous temporary composite path created
 								delete currRevEdge->getReverseEdge();
@@ -458,15 +456,9 @@ UINT64 OverlapGraph::removeShortBranches(void)
 				UINT64 one_length = one_edge->getOverlapOffset();
 				// edge is going in (0) or out (1) from the read
 				UINT8 in_out = ((one_edge->getOrientation() >> 1) & 1 );	
-/* 				FILE_LOG(logDEBUG1) << "Short branch from " << neighbor << " to " << i 
- * 					<< " with orientation " << in_out << " and length " << one_length << "\n";
- */
 				// If the longest branch lengths at this neighor hasn't been found yet,
 				// look for it
 				if(long_brlens_map.count(neighbor)==0){
-/* 					FILE_LOG(logDEBUG1) << "Now look for the longest branches at node " 
- * 						<< neighbor << "\n";
- */
 					LongBrLens long_brlens;
 					// Initialize both longest length in and out to be 0
 					long_brlens.push_back(0);
@@ -1210,17 +1202,6 @@ void OverlapGraph::graphPathFindInitial()
 //=============================================================================
 OverlapGraph::~OverlapGraph()
 {
-	// Free the memory used by the overlap graph.
-//	if (m_deletedEdges != nullptr){
-//		for(UINT64 i = 0 ; i < m_deletedEdges->size(); ++i){
-//			if (m_deletedEdges->at(i) != nullptr){
-//				delete m_deletedEdges->at(i);
-//				m_deletedEdges->at(i) = nullptr;
-//			}
-//		}
-//		delete m_deletedEdges;
-//		m_deletedEdges = nullptr;
-//	}
 	if (m_graph!= nullptr){
 		for(map<UINT64, t_edge_vec* >::iterator it=m_graph->begin(); it!=m_graph->end();it++){
 			for(UINT64 j = 0; j< it->second->size(); j++) {
@@ -2395,7 +2376,7 @@ void OverlapGraph::streamContigs(const vector<std::string> &read_SingleFiles,con
  */
 void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFiles,const vector<std::string> &read_PairFiles,
 		vector<std::string> &read_PairInterFiles, string contig_file, string edge_file,string edge_cov_file,
-		string usedReadFileName,std::string simplifyPartialPath,UINT64 n50Threshold, string namePrefix, UINT64 &printed_contigs)
+		string usedReadFileName,std::string simplifyPartialPath,UINT64 thresVal, string namePrefix, UINT64 &printed_contigs)
 {
 	CLOCKSTART;
 	//streaming reads
@@ -2438,7 +2419,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	if(!fileUsedReadPointer)
 		MYEXIT("Unable to open file: "+usedReadFileName);
 
-	vector<string> contigStrs, contigStrsFinal, subStrs, misAsmStr;
+	vector<string> contigStrs, contigStrsFinal, contigRefStrs,subStrs, misAsmStr;
 	vector<UINT64> covVals;
 	UINT64 totalLength=0, cumulativeLength=0;
 	#pragma omp parallel for schedule(dynamic) num_threads(p_ThreadPoolSize)
@@ -2458,8 +2439,20 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			}
 		}
 	}
-	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+".txt");
+	std::fstream scaffFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+"_join2.txt");
 	std::string line;
+	if(scaffFile.good())
+	{
+		Utils::getRefNames(scaffFile, contigRefStrs);
+		for (auto it=contigRefStrs.begin(); it!=contigRefStrs.end();)
+		{
+		   if((*it).size()<=5000)
+		      it = contigRefStrs.erase(it);
+		  else
+		      ++it;
+		}
+	}
+	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+".txt");
 	if(misAsmFile.good())
 	{
 		while (std::getline(misAsmFile, line)) {
@@ -2500,7 +2493,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	int indexN50 = contigStrs.size() - 1, n50CtgLen;
 	for (; 0 <= indexN50; indexN50--)
 	{
-		if(contigStrs[indexN50].length()<n50Threshold)
+		if(contigStrs[indexN50].length()<thresVal)
 			break;
 		cumulativeLength += contigStrs[indexN50].length();
 		contigStrsFinal.push_back(contigStrs[indexN50]);
@@ -2509,7 +2502,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	if(contigStrsFinal.size()>0)
 		n50CtgLen = contigStrsFinal.back().length();
 	else
-		n50CtgLen=n50Threshold;
+		n50CtgLen=thresVal;
 
 	if(cumulativeLength >= (totalLength * 0.5))
 	{
@@ -2519,7 +2512,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 	else
 	{
 		contigStrs.erase(contigStrs.begin()+indexN50+1,contigStrs.end());
-		std::ifstream joinCtgFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(n50Threshold)+"_join.txt");
+		std::ifstream joinCtgFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+"_join.txt");
 		int joinCtr=0, foundCtr=0;
 		do
 		{
@@ -2573,7 +2566,7 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			}
 			if(totSubLen>0){
 				subStrs.push_back(subStr);
-				if(totSubLen>n50Threshold)
+				if(totSubLen>thresVal)
 					cumulativeLength+=totSubLen;
 
 			}
@@ -2604,6 +2597,14 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
 	//Write to File
+	for (auto it=contigStrsFinal.begin(); it!=contigStrsFinal.end();)
+	{
+	   if((*it).size()>5000)
+	      it = contigStrsFinal.erase(it);
+	  else
+	      ++it;
+	}
+	contigStrsFinal.insert(contigStrsFinal.end(), contigRefStrs.begin(), contigRefStrs.end());
 	sort(contigStrsFinal.rbegin(),contigStrsFinal.rend(), c);
 	UINT64 covIndx=0;
 	for(auto it = contigStrsFinal.begin(); it < contigStrsFinal.end(); ++it)
@@ -3611,13 +3612,10 @@ bool OverlapGraph::mergeEdgesDisconnected(Edge *edge1, Edge *edge2, INT64 gapLen
 
 	edge1->m_flow = edge1->m_flow - flow;		// decrease the flow in the original edge.
 	edge1->getReverseEdge()->m_flow = edge1->getReverseEdge()->m_flow - flow; // decrease the flow in the original edge.
-//	edge1->coverageDepth = edge1->coverageDepth - coverage;
-//	edge1->getReverseEdge()->coverageDepth = edge1->getReverseEdge()->coverageDepth - coverage;
 
 	edge2->m_flow = edge2->m_flow - flow; // decrease the flow in the original edge.
 	edge2->getReverseEdge()->m_flow = edge2->getReverseEdge()->m_flow - flow; // decrease the flow in the original edge.
-//	edge2->coverageDepth = edge2->coverageDepth - coverage;
-//	edge2->getReverseEdge()->coverageDepth = edge2->getReverseEdge()->coverageDepth - coverage;
+
 
 	if(edge2 != edge1->getReverseEdge() && (edge2->m_flow == 0 || flow == 0))
 			removeEdge(edge2);

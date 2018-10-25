@@ -11,19 +11,6 @@
 #include "Read.h"
 
 //Expose only is read sequence is being stored
-/*Read::Read(const std::string &seq)
-{
-	m_seq = new dna_bitset(seq);
-	m_readID	= 0;
-	edgeP = nullptr;
-	edgeOriIndex = nullptr;
-	noOfEdges=0;
-	noOfAllocEdgeMemAvail=0;
-	containedReads = nullptr;
-	noOfConReads=0;
-	containedReadFlag=false;
-	usedRead=false;
-}*/
 
 Read::Read(const UINT64 seqLen)
 {

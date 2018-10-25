@@ -146,6 +146,9 @@ namespace Utils
     /* Get ref sequence names and save them in a vector of strings, from stream */
     bool getRefNames(FILE * stream, std::vector<std::string> & refNames, std::vector<unsigned short> & refLens);
 
+    /* Get ref sequence names and save them in a vector of strings, from stream */
+    bool getRefNames(std::fstream &stream, std::vector<std::string> & refSeqs);
+
     /* Get current working directory */
     std::string get_cwd();
 
