@@ -428,29 +428,6 @@ namespace Utils
             return false;
     }
     
-    /** find all files with specified extensions in a directory **/
-    /*
-    void getFiles(const std::string & directory, const std::string & extension,
-                  std::vector<std::string> & filenames)
-    {
-        DirectoryStructure searchDir(directory);
-        
-        searchDir.setPattern(extension);
-        searchDir.getFiles(filenames);
-        
-        int i, fileNum;
-        fileNum = (int) searchDir.getFileCount();
-        vector<string>::reverse_iterator rit = filenames.rbegin();
-        // full path of the input files and the output files
-        for (i = 0; i < fileNum; rit++,i++) {
-            //cout << *rit << " -> ";
-            *rit = directory + getPathSeparator() + *rit;
-            //cout << *rit << endl;
-        }
-
-    }
-    */
-    
     /** find the last non-empty line of a file **/
     std::string last_line(const std::string & filename)
     {
@@ -562,7 +539,8 @@ namespace Utils
 		while (std::getline(stream, line)) {
 			if(line.at(0)=='>')
 			{
-				refSeqs.push_back(seq);
+				if(seq!="")
+					refSeqs.push_back(seq);
 				seq="";
 			}
 			else
