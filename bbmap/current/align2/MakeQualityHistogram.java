@@ -1,13 +1,14 @@
 package align2;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
+import fileIO.ReadWrite;
 import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
 import structures.ListNum;
-import fileIO.ReadWrite;
 
 public class MakeQualityHistogram {
 	
@@ -35,7 +36,7 @@ public class MakeQualityHistogram {
 			int e=mapped[0][i];
 			int m=mapped[1][i];
 			float percent=e*100f/(e+m);
-			System.out.println(i+"\t"+e+"\t"+m+"\t"+String.format("%.3f", percent));
+			System.out.println(i+"\t"+e+"\t"+m+"\t"+String.format(Locale.ROOT, "%.3f", percent));
 		}
 	}
 	
@@ -46,7 +47,7 @@ public class MakeQualityHistogram {
 			int e=paired[0][i];
 			int m=paired[1][i];
 			float percent=e*100f/(e+m);
-			System.out.println(i+"\t"+e+"\t"+m+"\t"+String.format("%.3f", percent));
+			System.out.println(i+"\t"+e+"\t"+m+"\t"+String.format(Locale.ROOT, "%.3f", percent));
 		}
 	}
 	
@@ -96,7 +97,7 @@ public class MakeQualityHistogram {
 			r.setStrand(ss.strand);
 		}
 		
-		int avgQ=r.avgQuality(true, 0);
+		int avgQ=r.avgQualityInt(true, 0);
 		if(r.chrom>0){
 			mapped[0][avgQ]++;
 		}else{

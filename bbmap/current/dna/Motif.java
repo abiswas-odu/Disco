@@ -98,6 +98,7 @@ public abstract class Motif {
 		return pos;
 	}
 	
+	@Override
 	public String toString(){
 		return name+", "+length+", "+center;
 	}
@@ -122,7 +123,7 @@ public abstract class Motif {
 	
 	static final float[] baseProb1={0.256614f, 0.226617f, 0.238012f, 0.278756f};
 	
-	//Within 200 of exon and gene ends only 
+	//Within 200 of exon and gene ends only
 	static final float[] baseProb2={
 		0.076019f, 0.046405f, 0.071754f, 0.062437f, 0.067143f, 0.066057f, 0.020333f, 0.073085f,
 		0.060553f, 0.054897f, 0.068741f, 0.053822f, 0.052896f, 0.059260f, 0.077188f, 0.089412f
@@ -141,13 +142,13 @@ public abstract class Motif {
 	};
 	
 //	protected static final Hashtable<String, float[]> percentTable=makePercentTable();
-//	
+//
 //	private static final Hashtable<String, float[]> makePercentTable(){
-//		
+//
 //		String[] keys={
 //				"Exon Stops MP3",
 //		};
-//		
+//
 //		float[][] values={
 //				{
 //					0.00234f, 0.01071f, 0.02476f, 0.05155f, 0.08682f, 0.1453f, 0.22434f, 0.29615f, 0.36233f, 0.41034f,
@@ -157,12 +158,12 @@ public abstract class Motif {
 //					0.98957f, 0.99064f, 0.99157f, 0.99286f, 0.9952f, 0.99721f, 0.99858f, 0.99914f, 0.99967f, 0.9999f, 0.99998f
 //				},
 //		};
-//		
+//
 //		Hashtable<String, float[]> r= new Hashtable<String, float[]>();
 //		for(int i=0; i<keys.length; i++){
 //			r.put(keys[i], values[i]);
 //		}
-//		
+//
 //		return r;
 //	}
 

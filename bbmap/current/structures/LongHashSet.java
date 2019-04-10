@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;
 
+import shared.KillSwitch;
 import shared.Primes;
 import shared.Shared;
 import shared.Timer;
@@ -15,7 +16,7 @@ import shared.Tools;
  * @date July 6, 2016
  *
  */
-public final class LongHashSet{	
+public final class LongHashSet{
 	
 	public static void main(String[] args){
 		Random randy2=new Random();
@@ -136,8 +137,8 @@ public final class LongHashSet{
 	public LongHashSet(int initialSize, float loadFactor_){
 		invalid=randy.nextLong()|MINMASK;
 		assert(invalid<0);
-		assert(initialSize>0);
-		assert(loadFactor_>0 && loadFactor_<1);
+		assert(initialSize>0) : "Attempting to initialize a "+getClass().getSimpleName()+" of size<1.";
+		assert(loadFactor_>0 && loadFactor_<1) : "Attempting to initialize a "+getClass().getSimpleName()+" with invalid load factor: "+loadFactor_;
 		loadFactor=Tools.mid(0.25f, loadFactor_, 0.90f);
 		resize(initialSize);
 	}
@@ -156,7 +157,7 @@ public final class LongHashSet{
 		return value==invalid ? false : findCell(value)>=0;
 	}
 	
-	/** 
+	/**
 	 * Add this value to the set.
 	 * @param value
 	 * @return true if the value was added, false if it was already contained.
@@ -174,7 +175,7 @@ public final class LongHashSet{
 		return false;
 	}
 	
-	/** 
+	/**
 	 * Remove this value from the set.
 	 * @param value
 	 * @return true if the value was removed, false if it was not present.
@@ -199,6 +200,7 @@ public final class LongHashSet{
 	/*----------------        String Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	@Override
 	public String toString(){
 		return toStringListView();
 	}
@@ -207,7 +209,7 @@ public final class LongHashSet{
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
 		String comma="";
-		for(int i=0; i<size; i++){
+		for(int i=0; i<array.length; i++){
 			if(array[i]!=invalid){
 				sb.append(comma+"("+i+", "+array[i]+")");
 				comma=", ";
@@ -221,7 +223,7 @@ public final class LongHashSet{
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
 		String comma="";
-		for(int i=0; i<size; i++){
+		for(int i=0; i<array.length; i++){
 			if(array[i]!=invalid){
 				sb.append(comma+array[i]);
 				comma=", ";
@@ -232,7 +234,7 @@ public final class LongHashSet{
 	}
 	
 	public long[] toArray(){
-		long[] x=new long[size];
+		long[] x=new long[array.length];
 		int i=0;
 		for(long v : array){
 			x[i]=v;
@@ -252,7 +254,7 @@ public final class LongHashSet{
 			final long value=array[i];
 			if(value!=invalid){
 				numValues++;
-				final int cell=findCell(i);
+				final int cell=findCell(value);
 				if(i==cell){
 					numFound++;
 				}else{
@@ -350,7 +352,7 @@ public final class LongHashSet{
 		final int size3=(int)(newPrime+extra);
 		sizeLimit=(int)(modulus*loadFactor);
 		final long[] old=array;
-		array=new long[size3];
+		array=KillSwitch.allocLong1D(size3);
 		Arrays.fill(array, invalid);
 		
 //		System.err.println("Resizing "+(old==null ? "null" : ""+old.length)+" to "+size3);

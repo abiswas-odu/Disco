@@ -1,5 +1,12 @@
 package assemble;
 
+import structures.ByteBuilder;
+
+/**
+ * @author Brian Bushnell
+ * @date Oct 1, 2016
+ *
+ */
 public class ErrorTracker {
 	
 	public ErrorTracker(){
@@ -42,18 +49,19 @@ public class ErrorTracker {
 		return correctedReassembleInner+correctedReassembleOuter;
 	}
 	
+	@Override
 	public String toString(){
-		StringBuilder sb=new StringBuilder();
-		sb.append("suspected         \t").append(suspected).append('\n');
-		sb.append("detectedPincer    \t").append(detectedPincer).append('\n');
-		sb.append("detectedTail      \t").append(detectedTail).append('\n');
-//		sb.append("detectedBrute     \t").append(detectedBrute).append('\n');
-		sb.append("detectedReassemble\t").append(detectedReassemble).append('\n');
-		sb.append("correctedPincer   \t").append(correctedPincer).append('\n');
-		sb.append("correctedTail     \t").append(correctedTail).append('\n');
-//		sb.append("correctedBrute    \t").append(correctedBrute).append('\n');
-		sb.append("correctedReassembleInner\t").append(correctedReassembleInner).append('\n');
-		sb.append("correctedReassembleOuter\t").append(correctedReassembleOuter).append('\n');
+		ByteBuilder sb=new ByteBuilder();
+		sb.append("suspected         \t").append(suspected).nl();
+		sb.append("detectedPincer    \t").append(detectedPincer).nl();
+		sb.append("detectedTail      \t").append(detectedTail).nl();
+//		sb.append("detectedBrute     \t").append(detectedBrute).nl();
+		sb.append("detectedReassemble\t").append(detectedReassemble).nl();
+		sb.append("correctedPincer   \t").append(correctedPincer).nl();
+		sb.append("correctedTail     \t").append(correctedTail).nl();
+//		sb.append("correctedBrute    \t").append(correctedBrute).nl();
+		sb.append("correctedReassembleInner\t").append(correctedReassembleInner).nl();
+		sb.append("correctedReassembleOuter\t").append(correctedReassembleOuter).nl();
 		sb.append("marked            \t").append(marked);
 		return sb.toString();
 	}

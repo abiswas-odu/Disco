@@ -1,21 +1,26 @@
 package bloom;
 
+import java.io.Serializable;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
-import ukmer.Kmer;
-
 import dna.AminoAcid;
-import dna.Data;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 
 /**
  * @author Brian Bushnell
  * @date Jul 5, 2012
  */
-public abstract class KCountArray {
+public abstract class KCountArray implements Serializable {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1590374813059942002L;
+
 	public static KCountArray makeNew(long cells_, int cbits_, int gap_){
 		return makeNew(cells_+1, cells_, cbits_, gap_, 1);
 	}
@@ -282,8 +287,8 @@ public abstract class KCountArray {
 		return freq;
 	}
 	
-	public final StringBuilder description(){
-		StringBuilder sb=new StringBuilder();
+	public final ByteBuilder description(){
+		ByteBuilder sb=new ByteBuilder();
 		long words=cells/cellsPerWord;
 		int wordsPerArray=(int)(words/numArrays);
 		sb.append("cells:   \t"+cells).append('\n');
@@ -296,24 +301,25 @@ public abstract class KCountArray {
 		sb.append("wordsPerArray:\t"+wordsPerArray).append('\n');
 		sb.append("numArrays:\t"+numArrays).append('\n');
 		sb.append("Memory:   \t"+mem()).append('\n');
-		sb.append("Usage:    \t"+String.format("%.3f%%",usedFraction()*100));
+		sb.append("Usage:    \t"+String.format(Locale.ROOT, "%.3f%%",usedFraction()*100));
 		return sb;
 	}
 	
 	public final String toShortString(){
-		return (gap>0 ? "gap = "+gap+"   \t " : "")+"mem = "+mem()+"   \tcells = "+toKMG(cells)+"   \tused = "+String.format("%.3f%%",usedFraction()*100);
+		return (gap>0 ? "gap = "+gap+"   \t " : "")+"mem = "+mem()+"   \tcells = "+toKMG(cells)+"   \tused = "+String.format(Locale.ROOT, "%.3f%%",usedFraction()*100);
 	}
 	
 	public final String toShortString(int hashes){
 		return (gap>0 ? "gap = "+gap+"   \t " : "")+("hashes = "+hashes+"   \t ")+
-				"mem = "+mem()+"   \tcells = "+toKMG(cells)+"   \tused = "+String.format("%.3f%%",usedFraction()*100);
+				"mem = "+mem()+"   \tcells = "+toKMG(cells)+"   \tused = "+String.format(Locale.ROOT, "%.3f%%",usedFraction()*100);
 	}
 
+	@Override
 	public final String toString(){
 		return description().toString();
 	}
 	
-	public abstract String toContentsString();
+	public abstract CharSequence toContentsString();
 	
 	public abstract double usedFraction();
 	
@@ -336,14 +342,21 @@ public abstract class KCountArray {
 		return n;
 	}
 	
+	public final double estimateUniqueKmersFromUsedFraction(int hashes, double usedFraction){
+		double f=usedFraction;
+		double f2=(1-Math.pow(1-f, 1.0/hashes));
+		double n=(-cells)*Math.log(1-f2);
+		return n;
+	}
+	
 	public final String mem(){
 		long mem=(cells*cellBits)/8;
 		if(mem<(1<<20)){
-			return (String.format("%.2f KB", mem*1d/(1<<10)));
+			return (String.format(Locale.ROOT, "%.2f KB", mem*1d/(1<<10)));
 		}else if(mem<(1<<30)){
-			return (String.format("%.2f MB", mem*1d/(1<<20)));
+			return (String.format(Locale.ROOT, "%.2f MB", mem*1d/(1<<20)));
 		}else{
-			return (String.format("%.2f GB", mem*1d/(1<<30)));
+			return (String.format(Locale.ROOT, "%.2f GB", mem*1d/(1<<30)));
 		}
 	}
 	
@@ -360,7 +373,7 @@ public abstract class KCountArray {
 			div=1000;
 			ext="K";
 		}
-		return String.format("%.2f", x/div)+ext;
+		return String.format(Locale.ROOT, "%.2f", x/div)+ext;
 	}
 	
 	static final AtomicIntegerArray[] allocMatrix(final int numArrays, final int wordsPerArray){

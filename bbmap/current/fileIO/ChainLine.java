@@ -2,6 +2,7 @@ package fileIO;
 
 import dna.Data;
 import dna.Gene;
+import shared.Shared;
 
 public class ChainLine implements Comparable<ChainLine> {
 	
@@ -16,7 +17,7 @@ public class ChainLine implements Comparable<ChainLine> {
 			int loc=Integer.parseInt(args[i]);
 			int[] result=translate(loc, lines[chrom]);
 			System.out.print(chrom+"\t+\t"+loc+"\t->\t");
-			System.out.println(result==null ? "null" : result[0]+"\t"+Gene.strandCodes[result[1]]+"\t"+result[2]);
+			System.out.println(result==null ? "null" : result[0]+"\t"+Shared.strandCodes[result[1]]+"\t"+result[2]);
 		}
 		
 	}
@@ -35,9 +36,10 @@ public class ChainLine implements Comparable<ChainLine> {
 	}
 	
 	
+	@Override
 	public String toString(){
-		return tChrom+"\t"+Gene.strandCodes[tStrand]+"\t"+tStart+"\t"+tStop+"\t"+
-		qChrom+"\t"+Gene.strandCodes[qStrand]+"\t"+qStart+"\t"+qStop;
+		return tChrom+"\t"+Shared.strandCodes[tStrand]+"\t"+tStart+"\t"+tStop+"\t"+
+		qChrom+"\t"+Shared.strandCodes[qStrand]+"\t"+qStart+"\t"+qStop;
 	}
 	
 	
@@ -74,7 +76,7 @@ public class ChainLine implements Comparable<ChainLine> {
 		if(loc<tStart || loc>tStop){return null;}
 //		assert(loc>=tStart && loc<=tStop);
 		if(qChrom<1 || qChrom>25){return null;}
-		if(qStrand==Gene.PLUS){
+		if(qStrand==Shared.PLUS){
 			return new int[] {qChrom, qStrand, qStart+loc-tStart};
 		}else{
 			assert(qStart>=qStop) : this;

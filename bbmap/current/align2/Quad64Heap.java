@@ -69,13 +69,13 @@ public final class Quad64Heap {
 //			percDown(next);
 //		}
 //	}
-//	
+//
 //	private void percDown_old(int loc){
 //		//assert(testForDuplicates());
 //		assert(loc>0);
 //
 //		final Quad64 a=array[loc];
-//		
+//
 //		while(loc>1){
 //			int next=loc/2;
 //			Quad64 b=array[next];

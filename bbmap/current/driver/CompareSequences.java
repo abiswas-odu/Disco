@@ -1,6 +1,7 @@
 package driver;
 
 import dna.ChromosomeArray;
+import shared.Tools;
 
 public class CompareSequences {
 
@@ -33,9 +34,9 @@ public class CompareSequences {
 					baseToN++;
 				}
 				
-				if(Character.toLowerCase(a)==Character.toLowerCase(b)){
+				if(Tools.toLowerCase(a)==Tools.toLowerCase(b)){
 					caseDifferent++;
-					if(a==Character.toLowerCase(a)){
+					if(a==Tools.toLowerCase(a)){
 						toUpper++;
 					}else{
 						toLower++;

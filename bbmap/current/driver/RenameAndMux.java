@@ -3,23 +3,23 @@ package driver;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -38,8 +38,11 @@ public class RenameAndMux {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		RenameAndMux as=new RenameAndMux(args);
-		as.process(t);
+		RenameAndMux x=new RenameAndMux(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -48,20 +51,13 @@ public class RenameAndMux {
 	 */
 	public RenameAndMux(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		//Set some shared static variables regarding PIGZ
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
+		//Set shared static variables
 		ReadWrite.USE_PIGZ=true;
 		ReadWrite.USE_UNPIGZ=false;
 		ReadWrite.MAX_ZIP_THREADS=(Shared.threads()*3+1)/4;
@@ -77,9 +73,6 @@ public class RenameAndMux {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(parser.parse(arg, a, b)){//Parse standard flags in the parser
 				//do nothing
@@ -128,28 +121,17 @@ public class RenameAndMux {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(readPaths.isEmpty()){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(readPaths.isEmpty()){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			printOptions();
-			throw new RuntimeException("Error - output destination is required.");
-		}
+		if(out1==null){throw new RuntimeException("Error - output destination is required.");}
 		
 		//Ensure out2 is not set without out1
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		//Ensure output files can be written
 		if(!Tools.testOutputFiles(overwrite, false, false, out1, out2)){
@@ -177,25 +159,8 @@ public class RenameAndMux {
 		final long basesProcessed=basesProcessedA.get();
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
+		t.stop();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
@@ -205,23 +170,23 @@ public class RenameAndMux {
 	
 	
 //	private void renameAndMerge_ST(){
-//		
+//
 //		long readsProcessed=0;
 //		long basesProcessed=0;
-//		
+//
 //		FileFormat ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false, false);
 //		FileFormat ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false, false);
-//		
+//
 //		for(String path : readPaths){
-//			
+//
 //			String in1=null, in2=null;
-//			
+//
 //			//Do input file # replacement
 //			if(path.indexOf('#')>-1 && !new File(path).exists()){
 //				in2=path.replace("#", "2");
 //				in1=path.replace("#", "1");
 //			}
-//			
+//
 //			//Adjust interleaved settings based on number of output files
 //			if(!setInterleaved){
 //				assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -242,12 +207,12 @@ public class RenameAndMux {
 //					}
 //				}
 //			}
-//			
+//
 //			//Ensure input files can be read
 //			if(!Tools.testInputFiles(false, true, in1, in2)){
-//				throw new RuntimeException("\nCan't read to some input files.\n");
+//				throw new RuntimeException("\nCan't read some input files.\n");  
 //			}
-//			
+//
 //			//Ensure that no file was specified multiple times
 //			if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2)){
 //				throw new RuntimeException("\nSome file names were specified multiple times.\n");
@@ -265,7 +230,7 @@ public class RenameAndMux {
 //			boolean paired=cris.paired();
 //			if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
 //			final ConcurrentReadOutputStream ros;
-//			
+//
 //			final int buff=4;
 //
 //			if(cris.paired()){
@@ -274,26 +239,26 @@ public class RenameAndMux {
 //
 //			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, buff, null, false);
 //			ros.start();
-//			
+//
 //			{
-//				
+//
 //				ListNum<Read> ln=cris.nextList();
 //				ArrayList<Read> reads=(ln!=null ? ln.list : null);
-//				
+//
 //				if(reads!=null && !reads.isEmpty()){
 //					Read r=reads.get(0);
 //					assert((r.mate!=null)==cris.paired());
 //				}
 //
-//				while(reads!=null && reads.size()>0){
-//					
+//				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
+//
 //					for(int idx=0; idx<reads.size(); idx++){
 //						final Read r1=reads.get(idx);
 //						final Read r2=r1.mate;
-//						
+//
 //						final int initialLength1=r1.length();
 //						final int initialLength2=(r1.mateLength());
-//						
+//
 //						{
 //							readsProcessed++;
 //							basesProcessed+=initialLength1;
@@ -304,15 +269,15 @@ public class RenameAndMux {
 //							basesProcessed+=initialLength2;
 //							r2.id=core+"_"+r1.numericID+" /2";
 //						}
-//						
-//						
+//
+//
 //					}
-//					
+//
 //					final ArrayList<Read> listOut=reads;
-//					
+//
 //					if(ros!=null){ros.add(listOut, ln.id);}
 //
-//					cris.returnList(ln.id, ln.list.isEmpty());
+//					cris.returnList(ln);
 //					ln=cris.nextList();
 //					reads=(ln!=null ? ln.list : null);
 //				}
@@ -320,7 +285,7 @@ public class RenameAndMux {
 //					cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 //				}
 //			}
-//			
+//
 //			errorState|=ReadWrite.closeStreams(cris, ros);
 //
 //			ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, false, true, false);
@@ -331,8 +296,8 @@ public class RenameAndMux {
 //	}
 	
 	private void renameAndMerge_MT(){
-		FileFormat ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false, false);
-		FileFormat ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false, false);
+		FileFormat ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false, ordered);
+		FileFormat ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false, ordered);
 		
 		final ConcurrentReadOutputStream ros;
 		
@@ -368,7 +333,7 @@ public class RenameAndMux {
 		errorState|=ReadWrite.closeStream(ros);
 	}
 	
-	private void renameAndMergeOneFile(final String path, final ConcurrentReadOutputStream ros){
+	void renameAndMergeOneFile(final String path, final ConcurrentReadOutputStream ros){
 
 		long readsProcessed=0;
 		long basesProcessed=0;
@@ -406,7 +371,7 @@ public class RenameAndMux {
 
 			//Ensure input files can be read
 			if(!Tools.testInputFiles(false, true, in1, in2)){
-				throw new RuntimeException("\nCan't read to some input files.\n");
+				throw new RuntimeException("\nCan't read some input files.\n");  
 			}
 
 			//Ensure that no file was specified multiple times
@@ -438,7 +403,7 @@ public class RenameAndMux {
 				assert((r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -465,7 +430,7 @@ public class RenameAndMux {
 				
 				if(ros!=null){ros.add(listOut, 0/*nextListNumber.getAndIncrement()*/);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -506,18 +471,13 @@ public class RenameAndMux {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	protected ArrayList<String> readPaths=new ArrayList<String>();
 	
-	protected String out1, out2;	
+	protected String out1, out2;
 	
 	protected String extin;
 	protected String extout;

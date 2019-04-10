@@ -1,8 +1,11 @@
 package kmer;
 
-import stream.ByteBuilder;
+import java.util.concurrent.atomic.AtomicLong;
+
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -15,14 +18,17 @@ public class HashBuffer extends AbstractKmerTable {
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public HashBuffer(AbstractKmerTable[] tables_, int buflen_, int k_, boolean initValues){
+	public HashBuffer(AbstractKmerTable[] tables_, int buflen_, int k_, boolean initValues, boolean setIfNotPresent_){
 		tables=tables_;
 		buflen=buflen_;
 		halflen=(int)Math.ceil(buflen*0.5);
 		ways=tables.length;
 		buffers=new KmerBuffer[ways];
+		setIfNotPresent=setIfNotPresent_;
+		useValues=initValues;
+		coreMask=(AbstractKmerTableSet.MASK_CORE ? ~(((-1L)<<(2*(k_-1)))|3) : -1L);
 		for(int i=0; i<ways; i++){
-			buffers[i]=new KmerBuffer(buflen, k_, initValues);
+			buffers[i]=new KmerBuffer(buflen, k_, useValues);
 		}
 	}
 	
@@ -30,10 +36,17 @@ public class HashBuffer extends AbstractKmerTable {
 	/*----------------        Public Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public final int kmerToWay(final long kmer){
+		final int way=(int)((kmer&coreMask)%ways);
+		return way;
+	}
+	
 	@Override
-	public int incrementAndReturnNumCreated(long kmer) {
-		final int way=(int)(kmer%ways);
+	public int incrementAndReturnNumCreated(final long kmer, final int incr) {
+		assert(incr==1); //I could just add the kmer multiple times if not true, with addMulti
+		final int way=kmerToWay(kmer);
 		KmerBuffer buffer=buffers[way];
+//		final int size=buffer.addMulti(kmer, incr);
 		final int size=buffer.add(kmer);
 		if(size>=halflen && (size>=buflen || (size&SIZEMASK)==0)){
 			return dumpBuffer(way, size>=buflen);
@@ -50,7 +63,7 @@ public class HashBuffer extends AbstractKmerTable {
 	
 	@Override
 	public int set(long kmer, int value) {
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		KmerBuffer buffer=buffers[way];
 		final int size=buffer.add(kmer, value);
 		if(size>=halflen && (size>=buflen || (size&SIZEMASK)==0)){
@@ -60,7 +73,7 @@ public class HashBuffer extends AbstractKmerTable {
 	}
 	
 	@Override
-	public int set(long kmer, int[] vals) {
+	public int set(long kmer, int[] vals, int vlen) {
 		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
 	}
 	
@@ -71,19 +84,19 @@ public class HashBuffer extends AbstractKmerTable {
 	
 	@Override
 	public int getValue(long kmer) {
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].getValue(kmer);
 	}
 	
 	@Override
 	public int[] getValues(long kmer, int[] singleton){
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].getValues(kmer, singleton);
 	}
 	
 	@Override
 	public boolean contains(long kmer) {
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].contains(kmer);
 	}
 	
@@ -105,19 +118,19 @@ public class HashBuffer extends AbstractKmerTable {
 	
 	@Override
 	public final int setOwner(final long kmer, final int newOwner){
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].setOwner(kmer, newOwner);
 	}
 	
 	@Override
 	public final boolean clearOwner(final long kmer, final int owner){
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].clearOwner(kmer, owner);
 	}
 	
 	@Override
 	public final int getOwner(final long kmer){
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].getOwner(kmer);
 	}
 	
@@ -127,7 +140,7 @@ public class HashBuffer extends AbstractKmerTable {
 	
 	@Override
 	Object get(long kmer) {
-		final int way=(int)(kmer%ways);
+		final int way=kmerToWay(kmer);
 		return tables[way].get(kmer);
 	}
 	
@@ -140,8 +153,14 @@ public class HashBuffer extends AbstractKmerTable {
 		final AbstractKmerTable table=tables[way];
 		final int lim=buffer.size();
 		if(lim<0){return 0;}
+		
 		if(force){table.lock();}
 		else if(!table.tryLock()){return 0;}
+		
+		if(SORT_BUFFERS && buffer.values==null){//Can go before or after lock; neither helps much
+			buffer.kmers.sortSerial();
+		}
+		
 		final int x=dumpBuffer_inner(way);
 		table.unlock();
 		return x;
@@ -160,19 +179,45 @@ public class HashBuffer extends AbstractKmerTable {
 //		synchronized(table){
 			if(values==null){
 //				Arrays.sort(kmers, 0, lim); //Makes it slower
-				for(int i=0; i<lim; i++){
-					final long kmer=kmers[i];
-					added+=table.incrementAndReturnNumCreated(kmer);
+				if(SORT_BUFFERS){
+					long prev=-1;
+					int sum=0;
+					for(int i=0; i<lim; i++){
+						final long kmer=kmers[i];
+						if(kmer==prev){
+							sum++;
+						}else{
+							if(sum>0){added+=table.incrementAndReturnNumCreated(prev, sum);}
+							prev=kmer;
+							sum=1;
+						}
+					}
+					if(sum>0){added+=table.incrementAndReturnNumCreated(prev, sum);}
+				}else{
+					for(int i=0; i<lim; i++){
+						final long kmer=kmers[i];
+						added+=table.incrementAndReturnNumCreated(kmer, 1);
+					}
 				}
 			}else{
-				for(int i=0; i<lim; i++){
-					final long kmer=kmers[i];
-					final int value=values[i];
-					added+=table.setIfNotPresent(kmer, value);
+				if(setIfNotPresent){
+					for(int i=0; i<lim; i++){
+						final long kmer=kmers[i];
+						final int value=values[i];
+						added+=table.setIfNotPresent(kmer, value);
+					}
+				}else{
+					for(int i=0; i<lim; i++){
+						final long kmer=kmers[i];
+						final int value=values[i];
+						added+=table.set(kmer, value);
+//						System.err.println("B: "+kmer+", "+Arrays.toString(((HashArrayHybrid)table).getValues(kmer, new int[1])));
+					}
 				}
 			}
 //		}
 		buffer.clear();
+		uniqueAdded+=added;
 		return added;
 	}
 	
@@ -210,6 +255,7 @@ public class HashBuffer extends AbstractKmerTable {
 		throw new RuntimeException("Unimplemented.");
 	}
 	
+	@Override
 	public long regenerate(final int limit){
 		long sum=0;
 		for(AbstractKmerTable table : tables){
@@ -223,32 +269,37 @@ public class HashBuffer extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount){
 		for(AbstractKmerTable table : tables){
-			table.dumpKmersAsText(tsw, k, mincount);
+			table.dumpKmersAsText(tsw, k, mincount, maxcount);
 		}
 		return true;
 	}
 	
 	@Override
-	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		for(AbstractKmerTable table : tables){
-			table.dumpKmersAsBytes(bsw, k, mincount);
+			table.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);
 		}
 		return true;
 	}
 	
 	@Override
 	@Deprecated
-	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		throw new RuntimeException("Unsupported.");
 	}
 	
 	@Override
+	@Deprecated
 	public void fillHistogram(long[] ca, int max){
-		for(AbstractKmerTable table : tables){
-			table.fillHistogram(ca, max);
-		}
+		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Override
+	@Deprecated
+	public void fillHistogram(SuperLongList sll){
+		throw new RuntimeException("Unsupported.");
 	}
 	
 	@Override
@@ -263,7 +314,7 @@ public class HashBuffer extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public int increment(long kmer) {
+	public int increment(final long kmer, final int incr) {
 		throw new RuntimeException("Unsupported");
 	}
 	
@@ -275,8 +326,14 @@ public class HashBuffer extends AbstractKmerTable {
 	private final int buflen;
 	private final int halflen;
 	private final int ways;
+	private final boolean useValues;
 	private final KmerBuffer[] buffers;
+	private final long coreMask;
+	public long uniqueAdded=0;
 	
-	private final static int SIZEMASK=15;
+	private static final int SIZEMASK=15;
+	private final boolean setIfNotPresent;
+	
+	public static boolean SORT_BUFFERS=false;
 
 }

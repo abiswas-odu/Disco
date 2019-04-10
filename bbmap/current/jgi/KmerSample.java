@@ -28,10 +28,10 @@ public class KmerSample {
 		int len=0;
 		
 		//This will create a bitmask of 00000...0000111111...11111, where the number if 1's is equal to kbits.
-		long mask=~((-1L)<<kbits);
+		long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 		
 		//Initialize an input stream for the fasta file
-		TextFile tf=new TextFile(filename, false, false);
+		TextFile tf=new TextFile(filename, false);
 		
 		//Grab the first line of the fasta file
 		String line=tf.nextLine();
@@ -78,7 +78,7 @@ public class KmerSample {
 							//The index in the array is the upper bits of the kmer.  Each location in the array is 32 bits.
 							int index=(int)(kmer/32);
 							
-							//The bit within the word of the array is the lower 5 bits of the kmer 
+							//The bit within the word of the array is the lower 5 bits of the kmer
 							int bit=(int)(kmer%32);
 							
 							//A bitmask to set the correct bit in the array to 1.
@@ -106,7 +106,7 @@ public class KmerSample {
 		//The index in the array is the upper bits of the kmer.  Each location in the array is 32 bits.
 		int index=(int)(kmer/32);
 		
-		//The bit within the word of the array is the lower 5 bits of the kmer 
+		//The bit within the word of the array is the lower 5 bits of the kmer
 		int bit=(int)(kmer%32);
 		
 		//A bitmask to test the correct bit in the array to 1.

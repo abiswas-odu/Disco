@@ -3,13 +3,16 @@ package jgi;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.util.Arrays;
+import java.util.Locale;
 
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 
@@ -34,6 +37,12 @@ public class CountGC {
 			System.exit(0);
 		}
 		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
+		
 		boolean benchmark=false;
 		ReadWrite.USE_UNPIGZ=true;
 		
@@ -46,11 +55,8 @@ public class CountGC {
 				final String[] split=arg.split("=");
 				String a=split[0].toLowerCase();
 				String b=split.length>1 ? split[1] : null;
-				if("null".equalsIgnoreCase(b)){b=null;}
-
-				if(Parser.isJavaFlag(arg)){
-					//jvm argument; do nothing
-				}else if(Parser.parseCommonStatic(arg, a, b)){
+				
+				if(Parser.parseCommonStatic(arg, a, b)){
 					//do nothing
 				}else if(Parser.parseZip(arg, a, b)){
 					//do nothing
@@ -133,24 +139,26 @@ public class CountGC {
 		t.stop();
 		
 		if(benchmark){
-			System.err.println("Time: \t"+t);
+			outstream.println("Time: \t"+t);
 			long bytes=new File(in).length();
 			if(bytes<1){bytes=LIMSUM;}
 			double mbps1=bytes*1000d/t.elapsed;
 			double mbps2=sum*1000d/t.elapsed;
-			System.err.println(String.format("Raw Speed:         \t%.2f MBytes/s",mbps1));
-			System.err.println(String.format("Uncompressed Speed:\t%.2f MBytes/s",mbps2));
+			outstream.println(String.format(Locale.ROOT, "Raw Speed:         \t%.2f MBytes/s",mbps1));
+			outstream.println(String.format(Locale.ROOT, "Uncompressed Speed:\t%.2f MBytes/s",mbps2));
 		}else{
-			System.err.println(toString2(new StringBuilder("Overall"), counts));
-			System.err.println("Time: \t"+t);
+			outstream.println(toString2(new StringBuilder("Overall"), counts));
+			outstream.println("Time: \t"+t);
 			long bytes=new File(in).length();
 			if(bytes<1){bytes=LIMSUM;}
 			double mbps=bytes*1000d/t.elapsed;
 			double mbpps=Tools.sum(counts)*1000d/t.elapsed;
-			System.err.println(String.format("Speed:\t%.2f MBytes/s",mbps));
-			System.err.println(String.format("      \t%.2f MBases/s",mbpps));
+			outstream.println(String.format(Locale.ROOT, "Speed:\t%.2f MBytes/s",mbps));
+			outstream.println(String.format(Locale.ROOT, "      \t%.2f MBases/s",mbpps));
 		}
 		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	public static long bench2(InputStream is) throws IOException{
@@ -163,7 +171,7 @@ public class CountGC {
 	public static long[] countFasta(InputStream is, String out) throws IOException{
 		
 		long limsum=0;
-		final byte[] buf=new byte[32768]; 
+		final byte[] buf=new byte[32768];
 		final TextStreamWriter tsw=(out==null ? null : new TextStreamWriter(out, true, false, false));
 		if(tsw!=null){tsw.start();}
 		final int[] counts=new int[6];
@@ -233,7 +241,7 @@ public class CountGC {
 	public static long[] countFastq(InputStream is, String out) throws IOException{
 //		assert(false) : "Fastq mode - TODO"; //TODO
 		long limsum=0;
-		final byte[] buf=new byte[32768]; 
+		final byte[] buf=new byte[32768];
 		final TextStreamWriter tsw=(out==null ? null : new TextStreamWriter(out, true, false, false));
 		if(tsw!=null){tsw.start();}
 		final int[] counts=new int[6];
@@ -337,12 +345,12 @@ public class CountGC {
 		final float inv1=1f/Tools.max(1, sum1);
 		final float inv2=1f/Tools.max(1, sum2);
 		if(FORMAT==1){
-			return sb.append(String.format("\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
+			return sb.append(String.format(Locale.ROOT, "\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n",
 					sum2, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*inv2, (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==2){
-			return sb.append(String.format("\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format(Locale.ROOT, "\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==4){
-			return sb.append(String.format("\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format(Locale.ROOT, "\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
 		}else{
 			throw new RuntimeException("Unknown format.");
 		}
@@ -354,12 +362,12 @@ public class CountGC {
 		final float inv1=1f/Tools.max(1, sum1);
 		final float inv2=1f/Tools.max(1, sum2);
 		if(FORMAT==1){
-			return sb.append(String.format("\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
+			return sb.append(String.format(Locale.ROOT, "\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n",
 					sum2, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*inv2, (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==2){
-			return sb.append(String.format("\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format(Locale.ROOT, "\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==4){
-			return sb.append(String.format("\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format(Locale.ROOT, "\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
 		}else{
 			throw new RuntimeException("Unknown format.");
 		}
@@ -371,6 +379,8 @@ public class CountGC {
 	private static long LIMSUM=0;
 
 	final static byte slashr='\r', slashn='\n', carrot='>', at='@';
+	
+	static PrintStream outstream=System.err;
 	
 	/**
 	 * @return

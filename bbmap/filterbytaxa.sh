@@ -1,10 +1,9 @@
 #!/bin/bash
-#filterbytaxa in=<infile> out=<outfile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 7, 2016
+Last modified June 18, 2018
 
 Description:   Filters sequences according to their taxonomy,
 as determined by the sequence name.  Sequences should
@@ -12,12 +11,10 @@ be labeled with a gi number, NCBI taxID, or species name.
 
 Usage:  filterbytaxa.sh in=<input file> out=<output file> tree=<tree file> table=<table file> ids=<numbers> level=<name or number>
 
-Input may be fasta or fastq, compressed or uncompressed.
-
-
-Standard parameters:
+I/O parameters:
 in=<file>       Primary input, or read 1 input.
 out=<file>      Primary output, or read 1 output.
+results=<file>  Optional; prints a list indicating which taxa were retained.
 overwrite=f     (ow) Set to false to force the program to abort rather than
                 overwrite an existing file.
 showspeed=t     (ss) Set to 'f' to suppress display of processing speed.
@@ -27,34 +24,50 @@ ziplevel=2      (zl) Set to 1 (lowest) through 9 (max) to change compression
 Processing parameters:
 level=          Taxonomic level, such as phylum.  Filtering will operate on
                 sequences within the same taxonomic level as specified ids.
+                If not set, only matches to a node or its descendants will 
+                be considered.
 reqlevel=       Require nodes to have ancestors at these levels.  For example,
                 reqlevel=species,genus would ban nodes that are not defined
                 at both the species and genus levels.
-ids=            Comma-delimited list of NCBI numeric IDs.
+ids=            Comma-delimited list of NCBI numeric IDs.  Can also be a
+                file with one taxID per line.
 names=          Alternately, a list of names (such as 'Homo sapiens').
                 Note that spaces need special handling.
 include=f       'f' will discard filtered sequences, 't' will keep them.
-tree=           A taxonomic tree made by TaxTree, such as tree.taxtree.gz.
-table=          A table translating gi numbers to NCBI taxIDs.
-                Only needed if gi numbers will be used.
+besteffort=f    Intended for include mode.  Iteratively increases level
+                while the input file has no hits to the tax list.
+tree=<file>     Specify a TaxTree file like tree.taxtree.gz.  
+                On Genepool, use 'auto'.
+gi=<file>       Specify a gitable file like gitable.int1d.gz. Only needed
+                if gi numbers will be used.  On Genepool, use 'auto'.
+accession=      Specify one or more comma-delimited NCBI accession to taxid
+                files.  Only needed if accesions will be used; requires ~45GB
+                of memory.  On Genepool, use 'auto'.
+printnodes=t    Print the names of nodes added to the filter.
+requirepresent=t   Crash with an error message if a header cannot be resolved
+                   to a taxid.
 
 String-matching parameters:
 regex=          Filter names matching this Java regular expression.
 contains=       Filter names containing this substring (case-insensitive).
-
 
 * Note *
 Tree and table files are in /global/projectb/sandbox/gaag/bbtools/tax
 For non-Genepool users, or to make new ones, use taxtree.sh and gitable.sh
 
 Java Parameters:
--Xmx            This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+-Xmx            This will set Java's memory usage, overriding autodetection.
+                -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will
+                specify 200 megs. The max is typically 85% of physical memory.
+-eoom           This flag will cause the process to exit if an out-of-memory
+                exception occurs.  Requires Java 8u92+.
+-da             Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -71,6 +84,7 @@ CP="$DIR""current/"
 z="-Xmx4g"
 z2="-Xms4g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -91,12 +105,25 @@ calcXmx () {
 calcXmx "$@"
 
 filterbytaxa() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z -cp $CP tax.FilterByTaxa $@"
+	local CMD="java $EA $EOOM $z -cp $CP tax.FilterByTaxa $@"
 	echo $CMD >&2
 	eval $CMD
 }

@@ -61,7 +61,7 @@ public abstract class ConcurrentReadOutputStream {
 	ConcurrentReadOutputStream(FileFormat ff1_, FileFormat ff2_){
 		ff1=ff1_;
 		ff2=ff2_;
-		ORDERED=(ff1==null ? true : ff1.ordered());
+		ordered=(ff1==null ? true : ff1.ordered());
 	}
 	
 	public abstract void start();
@@ -96,6 +96,24 @@ public abstract class ConcurrentReadOutputStream {
 	/*----------------           Getters            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public long basesWritten(){
+		long x=0;
+		ReadStreamWriter rsw1=getRS1();
+		ReadStreamWriter rsw2=getRS2();
+		if(rsw1!=null){x+=rsw1.basesWritten();}
+		if(rsw2!=null){x+=rsw2.basesWritten();}
+		return x;
+	}
+	
+	public long readsWritten(){
+		long x=0;
+		ReadStreamWriter rsw1=getRS1();
+		ReadStreamWriter rsw2=getRS2();
+		if(rsw1!=null){x+=rsw1.readsWritten();}
+		if(rsw2!=null){x+=rsw2.readsWritten();}
+		return x;
+	}
+	
 	public abstract ReadStreamWriter getRS1();
 	public abstract ReadStreamWriter getRS2();
 	
@@ -104,7 +122,7 @@ public abstract class ConcurrentReadOutputStream {
 	/*--------------------------------------------------------------*/
 	
 	public final FileFormat ff1, ff2;
-	public final boolean ORDERED;
+	public final boolean ordered;
 	
 	boolean errorState=false;
 	boolean finishedSuccessfully=false;
@@ -114,7 +132,6 @@ public abstract class ConcurrentReadOutputStream {
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static boolean BYTE_WRITER=true;
 	public static boolean verbose=false;
 	
 }

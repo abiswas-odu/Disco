@@ -2,10 +2,12 @@ package driver;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Locale;
 
-import dna.Parser;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.Tools;
 
 /**
@@ -20,25 +22,23 @@ public class SummarizeCoverage {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			assert(false);
-			System.exit(0);
-		}
-		
-		//Create a new Seal instance
-		SummarizeCoverage sc=new SummarizeCoverage(args);
+		//Create a new instance
+		SummarizeCoverage x=new SummarizeCoverage(args);
 		
 		///And run it
-		sc.process();
+		x.process();
 	}
 	
 	public SummarizeCoverage(String[] args){
-		
-		Parser parser=new Parser();
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		ArrayList<String> names=new ArrayList<String>();
+		Parser parser=new Parser();
 		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
@@ -47,8 +47,6 @@ public class SummarizeCoverage {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -101,7 +99,7 @@ public class SummarizeCoverage {
 				}
 			}
 			tf.close();
-			tsw.print(String.format("%s\t%s\t%d\t%d\t%.5f\t%.5f\n", fname, pname, pcount, ocount, pmb, omb));
+			tsw.print(String.format(Locale.ROOT, "%s\t%s\t%d\t%d\t%.5f\t%.5f\n", fname, pname, pcount, ocount, pmb, omb));
 		}
 		tsw.poisonAndWait();
 	}

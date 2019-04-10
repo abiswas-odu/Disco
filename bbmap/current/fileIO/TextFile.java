@@ -6,42 +6,44 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 
 import dna.Data;
+import shared.Timer;
+import shared.Tools;
 
 
 public class TextFile {
 	
 	
 	public static void main(String[] args){
-		TextFile tf=new TextFile(args.length>0 ? args[0] : "stdin", false, false);
-		int first=0, last=100;
-		long lines=0;
-		long bytes=0;
+		TextFile tf=new TextFile(args.length>0 ? args[0] : "stdin", false);
+		int first=0;
+		long last=100;
+		boolean speedtest=false;
 		if(args.length>1){
-			first=Integer.parseInt(args[1]);
-			last=first+100;
+			if(args[1].equalsIgnoreCase("speedtest")){
+				speedtest=true;
+				first=0;
+				last=Long.MAX_VALUE;
+			}else{
+				first=Integer.parseInt(args[1]);
+				last=first+100;
+			}
 		}
 		if(args.length>2){
 			last=Integer.parseInt(args[2]);
 		}
+		speedtest(tf, first, last, !speedtest);
 		
-		for(int i=0; i<first; i++){tf.readLine();}
-		for(int i=first; i<last; i++){
-			String s=tf.readLine();
-			if(s==null){break;}
-
-			lines++;
-			bytes+=s.length();
-			System.out.println(s);
-//			System.out.println(Arrays.toString(s.getBytes()));
-		}
-		
-		System.err.println("\n");
-		System.err.println("Lines: "+lines);
-		System.err.println("Bytes: "+bytes);
-		tf.close();
-		tf.reset();
-		tf.close();
-		
+//		long lines=0;
+//		long bytes=0;
+//		if(args.length>1){
+//			first=Integer.parseInt(args[1]);
+//			last=first+100;
+//		}
+//		if(args.length>2){
+//			last=Integer.parseInt(args[2]);
+//		}
+//		
+//		for(int i=0; i<first; i++){tf.readLine();}
 //		for(int i=first; i<last; i++){
 //			String s=tf.readLine();
 //			if(s==null){break;}
@@ -49,47 +51,83 @@ public class TextFile {
 //			lines++;
 //			bytes+=s.length();
 //			System.out.println(s);
+////			System.out.println(Arrays.toString(s.getBytes()));
 //		}
+//		
+//		System.err.println("\n");
+//		System.err.println("Lines: "+lines);
+//		System.err.println("Bytes: "+bytes);
+//		tf.close();
+//		tf.reset();
+//		tf.close();
+//		
+////		for(int i=first; i<last; i++){
+////			String s=tf.readLine();
+////			if(s==null){break;}
+////
+////			lines++;
+////			bytes+=s.length();
+////			System.out.println(s);
+////		}
+	}
+	
+	private static void speedtest(TextFile tf, long first, long last, boolean reprint){
+		Timer t=new Timer();
+		long lines=0;
+		long bytes=0;
+		for(long i=0; i<first; i++){tf.nextLine();}
+		if(reprint){
+			for(long i=first; i<last; i++){
+				String s=tf.nextLine();
+				if(s==null){break;}
+
+				lines++;
+				bytes+=s.length();
+				System.out.println(s);
+			}
+			
+			System.err.println("\n");
+			System.err.println("Lines: "+lines);
+			System.err.println("Bytes: "+bytes);
+		}else{
+			for(long i=first; i<last; i++){
+				String s=tf.nextLine();
+				if(s==null){break;}
+				lines++;
+				bytes+=s.length();
+			}
+		}
+		t.stop();
+		
+		if(!reprint){
+			System.err.println(Tools.timeLinesBytesProcessed(t, lines, bytes, 8));
+		}
 	}
 
-	public TextFile(String name){this(name, false, false);}
+	public TextFile(String name){this(name, false);}
 	
-	public TextFile(FileFormat ff){this(ff, false);}
-	
-	public TextFile(FileFormat ff, boolean tryAllExtensions){
+	public TextFile(FileFormat ff){
 		file=new File(ff.name());
 		allowSubprocess=ff.allowSubprocess();
-
-		if(tryAllExtensions && !ff.name().startsWith("jar:") && !file.exists()){
-			name=ReadWrite.findFileExtension(ff.name());
-			file=new File(name);
-		}else{
-			name=ff.name();
-		}
+		name=ff.name();
 		
 		br=open();
 	}
 	
-	public TextFile(String fname, boolean allowSubprocess_, boolean tryAllExtensions){
+	public TextFile(String fname, boolean allowSubprocess_){
 		fname=fname.replace('\\', '/');
 		file=new File(fname);
 		allowSubprocess=allowSubprocess_;
-
-		if(tryAllExtensions && !fname.startsWith("jar:") && !file.exists()){
-			name=ReadWrite.findFileExtension(fname);
-			file=new File(name);
-		}else{
-			name=fname;
-		}
-		
-		
-//		assert(file.exists()) : "Can't find "+fname;
-		
-//		if(!file.exists()){
-//			throw new RuntimeException("Can't find "+fname);
-//		}
+		name=fname;
 		
 		br=open();
+	}
+	
+	public static final String[] toStringLines(FileFormat ff){
+		TextFile tf=new TextFile(ff);
+		String[] lines=tf.toStringLines();
+		tf.close();
+		return lines;
 	}
 	
 	public static final String[] toStringLines(String fname){
@@ -221,8 +259,8 @@ public class TextFile {
 		
 		//Note! This may generate a new String for every line and thus be slow.
 //		if(currentLine.trim().length()==0){return readLine();} //Skips blank lines
-		if(skipBlank && (currentLine.length()==0 || 
-				(Character.isWhitespace(currentLine.charAt(0)) && 
+		if(skipBlank && (currentLine.length()==0 ||
+				(Character.isWhitespace(currentLine.charAt(0)) &&
 						(Character.isWhitespace(currentLine.charAt(currentLine.length()-1)))) &&
 						currentLine.trim().length()==0)){
 			return readLine(skipBlank); //Skips blank lines

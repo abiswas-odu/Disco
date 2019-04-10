@@ -19,7 +19,7 @@ public class MakeTestScriptScoreOnly {
 		
 //		String[] strings=new String[] {
 //				"bwa aln -t 22 bs_ /work/bbushnell/synth/reads_B1_100000x100bp_#S_chr1-25.fq > temp_default.sai",
-//				"bwa samse bs_ temp_default.sai /work/bbushnell/synth/reads_B1_#Rx100bp_#S_chr1-25.fq > #S_default.sam", 
+//				"bwa samse bs_ temp_default.sai /work/bbushnell/synth/reads_B1_#Rx100bp_#S_chr1-25.fq > #S_default.sam",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime defaultTime.txt",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.GradeSamFile #S_default.sam #R",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime defaultTime.txt"
@@ -31,7 +31,7 @@ public class MakeTestScriptScoreOnly {
 //				"align.TestIndex11f 1 25 100 0 /work/bbushnell/synth/reads_B1_#Rx100bp_#S_chr1-25.fq null " +
 //				"outfile=#S_bbmap11f.sam cs=false threads=22 paired=false pairlen=100 build=37 match=short " +
 //				"removeambiguous=false fastqparsecustom overwrite savepar=false",
-//				
+//
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bbmap11fTime.txt",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.GradeSamFile #S_bbmap11f.sam #R",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bbmap11fTime.txt"
@@ -41,7 +41,7 @@ public class MakeTestScriptScoreOnly {
 //		String[] strings=new String[] {
 //				"bowtie --best -y --chunkmbs 1024 --strata -m 1 -k 2 -v 3 -p 24 -t -q -S HG37" +
 //				" /work/bbushnell/synth/reads_B1_#Rx100bp_#S_chr1-25.fq #S_bowtie.sam",
-//				
+//
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bowtieTime.txt",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.GradeSamFile #S_bowtie.sam #R",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bowtieTime.txt"
@@ -54,7 +54,7 @@ public class MakeTestScriptScoreOnly {
 ////				"bfast postprocess -n 16 -a 3 -f hg19.fa -i $TMPDIR/#S.baf > #S.sam",
 ////				"bfast postprocess -n 16 -a 3 -m 20 -f hg19.fa -i $TMPDIR/#S.baf > #S_r#R.sam",
 //				"bfast postprocess -n 16 -M 20 -f hg19.fa -i $TMPDIR/#S.baf > #S_r#R.sam",
-//				
+//
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bfastTime.txt",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.GradeSamFile #S_r#R.sam #R",
 //				"java -ea -Xmx96m -cp /work/bbushnell/java/ align.PrintTime bfastTime.txt"

@@ -7,11 +7,11 @@ import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import dna.Data;
-
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import shared.Shared;
 import shared.Tools;
-import fileIO.FileFormat;
+import structures.ByteBuilder;
 
 public abstract class ReadStreamWriter extends Thread {
 	
@@ -21,7 +21,7 @@ public abstract class ReadStreamWriter extends Thread {
 	/*--------------------------------------------------------------*/
 	
 	
-	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, 
+	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header,
 			boolean makeWriter, boolean buffered, boolean useSharedHeader){
 //		assert(false) : useSharedHeader+", "+header;
 		assert(ff!=null);
@@ -41,7 +41,7 @@ public abstract class ReadStreamWriter extends Thread {
 		OUTPUT_STANDARD_OUT=ff.stdio();
 		FASTA_WRAP=Shared.FASTA_WRAP;
 		assert(((OUTPUT_SAM ? 1 : 0)+(OUTPUT_FASTQ ? 1 : 0)+(OUTPUT_FASTA ? 1 : 0)+(OUTPUT_ATTACHMENT ? 1 : 0)+
-				(OUTPUT_HEADER ? 1 : 0)+(OUTPUT_ONELINE ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) : 
+				(OUTPUT_HEADER ? 1 : 0)+(OUTPUT_ONELINE ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) :
 			OUTPUT_SAM+", "+SITES_ONLY+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT+", "+OUTPUT_HEADER+", "+OUTPUT_ONELINE;
 		
 		fname=ff.name();
@@ -67,14 +67,19 @@ public abstract class ReadStreamWriter extends Thread {
 			myWriter=null;
 		}else{
 			if(OUTPUT_STANDARD_OUT){myOutstream=System.out;}
-			else if(!OUTPUT_BAM || !Data.SAMTOOLS() || !Data.SH()){
+			else if(!OUTPUT_BAM || !(Data.SAMTOOLS() /*|| Data.SAMBAMBA()*/) /*|| !Data.SH()*/){
 				myOutstream=ReadWrite.getOutputStream(ff, buffered);
 			}else{
 				if(!allowSubprocess){System.err.println("Warning! Spawning a samtools process when allowSubprocess="+allowSubprocess);}
-				String command="samtools view -S -b -h - ";
-				int threads=Tools.min(ReadWrite.MAX_ZIP_THREADS, Shared.threads(), 8);
-				if(threads>1){
-					command="samtools view -S -b -h -@ "+threads+" - ";
+				String command;
+				if(Data.SAMTOOLS()){
+					command="samtools view -S -b -h - ";
+					int threads=Tools.min(ReadWrite.MAX_ZIP_THREADS, Shared.threads(), ReadWrite.MAX_SAMTOOLS_THREADS);
+					if(threads>1){
+						command="samtools view -S -b -h -@ "+threads+" - ";
+					}
+				}else{
+					command= "sambamba view -S -f bam -h "; //Sambamba does not support stdin
 				}
 				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, command, true, ff.append(), true, true);
 			}
@@ -141,7 +146,7 @@ public abstract class ReadStreamWriter extends Thread {
 					}else{
 						ByteBuilder bb=new ByteBuilder(4096);
 						SamHeader.header0B(bb);
-						bb.append('\n');
+						bb.nl();
 						int a=(MINCHROM==-1 ? 1 : MINCHROM);
 						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
 						if(!supressHeaderSequences){
@@ -150,7 +155,7 @@ public abstract class ReadStreamWriter extends Thread {
 							}
 						}
 						SamHeader.header2B(bb);
-						bb.append('\n');
+						bb.nl();
 
 
 						try {
@@ -228,51 +233,6 @@ public abstract class ReadStreamWriter extends Thread {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	
-	protected static final StringBuilder toQualitySB(final byte[] quals, final int len, final int wrap){
-		if(quals==null){return fakeQualitySB(30, len, wrap);}
-		assert(quals.length==len);
-		StringBuilder sb=new StringBuilder(NUMERIC_QUAL ? len*3+1 : len+1);
-		if(NUMERIC_QUAL){
-			if(len>0){sb.append(quals[0]);}
-			for(int i=1, w=1; i<len; i++, w++){
-				if(w>=wrap){
-					sb.append('\n');
-					w=0;
-				}else{
-					sb.append(' ');
-				}
-				sb.append(quals[i]);
-			}
-		}else{
-			final byte b=FASTQ.ASCII_OFFSET_OUT;
-			for(int i=0; i<len; i++){
-				sb.append((char)(b+quals[i]));
-			}
-		}
-		return sb;
-	}
-	
-	protected static final StringBuilder fakeQualitySB(final int q, final int len, final int wrap){
-		StringBuilder sb=new StringBuilder(NUMERIC_QUAL ? len*3+1 : len+1);
-		char c=(char)(q+FASTQ.ASCII_OFFSET_OUT);
-		if(NUMERIC_QUAL){
-			if(len>0){sb.append(q);}
-			for(int i=1, w=1; i<len; i++, w++){
-				if(w>=wrap){
-					sb.append('\n');
-					w=0;
-				}else{
-					sb.append(' ');
-				}
-				sb.append(q);
-			}
-		}else{
-			for(int i=0; i<len; i++){sb.append(c);}
-		}
-		return sb;
-	}
-	
 	protected static final ByteBuilder toQualityB(final byte[] quals, final int len, final int wrap, final ByteBuilder bb){
 		if(quals==null){return fakeQualityB(30, len, wrap, bb);}
 		assert(quals.length==len);
@@ -281,7 +241,7 @@ public abstract class ReadStreamWriter extends Thread {
 			if(len>0){bb.append((int)quals[0]);}
 			for(int i=1, w=1; i<len; i++, w++){
 				if(w>=wrap){
-					bb.append('\n');
+					bb.nl();
 					w=0;
 				}else{
 					bb.append(' ');
@@ -304,7 +264,7 @@ public abstract class ReadStreamWriter extends Thread {
 			if(len>0){bb.append(q);}
 			for(int i=1, w=1; i<len; i++, w++){
 				if(w>=wrap){
-					bb.append('\n');
+					bb.nl();
 					w=0;
 				}else{
 					bb.append(' ');

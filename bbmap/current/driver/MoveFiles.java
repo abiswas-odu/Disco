@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import shared.Tools;
+
 
 public class MoveFiles {
 	
@@ -43,7 +45,7 @@ public class MoveFiles {
 					name=name.substring(0,name.lastIndexOf("."));
 				}
 				
-				while(name.length()>1 && !Character.isDigit(name.charAt(name.length()-1))){
+				while(name.length()>1 && !Tools.isDigit(name.charAt(name.length()-1))){
 					name=name.substring(0, name.length()-1);
 				}
 				name=name.toLowerCase();
@@ -84,7 +86,7 @@ public class MoveFiles {
 		}catch(FileNotFoundException e){
 			throw new RuntimeException(e);
 		}catch(IOException e){
-			throw new RuntimeException(e);   
+			throw new RuntimeException(e);
 		}
 	}
 	

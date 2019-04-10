@@ -12,10 +12,10 @@ public final class ReadComparatorID extends ReadComparator{
 	
 	@Override
 	public int compare(Read r1, Read r2) {
-		return compare0(r1, r2)*mult;
+		return compareInner(r1, r2)*mult;
 	}
 	
-	public int compare0(Read r1, Read r2) {
+	public static int compareInner(Read r1, Read r2) {
 		if(r1.numericID<r2.numericID){return -1;}
 		else if(r1.numericID>r2.numericID){return 1;}
 		

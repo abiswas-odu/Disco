@@ -3,20 +3,20 @@ package clump;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
-import dna.Parser;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import hiseq.FlowcellCoordinate;
 import jgi.BBMerge;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import sort.SortByName;
 import stream.FASTQ;
 import stream.Read;
+import structures.ByteBuilder;
 import structures.Quantizer;
 
 /**
@@ -34,8 +34,11 @@ public class Clumpify {
 		Timer t=new Timer();
 		ReadWrite.ZIPLEVEL=Tools.max(ReadWrite.ZIPLEVEL, 6);
 		BBMerge.changeQuality=Read.CHANGE_QUALITY=false;
-		Clumpify cl=new Clumpify(args);
-		cl.process(t);
+		Clumpify x=new Clumpify(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -44,20 +47,19 @@ public class Clumpify {
 	 */
 	public Clumpify(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), true);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		System.err.println("\nClumpify version "+Shared.BBMAP_VERSION_STRING);
 		
 		Read.VALIDATE_IN_CONSTRUCTOR=Shared.threads()<4;
 		
 		args2=new ArrayList<String>();
-		args2.add("in");
-		args2.add("out");
+		args2.add("in1");
+		args2.add("in2");
+		args2.add("out1");
+		args2.add("out2");
 		args2.add("groups");
 		args2.add("ecco=f");
 		args2.add("rename=f");
@@ -73,23 +75,27 @@ public class Clumpify {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(a.equals("in") || a.equals("in1")){
 				in1=b;
+			}else if(a.equals("in2")){
+				in2=b;
 			}else if(a.equals("out") || a.equals("out1")){
 				out1=b;
+			}else if(a.equals("out2")){
+				out2=b;
 			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){
 				gString=b;
-			}else if(a.equals("delete")){
+			}else if(a.equals("delete") || a.equals("deletetemp")){
 				delete=Tools.parseBoolean(b);
+			}else if(a.equals("deleteinput")){
+				deleteInput=Tools.parseBoolean(b);
 			}else if(a.equals("usetmpdir")){
 				useTmpdir=Tools.parseBoolean(b);
 			}else if(a.equals("ecco")){
 				ecco=Tools.parseBoolean(b);
 			}else if(a.equals("compresstemp") || a.equals("ct")){
-				if(b!=null & b.equalsIgnoreCase("auto")){forceCompressTemp=forceRawTemp=false;}
+				if(b!=null && b.equalsIgnoreCase("auto")){forceCompressTemp=forceRawTemp=false;}
 				else{
 					forceCompressTemp=Tools.parseBoolean(b);
 					forceRawTemp=!forceCompressTemp;
@@ -131,12 +137,21 @@ public class Clumpify {
 			}else if(a.equals("v3") || a.equals("kmersort3")){
 				V3=Tools.parseBoolean(b);
 				if(V3){V2=false;}
+			}else if(a.equals("fetchthreads")){
+				KmerSort3.fetchThreads=Integer.parseInt(b);
+				assert(KmerSort3.fetchThreads>0) : KmerSort3.fetchThreads+"\nFetch threads must be at least 1.";
 			}
 			
 			else if(a.equals("comparesequence")){
 				KmerComparator.compareSequence=Tools.parseBoolean(b);
 			}else if(a.equals("allowadjacenttiles") || a.equals("spantiles")){
-				FlowcellCoordinate.spanTiles=Tools.parseBoolean(b);
+				ReadKey.spanTilesX=ReadKey.spanTilesY=Tools.parseBoolean(b);
+			}else if(a.equals("spanx") || a.equals("spantilesx")){
+				ReadKey.spanTilesX=Tools.parseBoolean(b);
+			}else if(a.equals("spany") || a.equals("spantilesy")){
+				ReadKey.spanTilesY=Tools.parseBoolean(b);
+			}else if(a.equals("spanadjacent") || a.equals("spanadjacentonly") || a.equals("adjacentonly") || a.equals("adjacent")){
+				ReadKey.spanAdjacentOnly=Tools.parseBoolean(b);
 			}
 			
 //			else if(a.equals("repair")){
@@ -155,6 +170,8 @@ public class Clumpify {
 				BBMerge.changeQuality=Read.CHANGE_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("quantize") || a.equals("quantizesticky")){
 				quantizeQuality=Quantizer.parse(arg, a, b);
+			}else if(a.equals("lowcomplexity")){
+				lowComplexity=Tools.parseBoolean(b);
 			}
 			
 			else if(Clump.parseStatic(arg, a, b)){
@@ -168,22 +185,35 @@ public class Clumpify {
 			}
 		}
 		
-		KmerSplit.quantizeQuality=KmerSort.quantizeQuality=quantizeQuality;
+		Clump.setXY();
+		
+		KmerSplit.quantizeQuality=KmerSort1.quantizeQuality=quantizeQuality;
 		
 		Parser.processQuality();
 		
 		assert(!unpair || !KmerComparator.mergeFirst) : "Unpair and mergefirst may not be used together.";
 		
-		if(in1==null){
-			throw new RuntimeException("\nOne input file is required.\n");
+		if(in1==null){throw new RuntimeException("\nOne input file is required.\n");}
+		
+		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
+			in2=in1.replace("#", "2");
+			in1=in1.replace("#", "1");
+		}
+		if(out1!=null && out2==null && out1.indexOf('#')>-1){
+			out2=out1.replace("#", "2");
+			out1=out1.replace("#", "1");
 		}
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
+//		assert(false) : ReadKey.spanTiles()+", "+ReadKey.spanTilesX+", "+ReadKey.spanTilesY+", "+Clump.sortX+", "+Clump.sortY;
+		
 		autoSetGroups(gString);
+		
+		if((in2!=null || out2!=null) && groups>1){FASTQ.FORCE_INTERLEAVED=true;} //Fix for crash with twin fasta files
 	}
 	
 	
@@ -194,48 +224,72 @@ public class Clumpify {
 	/** Create read streams and process all data */
 	public void process(Timer t){
 		String[] args=args2.toArray(new String[0]);
-		args[2]="groups="+groups;
+		args[4]="groups="+groups;
 		
 		useSharedHeader=(FileFormat.hasSamOrBamExtension(in1) && out1!=null
 				&& FileFormat.hasSamOrBamExtension(out1));
 		
 		if(groups==1){
-			args[0]="in="+in1;
-			args[1]="out="+out1;
-			args[3]="ecco="+ecco;
-			args[4]="rename="+addName;
-			args[5]="shortname="+shortName;
-			args[6]="unpair="+unpair;
-			args[7]="repair="+repair;
-			args[8]="namesort="+namesort;
-			args[9]="ow="+overwrite;
-			KmerSort.main(args);
+			args[0]="in1="+in1;
+			args[1]="in2="+in2;
+			args[2]="out1="+out1;
+			args[3]="out2="+out2;
+			args[5]="ecco="+ecco;
+			args[6]="rename="+addName;
+			args[7]="shortname="+shortName;
+			args[8]="unpair="+unpair;
+			args[9]="repair="+repair;
+			args[10]="namesort="+namesort;
+			args[11]="ow="+overwrite;
+			KmerSort1.main(args);
 		}else{
-			String in=in1, out;
+			String pin1=in1, pin2=in2, temp;
 			final int conservativePasses=Clump.conservativeFlag ? passes : Tools.max(1, passes/2);
 			if(passes>1){Clump.setConservative(true);}
 			long fileMem=-1;
 			for(int pass=1; pass<=passes; pass++){
 				if(/*passes>1 &&*/ (V2 || V3)){
 //					System.err.println("Running pass with fileMem="+fileMem);
-					out=(pass==passes ? out1 : getTempFname("clumpify_p"+(pass+1)+"_temp%_"));
-					fileMem=runOnePass_v2(args, pass, in, out, fileMem);
+//					out=(pass==passes ? out1 : getTempFname("clumpify_p"+(pass+1)+"_temp%_"));
+					temp=getTempFname("clumpify_p"+(pass+1)+"_temp%_");
+					if(pass==passes){
+						fileMem=runOnePass_v2(args, pass, pin1, pin2, out1, out2, fileMem);
+					}else{
+						fileMem=runOnePass_v2(args, pass, pin1, pin2, temp, null, fileMem);
+					}
 //					System.err.println("New fileMem="+fileMem);
 				}else{
-					out=(pass==passes ? out1 : getTempFname("clumpify_temp_pass"+pass+"_"));
-					runOnePass(args, pass, in, out);
+//					out=(pass==passes ? out1 : getTempFname("clumpify_temp_pass"+pass+"_"));
+					temp=getTempFname("clumpify_temp_pass"+pass+"_");
+					if(pass==passes){
+						runOnePass(args, pass, pin1, pin2, out1, out2);
+					}else{
+						runOnePass(args, pass, pin1, pin2, temp, null);
+					}
 				}
-				in=out;
+				pin1=temp;
+				pin2=null;
 				KmerComparator.defaultBorder=Tools.max(0, KmerComparator.defaultBorder-1);
 				KmerComparator.defaultSeed++;
 				if(pass>=conservativePasses){Clump.setConservative(false);}
 			}
 		}
+		
+		if(deleteInput && !sharedErrorState && out1!=null && in1!=null){
+			try {
+				new File(in1).delete();
+				if(in2!=null){new File(in2).delete();}
+			} catch (Exception e) {
+				System.err.println("WARNING: Failed to delete input files.");
+			}
+		}
+		
 		t.stop();
 		System.err.println("Total time: \t"+t);
+		
 	}
 	
-	private void runOnePass(String[] args, int pass, String in, String out){
+	private void runOnePass(String[] args, int pass, String in1, String in2, String out1, String out2){
 		assert(groups>1);
 		if(pass>1){
 			ecco=false;
@@ -247,51 +301,60 @@ public class Clumpify {
 		
 		String temp2=temp.replace("%", "FINAL");
 		final boolean externalSort=(pass==passes && (repair || namesort));
-		
-		args[0]="in="+in;
-		args[1]="out="+temp;
-		args[3]="ecco="+ecco;
-		args[4]="addname=f";
-		args[5]="shortname="+shortName;
-		args[6]="unpair="+unpair;
-		args[7]="repair=f";
-		args[8]="namesort=f";
-		args[9]="ow="+overwrite;
+
+		args[0]="in1="+in1;
+		args[1]="in2="+in2;
+		args[2]="out="+temp;
+		args[3]="out2="+null;
+		args[5]="ecco="+ecco;
+		args[6]="addname=f";
+		args[7]="shortname="+shortName;
+		args[8]="unpair="+unpair;
+		args[9]="repair=f";
+		args[10]="namesort=f";
+		args[11]="ow="+overwrite;
 		KmerSplit.maxZipLevel=2;
 		KmerSplit.main(args);
 		
 		FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=false;
 		FASTQ.ASCII_OFFSET=FASTQ.ASCII_OFFSET_OUT;
-		
+
 		args[0]="in="+temp;
-		args[1]="out="+(externalSort ? temp2 : out);
-		args[3]="ecco=f";
-		args[4]="addname="+addName;
-		args[5]="shortname=f";
-		args[6]="unpair=f";
-		args[7]="repair="+(repair && externalSort);
-		args[8]="namesort="+(namesort && externalSort);
-		args[9]="ow="+overwrite;
+		args[1]="in2="+null;
+		args[2]="out="+(externalSort ? temp2 : out1);
+		args[3]="out2="+(externalSort ? "null" : out2);
+		args[5]="ecco=f";
+		args[6]="addname="+addName;
+		args[7]="shortname=f";
+		args[8]="unpair=f";
+		args[9]="repair="+(repair && externalSort);
+		args[10]="namesort="+(namesort && externalSort);
+		args[11]="ow="+overwrite;
 		if(unpair){
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
-		KmerSort.main(args);
+		KmerSort1.main(args);
 		
 		if(delete){
 			for(int i=0; i<groups; i++){
 				new File(temp.replaceFirst("%", ""+i)).delete();
 			}
-			if(pass>1){new File(in).delete();}
+			if(pass>1){
+				assert(in2==null);
+				new File(in1).delete();
+			}
 		}
 		
 		if(externalSort){
 			outstream.println();
-			SortByName.main(new String[] {"in="+temp2, "out="+out, "ow="+overwrite});
+			String[] sortArgs=new String[] {"in="+temp2, "out="+out1, "ow="+overwrite};
+			if(out2!=null){sortArgs=new String[] {"in="+temp2, "out="+out1, "out2="+out2, "ow="+overwrite};}
+			SortByName.main(sortArgs);
 			if(delete){new File(temp2).delete();}
 		}
 	}
 	
-	private long runOnePass_v2(String[] args, int pass, String in, String out, long fileMem){
+	private long runOnePass_v2(String[] args, int pass, String in1, String in2, String out1, String out2, long fileMem){
 		assert(groups>1);
 		if(pass>1){
 			ecco=false;
@@ -301,20 +364,22 @@ public class Clumpify {
 		
 		String temp=getTempFname("clumpify_p"+pass+"_temp%_");
 		
-		String temp2=temp.replace("%", "FINAL");
+//		String temp2=temp.replace("%", "FINAL");
 		String namesorted=temp.replace("%", "namesorted_%");
 		final boolean externalSort=(pass==passes && (repair || namesort));
 		
 		if(pass==1){
-			args[0]="in="+in;
-			args[1]="out="+temp;
-			args[3]="ecco="+ecco;
-			args[4]="addname=f";
-			args[5]="shortname="+shortName;
-			args[6]="unpair="+unpair;
-			args[7]="repair=f";
-			args[8]="namesort=f";
-			args[9]="ow="+overwrite;
+			args[0]="in1="+in1;
+			args[1]="in2="+in2;
+			args[2]="out="+temp;
+			args[3]="out2="+null;
+			args[5]="ecco="+ecco;
+			args[6]="addname=f";
+			args[7]="shortname="+shortName;
+			args[8]="unpair="+unpair;
+			args[9]="repair=f";
+			args[10]="namesort=f";
+			args[11]="ow="+overwrite;
 			KmerSplit.maxZipLevel=2;
 			KmerSplit.main(args);
 			fileMem=KmerSplit.lastMemProcessed;
@@ -323,30 +388,31 @@ public class Clumpify {
 			FASTQ.ASCII_OFFSET=FASTQ.ASCII_OFFSET_OUT;
 		}
 		
-		args[0]="in="+(pass==1 ? temp : in);
-//		args[1]="out="+(externalSort ? temp2 : out);
-		args[1]="out="+(externalSort ? namesorted : out);
-		args[3]="ecco=f";
-		args[4]="addname="+addName;
-		args[5]="shortname=f";
-		args[6]="unpair=f";
-		args[7]="repair="+(repair && externalSort);
-		args[8]="namesort="+(namesort && externalSort);
-		args[9]="ow="+overwrite;
+		args[0]="in1="+(pass==1 ? temp : in1);
+		args[1]="in2="+null;
+		args[2]="out="+(externalSort ? namesorted : out1);
+		args[3]="out2="+(externalSort ? "null" : out2);
+		args[5]="ecco=f";
+		args[6]="addname="+addName;
+		args[7]="shortname=f";
+		args[8]="unpair=f";
+		args[9]="repair="+(repair && externalSort);
+		args[10]="namesort="+(namesort && externalSort);
+		args[11]="ow="+overwrite;
 		if(unpair){
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
 		if(externalSort){
-			KmerSort2.doHashAndSplit=KmerSort3.doHashAndSplit=false;
+			KmerSort.doHashAndSplit=false;
 		}
 		if(V3){
-			KmerSort3.main(fileMem, args);
+			KmerSort3.main(fileMem, pass, passes, args);
 			if(fileMem<1){fileMem=KmerSort3.lastMemProcessed;}
 		}else{KmerSort2.main(args);}
 		
 		if(delete){
 			for(int i=0; i<groups; i++){
-				new File((pass==1 ? temp : in).replaceFirst("%", ""+i)).delete();
+				new File((pass==1 ? temp : in1).replaceFirst("%", ""+i)).delete();
 			}
 		}
 		
@@ -362,8 +428,9 @@ public class Clumpify {
 			ReadWrite.USE_PIGZ=true;
 			ReadWrite.ZIPLEVEL=Tools.max(ReadWrite.ZIPLEVEL, 6);
 			FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
-			FileFormat dest=FileFormat.testOutput(out, FileFormat.FASTQ, null, true, overwrite, false, false);
-			SortByName.mergeAndDump(names, dest, null, delete, useSharedHeader);
+			FileFormat dest=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, false, false);
+			FileFormat dest2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, false, false);
+			SortByName.mergeAndDump(names, /*null, */dest, dest2, delete, useSharedHeader, outstream, 150);
 		}
 		
 //		if(externalSort){
@@ -377,42 +444,45 @@ public class Clumpify {
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
 	
 	private void autoSetGroups(String s) {
 		if(s==null || s.equalsIgnoreCase("null")){return;}
-		if(Character.isDigit(s.charAt(0))){
+		if(Tools.isDigit(s.charAt(0))){
 			groups=Integer.parseInt(s);
 			return;
 		}
 		assert(s.equalsIgnoreCase("auto")) : "Unknown groups setting: "+s;
 		
 		final long maxMem=Shared.memAvailable(1);
-		FileFormat ff=FileFormat.testInput(in1, FileFormat.FASTQ, null, false, false);
-		if(ff==null || ff.stdio()){return;}
+		FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, false, false);
+		if(ff1==null || ff1.stdio()){return;}
 		
 //		outstream.println("in1="+in1+", overhead="+(0.5*(ReadKey.overhead+Clump.overhead)));
 		
-		double[] estimates=Tools.estimateFileMemory(in1, 200, 0.5*(ReadKey.overhead+Clump.overhead), true);
+		double[] estimates=Tools.estimateFileMemory(in1, 1000, 0.5*(ReadKey.overhead+Clump.overhead), true, lowComplexity);
+		if(in2!=null){
+			double[] estimates2=Tools.estimateFileMemory(in2, 1000, 0.5*(ReadKey.overhead+Clump.overhead), true, lowComplexity);
+			estimates[0]+=estimates2[0];
+			estimates[1]+=estimates2[1];
+			estimates[4]+=estimates2[4];
+		}
 		
 //		outstream.println(Arrays.toString(estimates));
 		
 		double memEstimate=estimates==null ? 0 : estimates[0];
 		double diskEstimate=estimates==null ? 0 : estimates[1];
+		double readEstimate=estimates==null ? 0 : estimates[4];
 		double worstCase=memEstimate*1.5;
 
 //		outstream.println("Raw Disk Size Estimate: "+(long)(diskEstimate/(1024*1024))+" MB");
+		outstream.println("Read Estimate:          "+(long)(readEstimate));
 		outstream.println("Memory Estimate:        "+(long)(memEstimate/(1024*1024))+" MB");
 		outstream.println("Memory Available:       "+(maxMem/(1024*1024))+" MB");
 		
-		if(maxMem>worstCase){
+		if(maxMem>worstCase && readEstimate<Integer.MAX_VALUE){
 			groups=1;
 		}else{
-			groups=Tools.max(11, 3+(int)(4*worstCase/maxMem))|1;
+			groups=Tools.max(11, (int)(3+(3*worstCase/maxMem)*(V3 ? KmerSort3.fetchThreads : 2)), (int)((2*readEstimate)/Integer.MAX_VALUE))|1;
 		}
 		outstream.println("Set groups to "+groups);
 	}
@@ -432,13 +502,17 @@ public class Clumpify {
 		}else{
 			temp=path+core+Long.toHexString((randy.nextLong()&Long.MAX_VALUE))+extension;
 		}
+//		assert(false) : path+", "+temp+", "+core+", "+out1;
 		
-		final String comp=ReadWrite.compressionType(temp);
+		String comp=ReadWrite.compressionType(temp);
+		if(comp!=null){comp=".gz";} //Prevent bz2 temp files which cause a crash
+		
 		if(forceCompressTemp && comp==null){
 			temp+=".gz";
 		}else if(comp!=null && forceRawTemp){
 			temp=temp.substring(0, temp.lastIndexOf('.'));
 		}
+		if(temp.endsWith(".bz2")){temp=temp.substring(0, temp.length()-4);} //Prevent bz2 temp files which cause a crash
 
 //		outstream.println(temp);
 		return temp;
@@ -449,7 +523,7 @@ public class Clumpify {
 		String s=r.id;
 		if(s.contains("HISEQ")){s=s.replace("HISEQ", "H");}
 		if(s.contains("MISEQ")){
-			s=s.replace("MISEQ", "M");		
+			s=s.replace("MISEQ", "M");
 		}
 		if(s.contains(":000000000-")){
 			s=s.replace(":000000000-", ":");
@@ -458,7 +532,7 @@ public class Clumpify {
 	}
 	
 	public static void shortName(Read r) {
-		StringBuilder sb=new StringBuilder(14);
+		ByteBuilder sb=new ByteBuilder(14);
 		long x=r.numericID|1;
 		
 		while(x<1000000000L){
@@ -480,18 +554,19 @@ public class Clumpify {
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
-
+	
+	private boolean lowComplexity=false;
 	
 	private boolean quantizeQuality=false;
 	private Random randy=new Random();
 	private int groups=31;
 	private int passes=1;
-//	private int k=31;
 	private boolean ecco=false;
 	private boolean addName=false;
 	private String shortName="f";
 	private boolean useTmpdir=false;
 	private boolean delete=true;
+	private boolean deleteInput=false;
 	private boolean useSharedHeader=false;
 	private boolean forceCompressTemp=false;
 	private boolean forceRawTemp=false;
@@ -502,11 +577,15 @@ public class Clumpify {
 	private boolean namesort=false;
 	private boolean V2=false;
 	private boolean V3=true;
-	
+
 	private String in1=null;
+	private String in2=null;
 	private String out1=null;
+	private String out2=null;
 	
 	ArrayList<String> args2=new ArrayList<String>();
 	private PrintStream outstream=System.err;
+
+	public static boolean sharedErrorState=false;
 	
 }

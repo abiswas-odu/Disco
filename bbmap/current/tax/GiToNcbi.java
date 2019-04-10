@@ -21,17 +21,17 @@ public class GiToNcbi {
 		ReadWrite.ZIPLEVEL=9;
 		ReadWrite.PIGZ_BLOCKSIZE=256;
 //		ReadWrite.PIGZ_ITERATIONS=30;
+		
 		for(String arg : args){
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			dna.Parser.parseZip(arg, a, b);
+			shared.Parser.parseZip(arg, a, b);
 		}
 		initialize(args[0]);
-		if(args.length>2){//Run a test
+		if(args.length>2 && false){//Run a test
 			test(args);
-		}else if(args.length==2){//Write array
+		}else if(args.length>=2){//Write array
 			ReadWrite.write(array, args[1], true);
 		}
 	}
@@ -50,7 +50,7 @@ public class GiToNcbi {
 		
 		TaxTree tree=null;
 		if(args.length>1){
-			tree=new TaxTree(args[1], args[2]);
+			tree=TaxTree.loadTaxTree(args[0], System.err, true, true);
 		}
 		
 		System.err.println("Strings:");
@@ -83,9 +83,10 @@ public class GiToNcbi {
 		}
 	}
 	
-	public static int parseGiToNcbi(String s){
-		int x=parseGiNumber(s);
-		assert(x>=0);
+	public static int parseGiToNcbi(String s){return parseGiToNcbi(s, '|');}
+	public static int parseGiToNcbi(String s, char delimiter){
+		int x=parseGiNumber(s, delimiter);
+		assert(x>=0) : s;
 		assert(array!=null) : "To use gi numbers, you must load a gi table.";
 //		if(x>=array.length || array[x]<0){x=(int)(Math.random()*array.length);} //Test to make sure array is nonempty.
 		if(x>=0 && x<array.length){return array[x];}
@@ -95,40 +96,47 @@ public class GiToNcbi {
 		return -1;
 	}
 	
-	public static int parseGiToNcbi(byte[] s){
-		int x=parseGiNumber(s);
+
+	public static int parseGiToNcbi(byte[] s){return parseGiToNcbi(s, '|');}
+	public static int parseGiToNcbi(byte[] s, char delimiter){
+		int x=parseGiNumber(s, delimiter);
 		if(x>=0){return array[x];}
 		return -1;
 	}
 	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	static int parseGiNumber(String s){
+	static int parseGiNumber(String s, char delimiter){
 		if(s==null || s.length()<4){return -1;}
 //		System.err.println("a");
-		if(s.charAt(0)=='>'){return getID(s.substring(1));}
+		if(s.charAt(0)=='>'){return getID(s.substring(1), delimiter);}
 //		System.err.println("b");
 		if(!s.startsWith("gi")){return -1;}
 //		System.err.println("c");
-		char delimiter='|';
 //		System.err.println("d");
 		int initial=s.indexOf(delimiter);
 //		System.err.println("e");
 		if(initial<0){
-			delimiter='_';
-//			System.err.println("f");
-			initial=s.indexOf(delimiter);
-//			System.err.println("g");
+			if(delimiter!='~'){
+				delimiter='~';
+				initial=s.indexOf(delimiter);
+			}
+			if(initial<0){
+				delimiter='_';
+				initial=s.indexOf(delimiter);
+			}
 			if(initial<0){return -1;}
+//			System.err.println("f");
+//			System.err.println("g");
 		}
 //		System.err.println("h");
-		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
+		if(!Tools.isDigit(s.charAt(initial+1))){return -1;}
 //		System.err.println("i");
 		
 		int number=0;
 		for(int i=initial+1; i<s.length(); i++){
 			char c=s.charAt(i);
 			if(c==delimiter){break;}
-			assert(Character.isDigit(c));
+			assert(Tools.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
 //		System.err.println("j: "+number);
@@ -136,87 +144,87 @@ public class GiToNcbi {
 	}
 	
 	/** Parse a ncbi number, or return -1 if formatted incorrectly. */
-	static int parseNcbiNumber(String s){
-		if(s==null || s.length()<6){return -1;}
-		if(s.charAt(0)=='>'){return getID(s.substring(1));}
-		if(!s.startsWith("ncbi")){return -1;}
-		char delimiter='|';
+	static int parseNcbiNumber(String s, char delimiter){
+		if(s==null || s.length()<5){return -1;}
+		if(s.charAt(0)=='>'){return parseNcbiNumber(s.substring(1), delimiter);}
+		if(!s.startsWith("ncbi") && !s.startsWith("tid")){return -1;}
 		int initial=s.indexOf(delimiter);
 		if(initial<0){
 			delimiter='_';
 			initial=s.indexOf(delimiter);
 			if(initial<0){return -1;}
 		}
-		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
+		if(!Tools.isDigit(s.charAt(initial+1))){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length(); i++){
 			char c=s.charAt(i);
 			if(c==delimiter || c==' '){break;}
-			assert(Character.isDigit(c)) : c+"\n"+s;
+			assert(Tools.isDigit(c)) : c+"\n"+s;
 			number=(number*10)+(c-'0');
 		}
 		return number;
 	}
 	
+
+	public static int getID(String s){return getID(s, '|');}
 	/** Get the taxID from a header starting with a taxID or gi number */
-	public static int getID(String s){
-		int x=parseGiNumber(s);
+	public static int getID(String s, char delimiter){
+		int x=parseGiNumber(s, delimiter);
 		if(x>=0){return array[x];}
-		return parseNcbiNumber(s);
+		return parseNcbiNumber(s, delimiter);
 	}
 	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	static int parseGiNumber(byte[] s){
+	static int parseGiNumber(byte[] s, char delimiter){
 		if(s==null || s.length<4){return -1;}
 		if(!Tools.startsWith(s, "gi") && !Tools.startsWith(s, ">gi")){return -1;}
-		char delimiter='|';
 		int initial=Tools.indexOf(s, (byte)delimiter);
 		if(initial<0){
 			delimiter='_';
 			initial=Tools.indexOf(s, (byte)delimiter);
 			if(initial<0){return -1;}
 		}
-		if(!Character.isDigit(s[initial+1])){return -1;}
+		if(!Tools.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length; i++){
 			byte c=s[i];
 			if(c==delimiter){break;}
-			assert(Character.isDigit(c));
+			assert(Tools.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
 		return number;
 	}
 	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	static int parseNcbiNumber(byte[] s){
-		if(s==null || s.length<4){return -1;}
-		if(!Tools.startsWith(s, "ncbi") && !Tools.startsWith(s, ">ncbi")){return -1;}
-		char delimiter='|';
+	static int parseNcbiNumber(byte[] s, char delimiter){
+		if(s==null || s.length<3){return -1;}
+		if(!Tools.startsWith(s, "ncbi") && !Tools.startsWith(s, ">ncbi") && !Tools.startsWith(s, "tid") && !Tools.startsWith(s, ">tid")){return -1;}
 		int initial=Tools.indexOf(s, (byte)delimiter);
 		if(initial<0){
 			delimiter='_';
 			initial=Tools.indexOf(s, (byte)delimiter);
 			if(initial<0){return -1;}
 		}
-		if(!Character.isDigit(s[initial+1])){return -1;}
+		if(!Tools.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length; i++){
 			byte c=s[i];
 			if(c==delimiter){break;}
-			assert(Character.isDigit(c));
+			assert(Tools.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
 		return number;
 	}
-	
+
+	public static int getID(byte[] s){return getID(s, '|');}
 	/** Get the taxID from a header starting with a taxID or gi number */
-	public static int getID(byte[] s){
-		int x=parseGiNumber(s);
+	public static int getID(byte[] s, char delimiter){
+		int x=parseGiNumber(s, delimiter);
 		if(x>=0){return array[x];}
-		return parseNcbiNumber(s);
+		return parseNcbiNumber(s, delimiter);
 	}
 	
 	/** Get the taxID from a gi number */
@@ -274,7 +282,7 @@ public class GiToNcbi {
 	}
 	
 	private static long findMaxID(String fname){
-		ByteFile bf=ByteFile.makeByteFile(fname, false, true);
+		ByteFile bf=ByteFile.makeByteFile(fname, true);
 		long count=0, max=0;
 		byte[] line=bf.nextLine();
 		while(line!=null){
@@ -289,7 +297,7 @@ public class GiToNcbi {
 	}
 	
 	private static long fillArray(String fname, int[] x){
-		ByteFile bf=ByteFile.makeByteFile(fname, false, true);
+		ByteFile bf=ByteFile.makeByteFile(fname, true);
 		long count=0;
 		byte[] line=bf.nextLine();
 		while(line!=null){

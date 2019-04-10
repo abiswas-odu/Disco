@@ -3,27 +3,25 @@ package cluster;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.concurrent.ThreadLocalRandom;
-
-
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
+import java.util.Random;
 import dna.Data;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -34,22 +32,23 @@ public class ReclusterByKmer {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		ReclusterByKmer rbk=new ReclusterByKmer(args);
-		rbk.process(t);
+		ReclusterByKmer x=new ReclusterByKmer(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public ReclusterByKmer(String[] args){
-		if(args==null || args.length==0){
-			printOptions();
-			System.exit(0);
-		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		
@@ -62,11 +61,8 @@ public class ReclusterByKmer {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
@@ -139,23 +135,13 @@ public class ReclusterByKmer {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-			//out1="stdout";
-			System.err.println("Warning: output destination not set; producing no output.  To print to standard out, set 'out=stdout.fq'");
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		if(!setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -178,7 +164,7 @@ public class ReclusterByKmer {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
@@ -198,11 +184,6 @@ public class ReclusterByKmer {
 	
 	/*--------------------------------------------------------------*/
 	
-	/** TODO */
-	public static void printOptions(){
-		System.err.println("Usage information unavailable");
-	}
-	
 	void process(Timer t){
 		
 		
@@ -221,7 +202,7 @@ public class ReclusterByKmer {
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -245,7 +226,7 @@ public class ReclusterByKmer {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -267,7 +248,7 @@ public class ReclusterByKmer {
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -279,19 +260,7 @@ public class ReclusterByKmer {
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
-
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(errorState){
 			throw new RuntimeException("ReformatReads terminated in an error state; the output may be corrupt.");
@@ -300,7 +269,7 @@ public class ReclusterByKmer {
 	
 	/*--------------------------------------------------------------*/
 	
-	private Cluster fetchCluster(int x){
+	Cluster fetchCluster(int x){
 		if(x>clusterList.size()){
 			synchronized(clusterList){
 				clusterList.ensureCapacity(2*x);
@@ -405,11 +374,11 @@ public class ReclusterByKmer {
 		
 		public ClusterThread(int id_, int clusterMode_, int ambigMode_, ConcurrentReadInputStream cris_){
 			id=id_;
-			ambigMode=ambigMode_; 
+			ambigModeT=ambigMode_;
 			clusterMode=clusterMode_;
 			cris=cris_;
 			
-			randy=(ambigMode==AMBIG_MODE_RAND) ? ThreadLocalRandom.current() : null;
+			randy=(ambigModeT==AMBIG_MODE_RAND) ? Shared.threadLocalRandom() : null;
 		}
 		
 		@Override
@@ -418,7 +387,7 @@ public class ReclusterByKmer {
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
 			//While there are more reads lists...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
@@ -426,11 +395,11 @@ public class ReclusterByKmer {
 				}
 				
 				//Fetch a new read list
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 		}
 		
 		
@@ -515,17 +484,17 @@ public class ReclusterByKmer {
 				float a=bestScore1+bestScore1_2;
 				float b=bestScore2+bestScore2_1;
 
-				if(ambigMode==AMBIG_MODE_BEST){
+				if(ambigModeT==AMBIG_MODE_BEST){
 					if(a>=b){
 						rt1.cluster1=rt2.cluster1=bestCluster1.id;
 					}else{
 						rt1.cluster1=rt2.cluster1=bestCluster2.id;
 					}
-				}else if(ambigMode==AMBIG_MODE_BOTH){
+				}else if(ambigModeT==AMBIG_MODE_BOTH){
 					assert(false) : "TODO";
-				}else if(ambigMode==AMBIG_MODE_TOSS){
+				}else if(ambigModeT==AMBIG_MODE_TOSS){
 					rt1.cluster1=rt2.cluster1=-1;
-				}else if(ambigMode==AMBIG_MODE_RAND){
+				}else if(ambigModeT==AMBIG_MODE_RAND){
 					if(a<0 || b<0){
 						float c=0-(Tools.min(a, b))*1.5f;
 						a=a+c;
@@ -544,10 +513,10 @@ public class ReclusterByKmer {
 
 		final int id;
 		final int clusterMode;
-		final int ambigMode;
+		final int ambigModeT;
 		final ConcurrentReadInputStream cris;
 		
-		final ThreadLocalRandom randy;
+		final Random randy;
 		
 		long readsInT;
 		long basesInT;
@@ -564,7 +533,7 @@ public class ReclusterByKmer {
 	
 	public boolean errorState=false;
 	
-	private final ArrayList<Cluster> clusterList=new ArrayList<Cluster>(256);
+	final ArrayList<Cluster> clusterList=new ArrayList<Cluster>(256);
 	
 	/** 'big' kmer */
 	public final int k1;

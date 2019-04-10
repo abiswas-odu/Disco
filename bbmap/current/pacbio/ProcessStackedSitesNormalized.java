@@ -1,18 +1,15 @@
 package pacbio;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.Locale;
 
-import stream.SiteScoreR;
-
-
-import dna.Gene;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.SiteScoreR;
 
 /**
  * @author Brian Bushnell
@@ -22,7 +19,12 @@ import shared.Tools;
 public class ProcessStackedSitesNormalized {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		
 		String infile=args[0];
@@ -31,7 +33,7 @@ public class ProcessStackedSitesNormalized {
 		for(int i=2; i<args.length; i++){
 			String[] split=args[i].toLowerCase().split("=");
 			String a=split[0];
-			String b=(split.length>1 ? split[1] : null);
+			String b=split.length>1 ? split[1] : null;
 			
 			if(a.equals("scorethresh")){
 				SCORE_THRESH=Float.parseFloat(b);
@@ -61,7 +63,7 @@ public class ProcessStackedSitesNormalized {
 //				throw new RuntimeException("Deprecated - use minfractionfromreadends instead.");
 				int x=Integer.parseInt(b);
 				float f=x/((150-INTERVAL)*.5f);
-				System.err.println("Warning - mindistfromreadends is deprecated.  Setting minfractionfromreadends = "+String.format("%.3f",f));
+				System.err.println("Warning - mindistfromreadends is deprecated.  Setting minfractionfromreadends = "+String.format(Locale.ROOT, "%.3f",f));
 				MIN_FRACTION_FROM_READ_ENDS=f;
 			}else if(a.equals("minfractionfromreadends")){
 				MIN_FRACTION_FROM_READ_ENDS=Float.parseFloat(b);
@@ -72,8 +74,8 @@ public class ProcessStackedSitesNormalized {
 		
 		process(infile, outfile);
 		
-		System.out.println("Sites In:\t"+sitesIn+"    \t"+String.format("%.3f%% correct",correctIn*100d/sitesIn));
-		System.out.println("Sites Out:\t"+sitesOut+"    \t"+String.format("%.3f%% correct",correctOut*100d/sitesOut));
+		System.out.println("Sites In:\t"+sitesIn+"    \t"+String.format(Locale.ROOT, "%.3f%% correct",correctIn*100d/sitesIn));
+		System.out.println("Sites Out:\t"+sitesOut+"    \t"+String.format(Locale.ROOT, "%.3f%% correct",correctOut*100d/sitesOut));
 		t.stop();
 		System.out.println("Time: \t"+t);
 	}
@@ -123,7 +125,7 @@ public class ProcessStackedSitesNormalized {
 					if(ssr.readlen>=MIN_LENGTH_TO_RETAIN){
 						if(Tools.isWithin(start, stop, ssr.start+x, ssr.stop-x)){
 							ssr.normalizedScore=normalizedScore(ssr, Tools.min(start-ssr.start, ssr.stop-stop));
-							if(ssr.strand==Gene.PLUS){
+							if(ssr.strand==Shared.PLUS){
 								plus.add(ssr);
 							}else{
 								minus.add(ssr);
@@ -142,9 +144,9 @@ public class ProcessStackedSitesNormalized {
 //	private static final int markRetain_old(ArrayList<SiteScoreR> list){
 ////		Shared.sort(list, SiteScoreR.NCOMP);
 //		assert(list.size()<2 || list.get(0).normalizedScore>=list.get(1).normalizedScore) : list.get(0)+"\t"+list.get(1);
-//		
+//
 //		int sites=list.size()-MIN_SITES_TO_DISCARD; //Always ignore worst site(s).
-//		
+//
 //		int retain=(int)(sites*FRACTION_TO_RETAIN1);
 //		if(retain>SITES_TO_RETAIN1){
 //			int temp=(int)((retain-SITES_TO_RETAIN1)*FRACTION_TO_RETAIN2);
@@ -153,12 +155,12 @@ public class ProcessStackedSitesNormalized {
 //		}
 //		retain=Tools.min(retain, SITES_TO_RETAIN2);
 ////		System.out.println("retain2="+retain);
-//		
+//
 ////		for(int i=0; i<retain; i++){
 ////			list.get(i).retainVotes++;
 ////		}
 //		Shared.sort(list);
-//		
+//
 //		final SiteScoreR best=(list!=null && list.size()>0 ? list.get(0) : null);
 //		for(int i=0; i<retain; i++){
 //			final SiteScoreR b=list.get(i);
@@ -167,7 +169,7 @@ public class ProcessStackedSitesNormalized {
 ////				if(a.score-b.score>a.score*0.03f){break;}
 //				if(best.score-b.score>best.score*0.034f){break;}
 //			}
-//			
+//
 //			if(i==0){
 //				b.retainVotes+=5;
 //			}else if(i<3){
@@ -178,7 +180,7 @@ public class ProcessStackedSitesNormalized {
 //				b.retainVotes++;
 //			}
 //		}
-//		
+//
 //		return retain;
 //	}
 	
@@ -327,7 +329,7 @@ public class ProcessStackedSitesNormalized {
 			array=new Ssra[size];
 			infname=infname_;
 			outfname=outfname_;
-			tf=new TextFile(infname, true, false);
+			tf=new TextFile(infname, true);
 			tsw=new TextStreamWriter(outfname, true, false, true);
 			tsw.start();
 			nextSsra=read();

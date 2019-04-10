@@ -3,29 +3,30 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
+import fileIO.ByteFile;
+import fileIO.ByteFile1;
+import fileIO.ByteFile2;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.KillSwitch;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ByteFile1;
-import fileIO.ByteFile2;
-import fileIO.ReadWrite;
-import fileIO.FileFormat;
-import fileIO.TextStreamWriter;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 
 
 /**
+ * Fuses reads together randomly to make chimeric reads.
  * @author Brian Bushnell
  * @date Oct 7, 2014
  *
@@ -34,24 +35,21 @@ public class MakeChimeras {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		MakeChimeras mb=new MakeChimeras(args);
-		mb.process(t);
+		MakeChimeras x=new MakeChimeras(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public MakeChimeras(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -64,8 +62,6 @@ public class MakeChimeras {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -107,10 +103,7 @@ public class MakeChimeras {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -155,7 +148,7 @@ public class MakeChimeras {
 					assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 				}
 				
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 					for(int idx=0; idx<reads.size(); idx++){
 						final Read r1=reads.get(idx);
@@ -171,7 +164,7 @@ public class MakeChimeras {
 						basesProcessed+=initialLength1;
 					}
 					
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
@@ -183,19 +176,7 @@ public class MakeChimeras {
 			errorState|=ReadWrite.closeStream(cris);
 			
 			t.stop();
-			
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Read Time:                    \t"+t);
-			outstream.println("Reads In:           "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases In:           "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		}
 		
 		
@@ -234,19 +215,7 @@ public class MakeChimeras {
 			if(tsw!=null){errorState|=tsw.poisonAndWait();}
 			
 			t.stop();
-			
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			outstream.println("Write Time:                   \t"+t);
-			outstream.println("Reads Out:          "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Out:          "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		}
 
 		if(errorState){
@@ -295,7 +264,7 @@ public class MakeChimeras {
 			if(quals!=null){quals[i]=bquals[j];}
 		}
 		
-		Read r=new Read(bases, -1, -1, -1, id, quals, numericID, 0);
+		Read r=new Read(bases, quals, id, numericID);
 		if(Tools.nextBoolean(randy)){r.reverseComplement();}
 		return r;
 	}
@@ -305,7 +274,7 @@ public class MakeChimeras {
 	 * @param randy
 	 * @return
 	 */
-	private Read getPiece(Read a, Random randy) {
+	private static Read getPiece(Read a, Random randy) {
 		int len=randy.nextInt(a.length())+1;
 		
 		final int start;
@@ -323,7 +292,7 @@ public class MakeChimeras {
 		byte[] bases=KillSwitch.copyOfRange(a.bases, start, start+len);
 		byte[] quals=a.quality==null ? null : KillSwitch.copyOfRange(a.quality, start, start+len);
 		
-		Read r=new Read(bases, -1, -1, -1, a.id, quals, a.numericID, 0);
+		Read r=new Read(bases, quals, a.id, a.numericID);
 		if(Tools.nextBoolean(randy)){r.reverseComplement();}
 		return r;
 	}
@@ -352,28 +321,12 @@ public class MakeChimeras {
 		byte[] bases=KillSwitch.copyOfRange(a.bases, start, start+len);
 		byte[] quals=a.quality==null ? null : KillSwitch.copyOfRange(a.quality, start, start+len);
 		
-		Read r=new Read(bases, -1, -1, -1, a.id, quals, a.numericID, 0);
+		Read r=new Read(bases, quals, a.id, a.numericID);
 		if(Tools.nextBoolean(randy)){r.reverseComplement();}
 		return r;
 	}
 	
 	/*--------------------------------------------------------------*/
-
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
-	
 	
 	/*--------------------------------------------------------------*/
 	

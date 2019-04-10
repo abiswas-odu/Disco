@@ -1,12 +1,11 @@
 package stream;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
 
@@ -28,6 +27,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 		restart();
 	}
 	
+	@Override
 	public void start(){}
 	
 	@Override
@@ -131,7 +131,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 			}
 			
 			if(s!=null){
-				Read r=new Read(s, chrom, Gene.PLUS, start, stop, id, null);
+				Read r=new Read(s, null, id, chrom, start, stop, Shared.PLUS);
 				if(alternateStrand && (r.numericID&1)==1){r.reverseComplement();}
 				r.setSynthetic(true);
 //				System.out.println("Made read: "+r);
@@ -173,7 +173,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 	private ArrayList<Read> buffer=null;
 	private int next=0;
 	
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.bufferLen();;
 	public static boolean UNLOAD=false;
 
 	public long generated=0;

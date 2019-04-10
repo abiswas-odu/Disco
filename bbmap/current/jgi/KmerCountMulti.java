@@ -4,21 +4,23 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.ReadStats;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
-import shared.ReadStats;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
-import fileIO.FileFormat;
 
 /**
  * Counts unique kmers in a file.
@@ -43,10 +45,13 @@ public class KmerCountMulti {
 		Timer t=new Timer();
 		
 		//Create an instance of this class
-		KmerCountMulti kcm=new KmerCountMulti(args);
+		KmerCountMulti x=new KmerCountMulti(args);
 		
 		//Run the object
-		kcm.process(t);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -55,21 +60,13 @@ public class KmerCountMulti {
 	 */
 	public KmerCountMulti(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether interleaved was explicitly set.
-		
-		//Set some shared static variables regarding PIGZ
+		//Set shared static variables
 		ReadWrite.USE_UNPIGZ=true;
 		
 		//Create a parser object
@@ -84,13 +81,11 @@ public class KmerCountMulti {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("k")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				for(String k : split2){
 					parser.loglogKlist.add(Integer.parseInt(k));
@@ -108,6 +103,7 @@ public class KmerCountMulti {
 			}else if(a.equals("minprob")){
 				parser.parse(null, "loglogminprob", b);
 			}else if(a.equals("sweep")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				int mink=Integer.parseInt(split2[0]);
 				int maxk=Integer.parseInt(split2[1]);
@@ -133,7 +129,6 @@ public class KmerCountMulti {
 			
 			overwrite=ReadStats.overwrite=parser.overwrite;
 			append=ReadStats.append=parser.append;
-			setInterleaved=parser.setInterleaved;
 			
 			in1=parser.in1;
 			in2=parser.in2;
@@ -171,10 +166,7 @@ public class KmerCountMulti {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -189,7 +181,7 @@ public class KmerCountMulti {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure that no file was specified multiple times
@@ -242,25 +234,8 @@ public class KmerCountMulti {
 		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
+		t.stop();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
@@ -330,7 +305,7 @@ public class KmerCountMulti {
 		for(int knum=0; knum<numK; knum++){
 			long sum=0;
 			for(MultiLogLog mlog : mlogArray){
-				sum+=mlog.counters[knum].cardinality(useWavg);
+				sum+=mlog.counters[knum].cardinality();
 			}
 			tsw.print(mlogArray[0].counters[knum].k+"\t"+((sum+ways-1)/ways)+"\n");
 		}
@@ -350,7 +325,7 @@ public class KmerCountMulti {
 		for(int way=0; way<ways; way++){
 			MultiLogLog mlog=mlogArray[way];
 			for(int knum=0; knum<numK; knum++){
-				counts[knum][way]=mlog.counters[knum].cardinality(useWavg);
+				counts[knum][way]=mlog.counters[knum].cardinality();
 			}
 		}
 		
@@ -364,19 +339,14 @@ public class KmerCountMulti {
 			String avgs=""+(long)Math.round(useWavg ? wavg : avg);
 			while(avgs.length()<11){avgs=avgs+" ";}
 			if(ways>1 && showStdev){
-				tsw.print(String.format("%d\t%s\t%.2f%%\n",k,avgs,stdev));
+				tsw.print(String.format(Locale.ROOT, "%d\t%s\t%.2f%%\n",k,avgs,stdev));
 			}else{
-				tsw.print(String.format("%d\t%s\n",k,avgs));
+				tsw.print(String.format(Locale.ROOT, "%d\t%s\n",k,avgs));
 			}
 				
 		}
 		if(ffout.stdio()){tsw.println();}
 		errorState|=tsw.poisonAndWait();
-	}
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO"); //TODO
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -394,6 +364,7 @@ public class KmerCountMulti {
 		}
 		
 		//Called by start()
+		@Override
 		public void run(){
 			//Do anything necessary prior to processing
 			
@@ -415,7 +386,7 @@ public class KmerCountMulti {
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 //				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
 
 				//Loop through each read in the list
@@ -432,7 +403,7 @@ public class KmerCountMulti {
 					final int initialLength2=r1.mateLength();
 
 					//Increment counters
-					readsProcessedT+=1+r1.mateCount();
+					readsProcessedT+=r1.pairCount();
 					basesProcessedT+=initialLength1+initialLength2;
 					
 					{
@@ -442,7 +413,7 @@ public class KmerCountMulti {
 				}
 
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 //				if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
 
 				//Fetch a new list

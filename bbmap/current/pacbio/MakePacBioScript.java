@@ -1,10 +1,8 @@
 package pacbio;
 
 import java.io.File;
-import java.util.ArrayList;
 
 import dna.Data;
-import dna.Parser;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import shared.Tools;
@@ -75,7 +73,7 @@ public class MakePacBioScript {
 			System.out.println("rb=,refbuild=    \tReference build number.  Default is 1.");
 			System.out.println("cp=,classpath=   \tClasspath to the program.  If unspecified, will be autodetected as "+
 					(Data.WINDOWS ? "/house/homedirs/b/bushnell/beta19/" : Data.ROOT()));
-//			r=ref.fa o=run.sh 
+//			r=ref.fa o=run.sh
 			System.exit(0);
 		}
 		
@@ -127,9 +125,7 @@ public class MakePacBioScript {
 			String b=split[1];
 			if(b.equalsIgnoreCase("null")){b=null;}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("threads") || a.startsWith("slots") || a.equals("t")){
+			if(a.equals("threads") || a.startsWith("slots") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("mode")){
 				mode=b;
@@ -282,7 +278,7 @@ public class MakePacBioScript {
 			if(f.exists()){
 				targetsize=""+new File(ref).length();
 				if(ref.endsWith(".gz") || ref.endsWith(".gzip") || ref.endsWith(".zip") || ref.endsWith(".bz2")){
-					TextFile tf=new TextFile(ref, false, false);
+					TextFile tf=new TextFile(ref, false);
 					long x=1;
 					for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){x+=s.length();}
 					tf.close();
@@ -308,7 +304,7 @@ public class MakePacBioScript {
 
 		String[] lines;
 		{
-			TextFile tf=new TextFile(template, false, false);
+			TextFile tf=new TextFile(template, false);
 			lines=tf.toStringLines();
 		}
 
@@ -337,7 +333,7 @@ public class MakePacBioScript {
 			}
 			
 			if(!s.startsWith("#")){
-				if((eccline && !ecc) || (sortline && !sort) || (refline && refbuild<1)){s="#"+s;} 
+				if((eccline && !ecc) || (sortline && !sort) || (refline && refbuild<1)){s="#"+s;}
 			}
 			
 			

@@ -18,7 +18,7 @@ public class Concatenator {
 	}
 	
 	public static void writeFile(String fname, TextStreamWriter tsw){
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		if(tsw==null){
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
 				System.out.println(s);
@@ -38,7 +38,7 @@ public class Concatenator {
 		for(int i=0; i<fnames.length; i++){
 			String fname=fnames[i];
 			if(fname!=null){
-				TextFile tf=new TextFile(fname, false, false);
+				TextFile tf=new TextFile(fname, false);
 				String[] lines=tf.toStringLines();
 				tf.close();
 				for(int j=0; j<lines.length; j++){

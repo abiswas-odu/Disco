@@ -1,6 +1,6 @@
 package structures;
 
-import java.util.ArrayList;
+import shared.KillSwitch;
 
 /**
  * @author Brian Bushnell
@@ -17,7 +17,7 @@ public final class LongHeap {
 		if((len&1)==1){len++;} //Array size is always even.
 		
 		CAPACITY=maxSize;
-		array=new long[len];
+		array=KillSwitch.allocLong1D(len);
 		rollover=rollover_;
 //		queue=new PriorityQueue<T>(maxSize);
 	}
@@ -95,13 +95,13 @@ public final class LongHeap {
 //			percDown(next);
 //		}
 //	}
-//	
+//
 //	private void percDown_old(int loc){
 //		//assert(testForDuplicates());
 //		assert(loc>0);
 //
 //		final long a=array[loc];
-//		
+//
 //		while(loc>1){
 //			int next=loc/2;
 //			long b=array[next];
@@ -257,6 +257,8 @@ public final class LongHeap {
 		assert(isEmpty());
 		return list;
 	}
+	
+	public int capacity(){return CAPACITY;}
 	
 	private final long[] array;
 	private final int CAPACITY;

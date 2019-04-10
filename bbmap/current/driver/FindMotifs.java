@@ -1,13 +1,9 @@
 package driver;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
 import java.util.HashSet;
 
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 import dna.GeneSet;
 import dna.Motif;
 import dna.MotifProbsN;
@@ -44,7 +40,7 @@ public class FindMotifs {
 				{0.99859f, 0.00108f, 0.00011f, 0.00022f},
 				{0.00001f, 0.00001f, 0.00076f, 0.99924f},
 				{0.00001f, 0.00001f, 0.99924f, 0.00076f},
-//				
+//
 				{0.20993f, 0.14877f, 0.51269f, 0.12861f},
 				{0.26903f, 0.39861f, 0.18337f, 0.14899f},
 //				{0.14812f, 0.26448f, 0.39286f, 0.19453f},
@@ -66,11 +62,11 @@ public class FindMotifs {
 //		{0.03793f, 0.04397f, 0.06643f, 0.02087f, 0.06272f, 0.11378f, 0.06177f, 0.07713f, 0.06526f, 0.10277f, 0.09535f, 0.04248f, 0.02564f, 0.06590f, 0.05943f, 0.05859f},
 //		{0.04534f, 0.04238f, 0.07427f, 0.02956f, 0.06897f, 0.11463f, 0.06579f, 0.07702f, 0.05594f, 0.09821f, 0.08677f, 0.04206f, 0.02363f, 0.05943f, 0.05721f, 0.05880f},
 //		{0.04397f, 0.04524f, 0.07766f, 0.02702f, 0.06537f, 0.10372f, 0.07130f, 0.07427f, 0.05234f, 0.09609f, 0.09397f, 0.04164f, 0.02808f, 0.05954f, 0.06399f, 0.05583f},
-//		
+//
 //		{0.04990f, 0.04164f, 0.07342f, 0.02479f, 0.06039f, 0.11294f, 0.06113f, 0.07013f, 0.06929f, 0.10234f, 0.09556f, 0.03973f, 0.02998f, 0.06102f, 0.05329f, 0.05445f},
 //		{0.05075f, 0.04725f, 0.08391f, 0.02765f, 0.06590f, 0.11664f, 0.06388f, 0.07151f, 0.06770f, 0.10012f, 0.07840f, 0.03719f, 0.02458f, 0.06113f, 0.05424f, 0.04916f},
 //		{0.04831f, 0.04005f, 0.08931f, 0.03125f, 0.06685f, 0.09249f, 0.09546f, 0.07035f, 0.05583f, 0.08359f, 0.10234f, 0.03867f, 0.02278f, 0.05287f, 0.06293f, 0.04693f},
-//		
+//
 //		{0.04587f, 0.05117f, 0.07045f, 0.02627f, 0.05488f, 0.09450f, 0.05541f, 0.06420f, 0.06664f, 0.13328f, 0.10478f, 0.04534f, 0.02087f, 0.06208f, 0.05912f, 0.04513f},
 		{0.04598f, 0.04015f, 0.07321f, 0.02892f, 0.06261f, 0.12575f, 0.07331f, 0.07935f, 0.06282f, 0.10637f, 0.08370f, 0.03687f, 0.02246f, 0.05721f, 0.05318f, 0.04810f},
 		{0.03952f, 0.03189f, 0.09704f, 0.02543f, 0.07639f, 0.08666f, 0.10266f, 0.06378f, 0.05424f, 0.07850f, 0.11166f, 0.03899f, 0.02426f, 0.04270f, 0.07819f, 0.04810f},
@@ -124,7 +120,7 @@ public class FindMotifs {
 //			count+=analyzeChromosomeGStarts(chrom, m, locations);
 //			count+=analyzeChromosomeGStartsStronger(chrom, m, locations, firstBeaten);
 //			count+=analyzeChromosomeGStartsStrongerInFrame(chrom, m, locations, firstBeaten, true, Gene.PLUS);
-			count+=analyzeChromosomeGStartsStrongerInFrame(chrom, m, locations, firstBeaten, true, Gene.MINUS);
+			count+=analyzeChromosomeGStartsStrongerInFrame(chrom, m, locations, firstBeaten, true, Shared.MINUS);
 			Data.unload(chrom, true);
 		}
 		
@@ -149,13 +145,13 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStarts(int chrom, Motif m, ArrayList<Integer> list, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){
 			if(g.strand==strand){
-				if(strand==Gene.PLUS){
+				if(strand==Shared.PLUS){
 					eset.add(g.minStart);
 				}else{
 					eset.add(ca.maxIndex-g.maxEnd);
@@ -183,13 +179,13 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStartsStronger(int chrom, Motif m, ArrayList<Integer> list, ArrayList<Integer> listBeat, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){
 			if(g.strand==strand){
-				if(strand==Gene.PLUS){
+				if(strand==Shared.PLUS){
 					eset.add(g.minStart);
 				}else{
 					eset.add(ca.maxIndex-g.maxEnd);
@@ -231,13 +227,13 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStartsStrongerInFrame(int chrom, Motif m, ArrayList<Integer> list, ArrayList<Integer> listBeat, boolean in, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){
 			if(g.strand==strand){
-				if(strand==Gene.PLUS){
+				if(strand==Shared.PLUS){
 					eset.add(g.minStart);
 				}else{
 					eset.add(ca.maxIndex-g.maxEnd);

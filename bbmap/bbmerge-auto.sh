@@ -1,7 +1,6 @@
 #!/bin/bash
-#merge in=<infile> out=<outfile>
 
-function usage(){
+usage(){
 echo "
 bbmerge-auto.sh is a wrapper for BBMerge that attempts to use all available
 memory, instead of a fixed amount.  This is for use with the Tadpole options
@@ -13,6 +12,7 @@ For information about usage and parameters, please run bbmerge.sh.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -30,6 +30,7 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx14g"
 z2="-Xms14g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -50,12 +51,26 @@ calcXmx () {
 calcXmx "$@"
 
 function merge() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBMerge $@"
+	#local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBMerge $@"
+	local CMD="java $EA $z $z2 -cp $CP jgi.BBMerge $@"
 	echo $CMD >&2
 	eval $CMD
 }

@@ -5,8 +5,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import dna.AminoAcid;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
 import jgi.BBMerge;
-import jgi.Dedupe;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -14,11 +18,6 @@ import stream.ConcurrentReadInputStream;
 import stream.Read;
 import structures.IntList;
 import structures.ListNum;
-import dna.AminoAcid;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
 
 /**
  * @author Brian Bushnell
@@ -36,16 +35,16 @@ public class TableLoaderLockFree {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			assert(false) : "TODO";
-			System.exit(0);
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, null, false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
 		Timer t=new Timer();
 		
-		AbstractKmerTable[] tables=makeTables(AbstractKmerTable.ARRAY1D, initialSizeDefault, true);
+		AbstractKmerTable[] tables=makeTables(AbstractKmerTable.ARRAY1D, 12, -1L, false, 1.0);
 		
 		int k=31;
 		int mink=0;
@@ -70,11 +69,14 @@ public class TableLoaderLockFree {
 		long kmers=loader.processData(refs, literals, keepNames, useRefNames, false);
 		t.stop();
 
-		System.err.println("Time:     \t"+t);
-		System.err.println("Return:   \t"+kmers);
-		System.err.println("refKmers: \t"+loader.refKmers);
-		System.err.println("refBases: \t"+loader.refBases);
-		System.err.println("refReads: \t"+loader.refReads);
+		outstream.println("Time:     \t"+t);
+		outstream.println("Return:   \t"+kmers);
+		outstream.println("refKmers: \t"+loader.refKmers);
+		outstream.println("refBases: \t"+loader.refBases);
+		outstream.println("refReads: \t"+loader.refReads);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	public TableLoaderLockFree(AbstractKmerTable[] tables_, int k_){
@@ -98,12 +100,25 @@ public class TableLoaderLockFree {
 	/*--------------------------------------------------------------*/
 	/*----------------         Outer Methods        ----------------*/
 	/*--------------------------------------------------------------*/
+
 	
+//	public static AbstractKmerTable[] makeTables(int tableType, int initialSize, long coreMask, boolean growable){
+//		return AbstractKmerTable.preallocate(WAYS, tableType, initialSize, coreMask, growable);
+//	}
 	
-	public static AbstractKmerTable[] makeTables(int tableType, int initialSize, boolean growable){
-		return AbstractKmerTable.preallocate(WAYS, tableType, initialSize, growable);
+//	public static AbstractKmerTable[] makeTables(int tableType, int[] schedule, long coreMask){
+//		return AbstractKmerTable.preallocate(WAYS, tableType, schedule, coreMask);
+//	}
+	
+	public static AbstractKmerTable[] makeTables(int tableType, int bytesPerKmer, long coreMask, 
+			boolean prealloc, double memRatio){
+		ScheduleMaker scheduleMaker=new ScheduleMaker(WAYS, bytesPerKmer, prealloc, memRatio);
+		int[] schedule=scheduleMaker.makeSchedule();
+		return AbstractKmerTable.preallocate(WAYS, tableType, schedule, coreMask);
 	}
 	
+	ScheduleMaker scheduleMaker=new ScheduleMaker(WAYS, 12, false, 0.8);
+	int[] schedule=scheduleMaker.makeSchedule();
 	
 	public long processData(String[] ref, String[] literal, boolean keepNames, boolean useRefNames, boolean ecc_){
 		
@@ -182,7 +197,7 @@ public class TableLoaderLockFree {
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
 				
 				/* Iterate through read lists from the input stream */
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					{
 						/* Assign a unique ID number to each scaffold */
 						ArrayList<Read> reads2=new ArrayList<Read>(reads);
@@ -223,12 +238,12 @@ public class TableLoaderLockFree {
 					}
 
 					/* Dispose of the old list and fetch a new one */
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				/* Cleanup */
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				errorState|=ReadWrite.closeStream(cris);
 				refNum++;
 			}
@@ -237,7 +252,7 @@ public class TableLoaderLockFree {
 		/* If there are literal sequences to use as references */
 		if(literal!=null){
 			ArrayList<Read> list=new ArrayList<Read>(literal.length);
-			if(verbose){System.err.println("Adding literals "+Arrays.toString(literal));}
+			if(verbose){outstream.println("Adding literals "+Arrays.toString(literal));}
 
 			/* Assign a unique ID number to each literal sequence */
 			for(int i=0; i<literal.length; i++){
@@ -318,7 +333,7 @@ public class TableLoaderLockFree {
 			TextStreamWriter tsw=new TextStreamWriter("stdout", false, false, false, FileFormat.TEXT);
 			tsw.start();
 			for(AbstractKmerTable table : tables){
-				table.dumpKmersAsText(tsw, k, 1);
+				table.dumpKmersAsText(tsw, k, 1, Integer.MAX_VALUE);
 			}
 			tsw.poisonAndWait();
 		}
@@ -337,9 +352,9 @@ public class TableLoaderLockFree {
 			final int scafs=refScafCounts[r];
 			final int lim=s+scafs;
 			final String name=ReadWrite.stripToCore(refNames.get(r));
-//			System.err.println("r="+r+", s="+s+", scafs="+scafs+", lim="+lim+", name="+name);
+//			outstream.println("r="+r+", s="+s+", scafs="+scafs+", lim="+lim+", name="+name);
 			while(s<lim){
-//				System.err.println(r+", "+s+". Setting "+scaffoldNames.get(s)+" -> "+name);
+//				outstream.println(r+", "+s+". Setting "+scaffoldNames.get(s)+" -> "+name);
 				scaffoldNames.set(s, name);
 				s++;
 			}
@@ -410,7 +425,7 @@ public class TableLoaderLockFree {
 			final byte[] bases=r.bases;
 			final int shift=2*k;
 			final int shift2=shift-2;
-			final long mask=~((-1L)<<shift);
+			final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 			final long kmask=kMasks[k];
 			long kmer=0;
 			long rkmer=0;
@@ -428,12 +443,12 @@ public class TableLoaderLockFree {
 			if(skip>1){ //Process while skipping some kmers
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
+					long x=AminoAcid.baseToNumber[b];
+					long x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
-					if(b=='N'){len=0;}else{len++;}
-					if(verbose){System.err.println("Scanning1 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(x<0){len=0; rkmer=0;}else{len++;}
+					if(verbose){outstream.println("Scanning1 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
 						refKmersT++;
 						if(len%skip==0){
@@ -449,12 +464,12 @@ public class TableLoaderLockFree {
 			}else{ //Process all kmers
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
+					long x=AminoAcid.baseToNumber[b];
+					long x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
-					if(b=='N'){len=0;}else{len++;}
-					if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(x<0){len=0; rkmer=0;}else{len++;}
+					if(verbose){outstream.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
 						refKmersT++;
 						final long extraBase=(i>=bases.length-1 ? -1 : AminoAcid.baseToNumber[bases[i+1]]);
@@ -481,7 +496,7 @@ public class TableLoaderLockFree {
 		 * @return Number of kmers stored
 		 */
 		private long addToMapLeftShift(long kmer, long rkmer, final long extraBase, final int id){
-			if(verbose){System.err.println("addToMapLeftShift");}
+			if(verbose){outstream.println("addToMapLeftShift");}
 			long added=0;
 			for(int i=k-1; i>=mink; i--){
 				kmer=kmer&rightMasks[i];
@@ -490,10 +505,10 @@ public class TableLoaderLockFree {
 				added+=x;
 				if(verbose){
 					if((toValue(kmer, rkmer, kMasks[i]))%WAYS==tnum){
-						System.err.println("added="+x+"; i="+i+"; tnum="+tnum+"; Added left-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i)+"; value="+(toValue(kmer, rkmer, kMasks[i]))+"; kmer="+kmer+"; rkmer="+rkmer+"; kmask="+kMasks[i]+"; rightMasks[i+1]="+rightMasks[i+1]);
-						System.err.println("i="+i+"; tnum="+tnum+"; Looking for left-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i));
+						outstream.println("added="+x+"; i="+i+"; tnum="+tnum+"; Added left-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i)+"; value="+(toValue(kmer, rkmer, kMasks[i]))+"; kmer="+kmer+"; rkmer="+rkmer+"; kmask="+kMasks[i]+"; rightMasks[i+1]="+rightMasks[i+1]);
+						outstream.println("i="+i+"; tnum="+tnum+"; Looking for left-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i));
 						final long value=toValue(kmer, rkmer, kMasks[i]);
-						if(map.contains(value)){System.err.println("Found "+value);}
+						if(map.contains(value)){outstream.println("Found "+value);}
 					}
 				}
 			}
@@ -509,7 +524,7 @@ public class TableLoaderLockFree {
 		 * @return Number of kmers stored
 		 */
 		private long addToMapRightShift(long kmer, long rkmer, final int id){
-			if(verbose){System.err.println("addToMapRightShift");}
+			if(verbose){outstream.println("addToMapRightShift");}
 			long added=0;
 			for(int i=k-1; i>=mink; i--){
 				long extraBase=kmer&3L;
@@ -521,10 +536,10 @@ public class TableLoaderLockFree {
 				added+=x;
 				if(verbose){
 					if((toValue(kmer, rkmer, kMasks[i]))%WAYS==tnum){
-						System.err.println("added="+x+"; i="+i+"; tnum="+tnum+"; Added right-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i)+"; value="+(toValue(kmer, rkmer, kMasks[i]))+"; kmer="+kmer+"; rkmer="+rkmer+"; kmask="+kMasks[i]+"; rightMasks[i+1]="+rightMasks[i+1]);
-						System.err.println("i="+i+"; tnum="+tnum+"; Looking for right-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i));
+						outstream.println("added="+x+"; i="+i+"; tnum="+tnum+"; Added right-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i)+"; value="+(toValue(kmer, rkmer, kMasks[i]))+"; kmer="+kmer+"; rkmer="+rkmer+"; kmask="+kMasks[i]+"; rightMasks[i+1]="+rightMasks[i+1]);
+						outstream.println("i="+i+"; tnum="+tnum+"; Looking for right-shift kmer "+AminoAcid.kmerToString(kmer&~kMasks[i], i));
 						final long value=toValue(kmer, rkmer, kMasks[i]);
-						if(map.contains(value)){System.err.println("Found "+value);}
+						if(map.contains(value)){outstream.println("Found "+value);}
 					}
 				}
 			}
@@ -546,21 +561,21 @@ public class TableLoaderLockFree {
 			
 			assert(kmask0==kMasks[len]) : kmask0+", "+len+", "+kMasks[len]+", "+Long.numberOfTrailingZeros(kmask0)+", "+Long.numberOfTrailingZeros(kMasks[len]);
 			
-			if(verbose){System.err.println("addToMap_A; len="+len+"; kMasks[len]="+kMasks[len]);}
+			if(verbose){outstream.println("addToMap_A; len="+len+"; kMasks[len]="+kMasks[len]);}
 			assert((kmer&kmask0)==0);
 			final long added;
 			if(hdist==0){
 				final long key=toValue(kmer, rkmer, kmask0);
 				if(speed>0 && ((key/WAYS)&15)<speed){return 0;}
 				if(key%WAYS!=tnum){return 0;}
-				if(verbose){System.err.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+" = "+key);}
+				if(verbose){outstream.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+" = "+key);}
 				if(storeMode==SET_IF_NOT_PRESENT){
 					added=map.setIfNotPresent(key, id);
 				}else if(storeMode==SET_ALWAYS){
 					added=map.set(key, id);
 				}else{
 					assert(storeMode==INCREMENT);
-					added=map.increment(key);
+					added=map.increment(key, 1);
 				}
 			}else if(edist>0){
 //				long extraBase=(i>=bases.length-1 ? -1 : AminoAcid.baseToNumber[bases[i+1]]);
@@ -568,7 +583,7 @@ public class TableLoaderLockFree {
 			}else{
 				added=mutate(kmer, rkmer, len, id, hdist, -1);
 			}
-			if(verbose){System.err.println("addToMap added "+added+" keys.");}
+			if(verbose){outstream.println("addToMap added "+added+" keys.");}
 			return added;
 		}
 		
@@ -586,9 +601,9 @@ public class TableLoaderLockFree {
 			
 			final long key=toValue(kmer, rkmer, kMasks[len]);
 			
-			if(verbose){System.err.println("mutate_A; len="+len+"; kmer="+kmer+"; rkmer="+rkmer+"; kMasks[len]="+kMasks[len]);}
+			if(verbose){outstream.println("mutate_A; len="+len+"; kmer="+kmer+"; rkmer="+rkmer+"; kMasks[len]="+kMasks[len]);}
 			if(key%WAYS==tnum){
-				if(verbose){System.err.println("mutate_B: "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+" = "+key);}
+				if(verbose){outstream.println("mutate_B: "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+" = "+key);}
 				int x;
 				if(storeMode==SET_IF_NOT_PRESENT){
 					x=map.setIfNotPresent(key, id);
@@ -596,10 +611,10 @@ public class TableLoaderLockFree {
 					x=map.set(key, id);
 				}else{
 					assert(storeMode==INCREMENT);
-					x=map.increment(key);
+					x=map.increment(key, 1);
 					x=(x==1 ? 1 : 0);
 				}
-				if(verbose){System.err.println("mutate_B added "+x+" keys.");}
+				if(verbose){outstream.println("mutate_B added "+x+" keys.");}
 				added+=x;
 				assert(map.contains(key));
 			}
@@ -694,14 +709,14 @@ public class TableLoaderLockFree {
 	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in keySets[Y] */
 	public AbstractKmerTable[] tables;
-	/** A scaffold's name is stored at scaffoldNames.get(id).  
+	/** A scaffold's name is stored at scaffoldNames.get(id).
 	 * scaffoldNames[0] is reserved, so the first id is 1. */
 	public ArrayList<String> scaffoldNames;
 	/** Names of reference files (refNames[0] is valid). */
 	public ArrayList<String> refNames;
 	/** Number of scaffolds per reference. */
 	public int[] refScafCounts;
-	/** scaffoldLengths[id] stores the length of that scaffold */ 
+	/** scaffoldLengths[id] stores the length of that scaffold */
 	public IntList scaffoldLengths=new IntList();
 	
 	/** Make the middle base in a kmer a wildcard to improve sensitivity */
@@ -741,7 +756,7 @@ public class TableLoaderLockFree {
 	
 	/** Look for reverse-complements as well as forward kmers.  Default: true */
 	private final boolean rcomp;
-	/** AND bitmask with 0's at the middle base */ 
+	/** AND bitmask with 0's at the middle base */
 	private final long middleMask;
 	
 	/** Normal kmer length */
@@ -763,7 +778,7 @@ public class TableLoaderLockFree {
 	/** Default initial size of data structures */
 	private static final int initialSizeDefault=128000;
 	
-	/** Number of tables (and threads, during loading) */ 
+	/** Number of tables (and threads, during loading) */
 	private static final int WAYS=7; //123
 	/** Verbose messages */
 	public static final boolean verbose=false; //123

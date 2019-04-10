@@ -3,16 +3,16 @@ package assemble;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
+import dna.AminoAcid;
 import kmer.AbstractKmerTableSet;
 import shared.Tools;
-import stream.ByteBuilder;
+import structures.ByteBuilder;
 import ukmer.AbstractKmerTableU;
 import ukmer.HashArrayU1D;
 import ukmer.HashForestU;
 import ukmer.Kmer;
 import ukmer.KmerNodeU;
 import ukmer.KmerTableSetU;
-import dna.AminoAcid;
 
 /**
  * Designed for removal of dead ends (aka hairs).
@@ -29,13 +29,13 @@ public class Shaver2 extends Shaver {
 	
 	
 	public Shaver2(KmerTableSetU tables_, int threads_){
-		this(tables_, threads_, 1, 1, 1, 100, 100, true, true);
+		this(tables_, threads_, 1, 1, 1, 1, 3, 100, 100, true, true);
 	}
 	
-	public Shaver2(KmerTableSetU tables_, int threads_, 
-			int minCount_, int maxCount_, int minSeed_, int maxLengthToDiscard_, int maxDistanceToExplore_, 
+	public Shaver2(KmerTableSetU tables_, int threads_,
+			int minCount_, int maxCount_, int minSeed_, int minCountExtend_, float branchMult2_, int maxLengthToDiscard_, int maxDistanceToExplore_,
 			boolean removeHair_, boolean removeBubbles_){
-		super(tables_, threads_, minCount_, maxCount_, minSeed_, maxLengthToDiscard_, maxDistanceToExplore_, removeHair_, removeBubbles_);
+		super(tables_, threads_, minCount_, maxCount_, minSeed_, minCountExtend_, branchMult2_, maxLengthToDiscard_, maxDistanceToExplore_, removeHair_, removeBubbles_);
 		tables=tables_;
 		
 	}
@@ -54,33 +54,65 @@ public class Shaver2 extends Shaver {
 	/*----------------       Dead-End Removal       ----------------*/
 	/*--------------------------------------------------------------*/
 	
+//	private boolean valid(ByteBuilder bb, boolean doAssertion){
+//		Kmer kmer=new Kmer(kbig);
+//		if(bb.length()<kbig){return false;}
+//		kmer.clear();
+//		for(int i=0; i<bb.length; i++){
+//			byte b=bb.array[i];
+//			kmer.addRight(b);
+//			if(kmer.len()>=kbig){
+//				int count=getCount(kmer);
+//				if(count<1){
+//					assert(!doAssertion || false) : "count="+count+", minCount="+minCount+", maxCount="+maxCount+", kbig="+kbig+", kmer.kbig="+kmer.kbig+"\n"
+//							+"kmer="+kmer.toString()+"\nbb=  "+bb.toString()+"\n";
+//					kmer.clear();
+//					return false;
+//				}
+//			}
+//		}
+//		kmer.clear();
+//		return true;
+//	}
 	
-	public boolean exploreAndMark(Kmer kmer, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int minCount, int maxCount, 
-			int maxLengthToDiscard, int maxDistanceToExplore, boolean prune
-			, long[][] countMatrixT, long[][] removeMatrixT
-			){
+	public boolean exploreAndMark(Kmer kmer, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int minCount, int maxCount,
+			int maxLengthToDiscard, int maxDistanceToExplore, boolean prune,
+			long[][] countMatrixT, long[][] removeMatrixT){
 		bb.clear();
 		assert(kmer.len>=kmer.kbig);
 		if(findOwner(kmer)>STATUS_UNEXPLORED){return false;}
 		
+		assert(countWithinLimits(kmer)) : "count="+getCount(kmer)+", minCount="+minCount+", maxCount="+maxCount+"\n"+kmer.toString();
+		
 		bb.appendKmer(kmer);
-		final int a=explore(kmer, bb, leftCounts, rightCounts, minCount, maxCount, maxDistanceToExplore);
+//		assert(kmer.toString().equals(bb.toString())) : "\n"+kmer+"\n"+bb+"\n";//123
+		//assert(valid(bb, true));
+//		assert(tables.getCount(kmer)==1) : tables.getCount(kmer);//count>0 && count<=maxCount
+		final int rightCode=explore(kmer, bb, leftCounts, rightCounts, minCount, maxCount, maxDistanceToExplore);
+		//assert(valid(bb, true));
 		
 		bb.reverseComplementInPlace();
+		//assert(valid(bb, true));
 		kmer=tables.rightmostKmer(bb, kmer);
-		final int b=explore(kmer, bb, leftCounts, rightCounts, minCount, maxCount, maxDistanceToExplore);
+		assert(getCount(kmer)>0) : "count="+getCount(kmer)+", minCount="+minCount+", maxCount="+maxCount+", rightCode="+rightCode+"\n"+kmer.toString();//123
+//		assert(tables.getCount(kmer)==1) : tables.getCount(kmer);//count>0 && count<=maxCount
+		final int leftCode=explore(kmer, bb, leftCounts, rightCounts, minCount, maxCount, maxDistanceToExplore);
+		//assert(valid(bb, true));
+		
+		kmer=tables.rightmostKmer(bb, kmer);//123
+		assert(getCount(kmer)>0) : "count="+getCount(kmer)+", minCount="+minCount+", maxCount="+maxCount+", leftCode="+leftCode+", rightCode="+rightCode+"\n"+kmer.toString();//123
 
-		final int min=Tools.min(a, b);
-		final int max=Tools.max(a, b);
+		final int min=Tools.min(rightCode, leftCode);
+		final int max=Tools.max(rightCode, leftCode);
 		
 		countMatrixT[min][max]++;
 		
-		if(a==TOO_LONG || a==TOO_DEEP || a==LOOP || a==FORWARD_BRANCH){
+		if(rightCode==TOO_LONG || rightCode==TOO_DEEP || rightCode==LOOP || rightCode==F_BRANCH){
 			claim(bb, STATUS_EXPLORED, false, kmer);
 			return false;
 		}
 		
-		if(b==TOO_LONG || b==TOO_DEEP || b==LOOP || b==FORWARD_BRANCH){
+		if(leftCode==TOO_LONG || leftCode==TOO_DEEP || leftCode==LOOP || leftCode==F_BRANCH){
 			claim(bb, STATUS_EXPLORED, false, kmer);
 			return false;
 		}
@@ -91,20 +123,20 @@ public class Shaver2 extends Shaver {
 		}
 		
 		if(removeHair && min==DEAD_END){
-			if(max==DEAD_END || max==BACKWARD_BRANCH){
+			if(max==DEAD_END || max==B_BRANCH){
 				removeMatrixT[min][max]++;
 				boolean success=claim(bb, STATUS_REMOVE, false, kmer);
-				if(verbose || verbose2){System.err.println("Claiming ("+a+","+b+") length "+bb.length()+": "+bb);}
+				if(verbose || verbose2){System.err.println("Claiming ("+rightCode+","+leftCode+") length "+bb.length()+": "+bb);}
 				assert(success);
 				return true;
 			}
 		}
 		
 		if(removeBubbles){
-			if(a==BACKWARD_BRANCH && b==BACKWARD_BRANCH){
+			if(rightCode==B_BRANCH && leftCode==B_BRANCH){
 				removeMatrixT[min][max]++;
 				boolean success=claim(bb, STATUS_REMOVE, false, kmer);
-				if(verbose || verbose2){System.err.println("Claiming ("+a+","+b+") length "+bb.length()+": "+bb);}
+				if(verbose || verbose2){System.err.println("Claiming ("+rightCode+","+leftCode+") length "+bb.length()+": "+bb);}
 				assert(success);
 				return true;
 			}
@@ -114,13 +146,21 @@ public class Shaver2 extends Shaver {
 		return false;
 	}
 	
-	/** Explores a single unbranching path in the forward direction.
-	 * Returns reason for ending in this direction:
-	 *  DEAD_END, TOO_LONG, TOO_DEEP, FORWARD_BRANCH, BACKWARD_BRANCH */
+	/** Explores a single unbranching path in the forward (right) direction.
+	 * @param kmer
+	 * @param bb
+	 * @param leftCounts
+	 * @param rightCounts
+	 * @param minCount
+	 * @param maxCount
+	 * @param maxLength0
+	 * @return A termination code such as DEAD_END
+	 */
 	public int explore(Kmer kmer, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int minCount, int maxCount, int maxLength0){
 		if(verbose){outstream.println("Entering explore with bb.length()="+bb.length());}
-		assert(bb.length()>=kmer.kbig && kmer.len>=kmer.kbig);
 		if(bb.length()==0){bb.appendKmer(kmer);}
+		assert(bb.length()>=kmer.kbig && kmer.len>=kmer.kbig) : bb.length()+", "+kmer.len+", "+kmer.kbig;
+		//assert(valid(bb, true));
 		
 		final int initialLength=bb.length();
 		final int maxLength=maxLength0+kbig;
@@ -128,7 +168,9 @@ public class Shaver2 extends Shaver {
 		final long firstKey=kmer.xor();
 		HashArrayU1D table=tables.getTable(kmer);
 		int count=table.getValue(kmer);
-		assert(count>=minCount && count<=maxCount);
+//		kmer.verify(false);
+//		kmer.verify(true);
+		assert(count>=minCount && count<=maxCount) : count+", "+Kmer.MASK_CORE+", "+kmer.verify(false)+", "+kmer.verify(true);
 		
 		int nextRightMaxPos=fillRightCounts(kmer, rightCounts);
 		int nextRightMax=rightCounts[nextRightMaxPos];
@@ -152,6 +194,8 @@ public class Shaver2 extends Shaver {
 				outstream.println("rightSecondPos="+rightSecondPos);
 				outstream.println("rightSecond="+rightSecond);
 			}
+			assert(count>0);
+//			assert(getCount(kmer)==count); //123
 			
 			final int prevCount=count;
 			
@@ -159,6 +203,8 @@ public class Shaver2 extends Shaver {
 			final byte b=AminoAcid.numberToBase[rightMaxPos];
 			final long x=rightMaxPos;
 			long evicted=kmer.addRightNumeric(x);
+			
+//			assert(getCount(kmer)==rightMax); //123
 			
 			//Now consider the next kmer
 			if(kmer.xor()==firstKey){
@@ -169,6 +215,7 @@ public class Shaver2 extends Shaver {
 			
 			assert(table.getValue(kmer)==rightMax);
 			count=rightMax;
+			assert(count>0);
 			
 			
 			{//Fill right and look for dead end
@@ -200,18 +247,18 @@ public class Shaver2 extends Shaver {
 				if(leftSecond>=minCount || leftMax>prevCount){//Backward branch
 //					assert(leftSecond==1) : prevCount+" -> "+Arrays.toString(leftCounts)+", "+count+", "+Arrays.toString(rightCounts);
 					if(leftMax>prevCount){
-						if(verbose){outstream.println("Returning BACKWARD_BRANCH_LOWER: " +
+						if(verbose){outstream.println("Returning B_BRANCH_LOWER: " +
 								"count="+count+", prevCount="+prevCount+", leftMax="+leftMax+", leftSecond="+leftSecond);}
-						return BACKWARD_BRANCH;
+						return B_BRANCH;
 					}else{
 						assert(leftMax==prevCount);
 						if(leftMax>=2*leftSecond){//This constant is adjustable
 //							assert(false) : prevCount+" -> "+Arrays.toString(leftCounts)+", "+count+", "+Arrays.toString(rightCounts);
 							//keep going
 						}else{
-							if(verbose){outstream.println("Returning BACKWARD_BRANCH_SIMILAR: " +
+							if(verbose){outstream.println("Returning B_BRANCH_SIMILAR: " +
 								"count="+count+", prevCount="+prevCount+", leftMax="+leftMax+", leftSecond="+leftSecond);}
-							return BACKWARD_BRANCH;
+							return B_BRANCH;
 						}
 					}
 				}
@@ -220,8 +267,8 @@ public class Shaver2 extends Shaver {
 			
 			//Look right
 			if(rightSecond>=minCount){
-				if(verbose){outstream.println("Returning FORWARD_BRANCH: rightSecond="+rightSecond);}
-				return FORWARD_BRANCH;
+				if(verbose){outstream.println("Returning F_BRANCH: rightSecond="+rightSecond);}
+				return F_BRANCH;
 			}
 			
 			if(count>maxCount){
@@ -230,6 +277,15 @@ public class Shaver2 extends Shaver {
 			}
 			
 			bb.append(b);
+//			assert(valid(bb, false)); //123
+//			if(!valid(bb, false)){
+//				System.err.println("kbig="+kbig+", "+kmer.kbig+"\nb="+
+//						(char)b+"\n"+Arrays.toString(rightCounts)+"\ncount="+count+", "+getCount(kmer)+"\nrightMax="+rightMax+"\nrightMax="+rightMax);
+//				System.err.println("\nkmer="+kmer+"\nbb=  "+bb);
+//				kmer.addLeftNumeric(evicted);
+//				System.err.println("prev="+kmer+"\nprevCount="+prevCount+", "+getCount(kmer));
+//				valid(bb, true);
+//			}
 			if(verbose){outstream.println("Added base "+(char)b);}
 		}
 		
@@ -248,7 +304,7 @@ public class Shaver2 extends Shaver {
 	/*--------------------------------------------------------------*/
 
 	/**
-	 * Searches for dead ends. 
+	 * Searches for dead ends.
 	 */
 	class ExploreThread extends AbstractExploreThread{
 		
@@ -260,34 +316,89 @@ public class Shaver2 extends Shaver {
 		}
 		
 		@Override
-		boolean processNextTable(final Kmer kmer){
+		boolean processNextTable(final Kmer kmer, Kmer temp){
 			final int tnum=nextTable.getAndAdd(1);
 			if(tnum>=tables.ways){return false;}
 			final HashArrayU1D table=tables.getTable(tnum);
-			final int max=table.arrayLength();
-			for(int cell=0; cell<max; cell++){
-				int x=processCell(table, cell, kmer);
-				deadEndsFoundT+=x;
+			final int[] counts=table.values();
+			final int max=counts.length;
+//			final int max=table.arrayLength();
+			if(startFromHighCounts){
+//				for(int cell=0; cell<max; cell++){
+//					int x=processCell_high(table, cell, kmer, temp);
+//					deadEndsFoundT+=x;
+//				}
+				for(int cell=0; cell<max; cell++){//Not noticeably faster
+					final int count=counts[cell];
+					if(count>maxCount){
+						int x=processCell_high(table, cell, kmer, temp, count);
+						deadEndsFoundT+=x;
+					}
+				}
+			}else{
+				for(int cell=0; cell<max; cell++){
+					int x=processCell_low(table, cell, kmer, temp);
+					deadEndsFoundT+=x;
+				}
 			}
 			return true;
 		}
 		
 		@Override
-		boolean processNextVictims(final Kmer kmer){
+		boolean processNextVictims(final Kmer kmer, Kmer temp){
 			final int tnum=nextVictims.getAndAdd(1);
 			if(tnum>=tables.ways){return false;}
 			final HashArrayU1D table=tables.getTable(tnum);
 			final HashForestU forest=table.victims();
 			final int max=forest.arrayLength();
-			for(int cell=0; cell<max; cell++){
-				KmerNodeU kn=forest.getNode(cell);
-				int x=traverseKmerNodeU(kn, kmer);
-				deadEndsFoundT+=x;
+			if(startFromHighCounts){
+				for(int cell=0; cell<max; cell++){
+					KmerNodeU kn=forest.getNode(cell);
+					int x=traverseKmerNodeU_high(kn, kmer, temp);
+					deadEndsFoundT+=x;
+				}
+			}else{
+				for(int cell=0; cell<max; cell++){
+					KmerNodeU kn=forest.getNode(cell);
+					int x=traverseKmerNodeU_low(kn, kmer, temp);
+					deadEndsFoundT+=x;
+				}
 			}
 			return true;
 		}
 		
-		private int processCell(HashArrayU1D table, int cell, Kmer kmer0){
+		private int traverseKmerNodeU_high(KmerNodeU kn, Kmer kmer, Kmer temp){
+			int sum=0;
+			if(kn!=null){
+				sum+=processKmerNodeU_high(kn, kmer, temp);
+				if(kn.left()!=null){
+					sum+=traverseKmerNodeU_high(kn.left(), kmer, temp);
+				}
+				if(kn.right()!=null){
+					sum+=traverseKmerNodeU_high(kn.right(), kmer, temp);
+				}
+			}
+			return sum;
+		}
+		
+		private int traverseKmerNodeU_low(KmerNodeU kn, Kmer kmer, Kmer temp){
+			int sum=0;
+			if(kn!=null){
+				sum+=processKmerNodeU_low(kn, kmer, temp);
+				if(kn.left()!=null){
+					sum+=traverseKmerNodeU_low(kn.left(), kmer, temp);
+				}
+				if(kn.right()!=null){
+					sum+=traverseKmerNodeU_low(kn.right(), kmer, temp);
+				}
+			}
+			return sum;
+		}
+		
+		/*--------------------------------------------------------------*/
+		
+		//old
+		private int processCell_low(HashArrayU1D table, int cell, Kmer kmer0, Kmer temp){
 			int count=table.readCellValue(cell);
 			if(count<minSeed || count>maxCount){return 0;}
 			int owner=table.getCellOwner(cell);
@@ -296,41 +407,141 @@ public class Shaver2 extends Shaver {
 			if(kmer==null){return 0;}
 			if(verbose){outstream.println("id="+id+" processing cell "+cell+"; \tkmer="+kmer);}
 			
-			return processKmer(kmer);
+			return processKmer_low(kmer, temp);
 		}
 		
-		private int traverseKmerNodeU(KmerNodeU kn, Kmer kmer){
-			int sum=0;
-			if(kn!=null){
-				sum+=processKmerNodeU(kn, kmer);
-				if(kn.left()!=null){
-					sum+=traverseKmerNodeU(kn.left(), kmer);
-				}
-				if(kn.right()!=null){
-					sum+=traverseKmerNodeU(kn.right(), kmer);
-				}
-			}
-			return sum;
-		}
-		
-		private int processKmerNodeU(KmerNodeU kn, Kmer kmer){
+		//old
+		private int processKmerNodeU_low(KmerNodeU kn, Kmer kmer, Kmer temp){
 			kmer.setFrom(kn.pivot());
 			final int count=kn.getValue(kmer);
 			if(count<minSeed || count>maxCount){return 0;}
 			int owner=kn.getOwner(kmer);
 			if(owner>STATUS_UNEXPLORED){return 0;}
 			
-			return processKmer(kmer);
+			return processKmer_low(kmer, temp);
 		}
 		
-		private int processKmer(Kmer kmer){
+		//old
+		private int processKmer_low(Kmer original, Kmer temp){
 			kmersTestedT++;
-			boolean b=exploreAndMark(kmer, builderT, leftCounts, rightCounts, minCount, maxCount, maxLengthToDiscard, maxDistanceToExplore, true
+			boolean b=exploreAndMark(original, builderT, leftCounts, rightCounts, minCount, maxCount, maxLengthToDiscard, maxDistanceToExplore, true
 					, countMatrixT, removeMatrixT
 				);
 			return b ? 1 : 0;
 		}
 		
+
+		
+		/*--------------------------------------------------------------*/
+		
+		//new
+		private int processCell_high(HashArrayU1D table, int cell, Kmer kmer0, Kmer temp, int count){
+			
+//		private int processCell_high(HashArrayU1D table, int cell, Kmer kmer0, Kmer temp){
+//			int count=table.readCellValue(cell);
+			
+			if(count<=maxCount){return 0;}
+//			if(shaveFast && maxCount==1 && count>=6){return 0;}
+//			int owner=table.getCellOwner(cell);
+//			if(owner>STATUS_UNEXPLORED){return 0;}
+			Kmer kmer=table.fillKmer(cell, kmer0);
+			if(kmer==null){return 0;}
+			if(verbose){outstream.println("id="+id+" processing cell "+cell+"; \tkmer="+kmer);}
+//			assert(false) : shaveFast;
+			
+			return processKmer_high(kmer, temp, count);
+		}
+		
+		//new
+		private int processKmerNodeU_high(KmerNodeU kn, Kmer kmer, Kmer temp){
+			kmer.setFrom(kn.pivot());
+			final int count=kn.getValue(kmer);
+			if(count<=maxCount){return 0;}
+//			if(shaveFast && maxCount==1 && count>=6){return 0;}
+//			int owner=kn.getOwner(kmer);
+//			if(owner>STATUS_UNEXPLORED){return 0;}
+			
+			return processKmer_high(kmer, temp, count);
+		}
+		
+		//new
+		private int processKmer_high(final Kmer original, Kmer kmer, final int count0){
+			int sum=0;
+			
+//			assert(false) : "This loop is broken and removes kmers with counts outside the range, including non-existing kmers.";
+//			for(long i=0; i<4; i++){
+//				kmer.setFrom(original);
+//				long old=kmer.addRightNumeric(i);
+//				HashArrayU1D table=(HashArrayU1D) tables.getTable(kmer);
+//				int count=table.getCount(kmer);
+//				if(count>0 && count<=maxCount && tables.getOwner(kmer)<=STATUS_UNEXPLORED){
+//					kmersTestedT++;
+//					boolean b=exploreAndMark(kmer, builderT, leftCounts, rightCounts,
+//							minCount, maxCount, maxLengthToDiscard, maxDistanceToExplore, true,
+//							countMatrixT, removeMatrixT);
+//					if(b){sum++;}
+//				}
+//			}
+			
+			assert(original.len()==kbig);
+			
+			//This loop appears to work correctly.
+			sum+=processKmer_high_leftLoop(original, kmer, count0);
+			
+			original.rcomp();
+			assert(original.len()==kbig);
+			sum+=processKmer_high_leftLoop(original, kmer, count0);
+			return sum;
+		}
+		
+		private int processKmer_high_leftLoop(final Kmer original, Kmer kmer, final int count0){
+			if(shaveVFast){//Optional accelerator; only examines kmers that actually branch
+				int inf=Integer.MAX_VALUE;
+				int maxHighBranch=-1, minHighBranch=inf, highBranches=0;
+				int maxLowBranch=-1, minLowBranch=inf, lowBranches=0;
+				for(long i=0; i<4; i++){
+					kmer.setFrom(original);
+					long old=kmer.addLeftNumeric(i);
+					assert(kmer.len()>=kbig) : kmer.len()+", "+kbig;
+					HashArrayU1D table=(HashArrayU1D) tables.getTable(kmer);
+					int count=table.getValue(kmer);
+					if(count>0){
+						if(count<=maxCount){
+							minLowBranch=Tools.min(count, minLowBranch);
+							maxLowBranch=Tools.max(count, maxLowBranch);
+							lowBranches++;
+						}else{
+							minHighBranch=Tools.min(count, minHighBranch);
+							maxHighBranch=Tools.max(count, maxHighBranch);
+							highBranches++;
+						}
+					}
+				}
+
+				if(maxLowBranch<0){return 0;} //This is fine
+//				if(maxHighBranch<0){return 0;} //Speed increase but quality decrease
+
+				if(highBranches+lowBranches<2){return 0;} //Speed increase (25% for shave) but contiguity decrease (~1%).
+//				if(maxLowBranch>0 && maxLowBranch*16<minHighBranch){return 0;} //Speed increase but quality decrease
+			}
+			
+			int sum=0;
+			for(long i=0; i<4; i++){
+				kmer.setFrom(original);
+				long old=kmer.addLeftNumeric(i);
+				assert(kmer.len()>=kbig) : kmer.len()+", "+kbig;
+				HashArrayU1D table=(HashArrayU1D) tables.getTable(kmer);
+				int count=table.getValue(kmer);
+				if(count>0 && count<=maxCount && table.getOwner(kmer)<=STATUS_UNEXPLORED){
+					kmersTestedT++;
+					boolean b=exploreAndMark(kmer, builderT, leftCounts, rightCounts,
+							minCount, maxCount, maxLengthToDiscard, maxDistanceToExplore, true,
+							countMatrixT, removeMatrixT);
+					if(b){sum++;}
+				}
+			}
+			return sum;
+		}
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -338,7 +549,7 @@ public class Shaver2 extends Shaver {
 	/*--------------------------------------------------------------*/
 
 	/**
-	 * Removes dead-end kmers. 
+	 * Removes dead-end kmers.
 	 */
 	private class ShaveThread extends AbstractShaveThread{
 
@@ -388,12 +599,47 @@ public class Shaver2 extends Shaver {
 	/*----------------        Recall Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public boolean claim(final ByteBuilder bb, final int id, final boolean exitEarly, Kmer kmer){
+		return claim(bb.array, bb.length(), id, exitEarly, kmer);
+	}
+	
+	public boolean claim(final byte[] bases, final int blen, final int id, boolean exitEarly, final Kmer kmer){
+		if(blen<kbig){return false;}
+		if(verbose){outstream.println("Thread "+id+" claim start.");}
+		int len=0;
+		kmer.clear();
+		boolean success=true;
+		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+		for(int i=0; i<blen && success; i++){
+			final byte b=bases[i];
+			final long x=AminoAcid.baseToNumber[b];
+			kmer.addRight(b);
+
+			if(x<0){len=0;}
+			else{len++;}
+			assert(len==kmer.len);
+
+			if(len>=kbig){
+				assert(countWithinLimits(kmer)) : "count="+getCount(kmer)+", minCount="+minCount+", maxCount="+maxCount+"\n"
+						+ "len="+len+", i="+i+", blen="+blen+"\n"
+								+ ""+kmer.toString();
+				success=claim(kmer, id/*, rid, i*/);
+				success=(success || !exitEarly);
+			}
+		}
+		return success;
+	}
+	
+	final boolean countWithinLimits(Kmer kmer){
+		int count=getCount(kmer);
+		return count>=minCount && count<=maxCount;
+	}
 	
 	int getCount(Kmer kmer){return tables.getCount(kmer);}
 	boolean claim(Kmer kmer, int id){return tables.claim(kmer, id);}
 	boolean doubleClaim(ByteBuilder bb, int id/*, long rid*/, Kmer kmer){return tables.doubleClaim(bb, id, kmer/*, rid*/);}
-	boolean claim(ByteBuilder bb, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(bb, id/*, rid*/, earlyExit, kmer);}
-	boolean claim(byte[] array, int len, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(array, len, id/*, rid*/, earlyExit, kmer);}
+//	boolean claim(ByteBuilder bb, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(bb, id/*, rid*/, earlyExit, kmer);}
+//	boolean claim(byte[] array, int len, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(array, len, id/*, rid*/, earlyExit, kmer);}
 	int findOwner(Kmer kmer){return tables.findOwner(kmer);}
 	int findOwner(ByteBuilder bb, int id, Kmer kmer){return tables.findOwner(bb, id, kmer);}
 	int findOwner(byte[] array, int len, int id, Kmer kmer){return tables.findOwner(array, len, id, kmer);}
@@ -414,6 +660,6 @@ public class Shaver2 extends Shaver {
 	@Override
 	AbstractKmerTableSet tables(){return tables;}
 	
-	private final KmerTableSetU tables;
+	final KmerTableSetU tables;
 	
 }

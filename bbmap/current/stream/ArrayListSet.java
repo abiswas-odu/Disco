@@ -23,7 +23,7 @@ public class ArrayListSet {
 	/*--------------------------------------------------------------*/
 
 	public ArrayListSet(boolean ordered_){
-		this(ordered_, null, TaxTree.stringToLevel("phylum"));
+		this(ordered_, null, TaxTree.stringToLevelExtended("phylum"));
 	}
 
 	/**
@@ -32,12 +32,12 @@ public class ArrayListSet {
 	 * rather than the name itself.
 	 * @param ordered_ Whether input order should be maintained.  Unimplemented.
 	 * @param tree_ A taxonomic tree.
-	 * @param taxLevel_ The minimum level in the tree to stop.
+	 * @param taxLevelE_ The minimum level in the tree to stop.
 	 */
-	public ArrayListSet(boolean ordered_, TaxTree tree_, int taxLevel_){
+	public ArrayListSet(boolean ordered_, TaxTree tree_, int taxLevelE_){
 		ordered=ordered_;
 		tree=tree_;
-		taxLevel=taxLevel_;
+		taxLevelE=taxLevelE_;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -116,7 +116,7 @@ public class ArrayListSet {
 	}
 	
 	private int nameToTaxid(String name){
-		TaxNode tn=tree.getNode(name, taxLevel);
+		TaxNode tn=tree.getNode(name, taxLevelE);
 		return (tn==null ? -1 :tn.id);
 	}
 	
@@ -136,6 +136,7 @@ public class ArrayListSet {
 		return p;
 	}
 	
+	@Override
 	public String toString(){
 		return nameList.toString();
 	}
@@ -174,6 +175,7 @@ public class ArrayListSet {
 			return temp;
 		}
 		
+		@Override
 		public String toString(){
 			return "Pack "+name;
 		}
@@ -192,7 +194,7 @@ public class ArrayListSet {
 	private final ArrayList<String> nameList=new ArrayList<String>();
 	private final ArrayList<Pack> packList=new ArrayList<Pack>();
 	private final LinkedHashMap<String, Pack> stringMap=new LinkedHashMap<String, Pack>();
-	private final int taxLevel;//=TaxTree.stringToLevel("phylum");
+	private final int taxLevelE;
 	private final TaxTree tree;
 	private final ThreadLocal<HashSet<Integer>> tls=new ThreadLocal<HashSet<Integer>>();
 	

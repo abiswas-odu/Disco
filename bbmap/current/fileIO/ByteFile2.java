@@ -1,10 +1,10 @@
 package fileIO;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import shared.Timer;
+import shared.Tools;
 
 
 /**
@@ -14,11 +14,11 @@ import shared.Timer;
  * @date Sep 23, 2013
  *
  */
-public class ByteFile2 extends ByteFile {
+public final class ByteFile2 extends ByteFile {
 	
 	
-	public static void main(String[] args) throws IOException{
-		ByteFile2 tf=new ByteFile2(args.length>0 ? args[0] : "stdin", false, true);
+	public static void main(String[] args){
+		ByteFile2 tf=new ByteFile2(args.length>0 ? args[0] : "stdin", true);
 		long first=0, last=100;
 		boolean speedtest=false;
 		if(args.length>1){
@@ -70,38 +70,30 @@ public class ByteFile2 extends ByteFile {
 		t.stop();
 		
 		if(!reprint){
-			double rpnano=lines/(double)(t.elapsed);
-			double bpnano=bytes/(double)(t.elapsed);
-
-			String rpstring=(lines<100000 ? ""+lines : lines<100000000 ? (lines/1000)+"k" : (lines/1000000)+"m");
-			String bpstring=(bytes<100000 ? ""+bytes : bytes<100000000 ? (bytes/1000)+"k" : (bytes/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			System.err.println("Time:                         \t"+t);
-			System.err.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk lines/sec", rpnano*1000000));
-			System.err.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bytes/sec", bpnano*1000));
+			System.err.println(Tools.timeLinesBytesProcessed(t, lines, bytes, 8));
 		}
 	}
 	
 //	public ByteFile2(String name()){this(name(), false);}
 	
-	public ByteFile2(String fname, boolean tryAllExtensions, boolean allowSubprocess_){
-		this(FileFormat.testInput(fname, FileFormat.TEXT, null, allowSubprocess_, false), tryAllExtensions);
+	public ByteFile2(String fname, boolean allowSubprocess_){
+		this(FileFormat.testInput(fname, FileFormat.TEXT, null, allowSubprocess_, false));
 	}
 	
-	public ByteFile2(FileFormat ff, boolean tryAllExtensions){
-		super(ff, tryAllExtensions);
-		if(verbose){System.err.println("ByteFile2("+ff+", "+tryAllExtensions+")");}
+	public ByteFile2(FileFormat ff){
+		super(ff);
+		if(verbose){System.err.println("ByteFile2("+ff+")");}
 		open();
 	}
 	
+	@Override
 	public final void reset(){
 		close();
 		open();
+		superReset();
 	}
 	
+	@Override
 	public synchronized final boolean close(){
 		if(verbose){System.err.println("ByteFile2("+name()+").close()");}
 		if(isOpen()){
@@ -127,13 +119,14 @@ public class ByteFile2 extends ByteFile {
 	}
 	
 	@Override
-	public byte[] nextLine(){
+	public final byte[] nextLine(){
 		
-		if(pushBack!=null){
+		if(pushBack!=null){//Commenting out does not seem to improve speed here.
 			byte[] temp=pushBack;
 			pushBack=null;
 			return temp;
 		}
+		
 //		if(verbose){System.err.println("Reading line.");}
 //		byte[] r=null;
 		
@@ -241,7 +234,7 @@ public class ByteFile2 extends ByteFile {
 //		}
 		
 		public BF1Thread(FileFormat ff){
-			bf1=new ByteFile1(ff, false);
+			bf1=new ByteFile1(ff);
 			qFull=new ArrayBlockingQueue<byte[][]>(buffs+2);
 			qEmpty=new ArrayBlockingQueue<byte[][]>(buffs+2);
 			for(int i=0; i<buffs; i++){
@@ -354,7 +347,7 @@ public class ByteFile2 extends ByteFile {
 			if(verbose){System.err.println("ByteFile2("+name()+").run() finished");}
 		}
 		
-		private synchronized void shutdown(){
+		synchronized void shutdown(){
 			if(verbose || verbose2){System.err.println("ByteFile2("+name()+").shutdown()");}
 			if(shutdown){return;}
 			shutdown=true;
@@ -372,8 +365,11 @@ public class ByteFile2 extends ByteFile {
 		
 	}
 	
+	@Override
 	public boolean isOpen(){
-		if(currentList!=null && currentLoc<currentList.length && currentList[currentLoc]!=null){return true;}
+		final byte[][] list=currentList;
+		final int loc=currentLoc;
+		if(list!=null && loc<list.length && list[loc]!=null){return true;}
 		final BF1Thread bft=thread;
 		if(bft==null){
 			return false;
@@ -386,6 +382,44 @@ public class ByteFile2 extends ByteFile {
 //		}
 	}
 	
+	@Override
+	public final void pushBack(byte[] line){
+		assert(pushBack==null);
+		pushBack=line;
+	}
+
+//	@Override
+//	public void pushBack(byte[] line) {
+//		if(bstart>line.length){
+//			bstart--;
+//			buffer[bstart]='\n';
+//			for(int i=0, j=bstart-line.length; i<line.length; i++, j++){
+//				buffer[j]=line[i];
+//			}
+//			bstart=bstart-line.length;
+//			return;
+//		}
+//		
+//		int bLen=bstop-bstart;
+//		int newLen=bLen+line.length+1;
+//		int rShift=line.length+1-bstart;
+//		assert(rShift>0) : bstop+", "+bstart+", "+line.length;
+//		while(newLen>buffer.length){
+//			//This could get big if pushback is used often,
+//			//unless special steps are taken to prevent it, like leaving extra space for pushbacks.
+//			buffer=Arrays.copyOf(buffer, buffer.length*2);
+//		}
+//		
+//		Tools.shiftRight(buffer, rShift);
+//		
+//		for(int i=0; i<line.length; i++){
+//			buffer[i]=line[i];
+//		}
+//		buffer[line.length]='\n';
+//		bstart=0;
+//		bstop=newLen;
+//	}
+	
 	/** For debugging */
 	private static String toString(byte[][] x){
 		StringBuilder sb=new StringBuilder();
@@ -395,11 +429,13 @@ public class ByteFile2 extends ByteFile {
 		return sb.toString();
 	}
 	
+	@Override
 	public final InputStream is(){return thread==null ? null : thread.bf1.is();}
 	
+	@Override
 	public final long lineNum(){return thread==null ? -1 : thread.bf1.lineNum();}
 
-	private long cntr;
+	long cntr;
 	private BF1Thread thread=null;
 	private byte[][] currentList=null;
 	private int currentLoc=0;
@@ -407,7 +443,9 @@ public class ByteFile2 extends ByteFile {
 	
 //	private long numIn=0, numOut=0;
 	
-	private static final byte[][] poison=new byte[0][];
+	private byte[] pushBack=null;
+	
+	static final byte[][] poison=new byte[0][];
 	public static boolean verbose=false;
 	private static final boolean verbose2=false;
 	private static final int bufflen=1000;

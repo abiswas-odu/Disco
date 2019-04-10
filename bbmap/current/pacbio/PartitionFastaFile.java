@@ -25,7 +25,7 @@ public class PartitionFastaFile {
 		
 		if(ReadWrite.ZIPLEVEL<2){ReadWrite.ZIPLEVEL=2;}
 		
-		TextFile tf=new TextFile(infile, false, false);
+		TextFile tf=new TextFile(infile, false);
 		
 		split(tf, outfile, partition);
 		t.stop();
@@ -33,13 +33,6 @@ public class PartitionFastaFile {
 		
 	}
 	
-	
-	
-	/**
-	 * @param infile
-	 * @param outfile
-	 * @param outindex
-	 */
 	public static void split(TextFile tf, String outfile, long partition) {
 		long currentBases=0;
 		int pnum=1;

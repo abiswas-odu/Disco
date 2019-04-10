@@ -4,22 +4,26 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.BitSet;
 
-import stream.KillSwitch;
+import dna.Data;
+import fileIO.TextFile;
+import shared.KillSwitch;
+import shared.PreParser;
+import shared.Tools;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
-
-import dna.Data;
-import dna.Parser;
-
-import fileIO.TextFile;
-import shared.Tools;
 
 /** Generate a file containing reads mapped correctly in one file and incorrectly in another file. */
 public class CompareSamFiles {
 	
 	
 	public static void main(String[] args){
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 
 		String in1=null;
 		String in2=null;
@@ -30,11 +34,8 @@ public class CompareSamFiles {
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-//			System.err.println("Processing "+args[i]);
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("path") || a.equals("root")){
+			
+			if(a.equals("path") || a.equals("root")){
 				Data.setPath(b);
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
@@ -58,7 +59,7 @@ public class CompareSamFiles {
 				in2=args[i];
 			}else if(a.equals("reads")){
 				reads=Tools.parseKMG(b);
-			}else if(i==2 && args[i].indexOf('=')<0 && Character.isDigit(a.charAt(0))){
+			}else if(i==2 && args[i].indexOf('=')<0 && Tools.isDigit(a.charAt(0))){
 				reads=Tools.parseKMG(a);
 			}
 		}
@@ -72,9 +73,9 @@ public class CompareSamFiles {
 			System.err.println("Warning - number of expected reads was not specified.");
 		}
 
-		TextFile tf1=new TextFile(in1, false, false);
+		TextFile tf1=new TextFile(in1, false);
 		TextFile tf2=null;
-		if(in2!=null){tf2=new TextFile(in2, false, false);}
+		if(in2!=null){tf2=new TextFile(in2, false);}
 
 		BitSet truePos1=new BitSet((int)reads);
 		BitSet falsePos1=new BitSet((int)reads);
@@ -231,7 +232,7 @@ public class CompareSamFiles {
 						SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
 						byte[] originalContig=sl.originalContig();
 						if(BLASR){
-							originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig : 
+							originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig :
 								KillSwitch.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
 						}
 						int cstart=sl.originalContigStart();
@@ -300,7 +301,7 @@ public class CompareSamFiles {
 						SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
 						byte[] originalContig=sl.originalContig();
 						if(BLASR){
-							originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig : 
+							originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig :
 								KillSwitch.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
 						}
 						int cstart=sl.originalContigStart();

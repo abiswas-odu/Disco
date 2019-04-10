@@ -38,19 +38,19 @@ public abstract class AbstractIndex {
 	
 	static final boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	
 	/** Is (a1, b1) within (a2, b2) ? */
 	static final boolean isWithin(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a1>=a2 && b1<=b2; 
+		return a1>=a2 && b1<=b2;
 	}
 	
 	
 	/** Generates a term that increases score with how far apart the two farthest perfect matches are.
 	 * Assumes that the centerIndex corresponds to the leftmost perfect match. */
-	final int scoreY(int[] locs, int centerIndex, int offsets[]){
+	final static int scoreY(int[] locs, int centerIndex, int offsets[]){
 		int center=locs[centerIndex];
 //		int rightIndex=centerIndex;
 //		for(int i=centerIndex; i<offsets.length; i++){
@@ -120,8 +120,8 @@ public abstract class AbstractIndex {
 	/** More accurate but uses chromosome arrays while mapping */
 	static final boolean USE_EXTENDED_SCORE=true; //Calculate score more slowly by extending keys
 	
-	/** Even more accurate but even slower than normal extended score calculation.  
-	 * Scores are compatible with slow-aligned scores. */ 
+	/** Even more accurate but even slower than normal extended score calculation.
+	 * Scores are compatible with slow-aligned scores. */
 	static final boolean USE_AFFINE_SCORE=true && USE_EXTENDED_SCORE; //Calculate score even more slowly
 
 	
@@ -137,7 +137,7 @@ public abstract class AbstractIndex {
 	
 	/** If no hits are found, search again with slower parameters (less of genome excluded) */
 	static final boolean DOUBLE_SEARCH_NO_HIT=false;
-	/** Only this fraction of the originally removed genome fraction (FRACTION_GENOME_TO_EXCLUDE) 
+	/** Only this fraction of the originally removed genome fraction (FRACTION_GENOME_TO_EXCLUDE)
 	 * is removed for the second pass */
 	static final float DOUBLE_SEARCH_THRESH_MULT=0.25f; //Must be less than 1.
 	
@@ -196,10 +196,10 @@ public abstract class AbstractIndex {
 	static boolean USE_CAMELWALK=false;
 	
 	static final boolean ADD_LIST_SIZE_BONUS=false;
-	static final byte[] LIST_SIZE_BONUS=new byte[100];	
+	static final byte[] LIST_SIZE_BONUS=new byte[100];
 	
 	public static boolean GENERATE_KEY_SCORES_FROM_QUALITY=true; //True: Much faster and more accurate.
-	public static boolean GENERATE_BASE_SCORES_FROM_QUALITY=true; //True: Faster, and at least as accurate. 
+	public static boolean GENERATE_BASE_SCORES_FROM_QUALITY=true; //True: Faster, and at least as accurate.
 	
 	static final int calcListSizeBonus(int[] array){
 		if(array==null || array.length>LIST_SIZE_BONUS.length-1){return 0;}

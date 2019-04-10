@@ -66,6 +66,6 @@ public class CompressFiles {
 	public static boolean zip=true;
 	public static boolean gzip=!zip;
 	
-	public static boolean PRINT_7Z_BATCH=true; 
+	public static boolean PRINT_7Z_BATCH=true;
 	
 }

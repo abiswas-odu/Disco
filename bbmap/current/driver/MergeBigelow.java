@@ -2,14 +2,14 @@ package driver;
 
 import java.io.File;
 import java.io.PrintStream;
-import java.util.Arrays;
 import java.util.HashMap;
 
-import dna.Parser;
-import fileIO.TextFile;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -23,28 +23,24 @@ public class MergeBigelow {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		MergeBigelow mb=new MergeBigelow(args);
-		mb.process(t);
+		MergeBigelow x=new MergeBigelow(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public MergeBigelow(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -52,8 +48,6 @@ public class MergeBigelow {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -83,10 +77,7 @@ public class MergeBigelow {
 			out1=parser.out1;
 		}
 		
-		if(in1==null || in2==null){
-			printOptions();
-			throw new RuntimeException("Error - two input files are required.");
-		}
+		if(in1==null || in2==null){throw new RuntimeException("Error - two input files are required.");}
 
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		
@@ -140,19 +131,7 @@ public class MergeBigelow {
 		errorState|=tf.close();
 		
 		t.stop();
-		
-		double rpnano=linesProcessed/(double)(t.elapsed);
-		double bpnano=charsProcessed/(double)(t.elapsed);
-
-		String rpstring=(linesProcessed<100000 ? ""+linesProcessed : linesProcessed<100000000 ? (linesProcessed/1000)+"k" : (linesProcessed/1000000)+"m");
-		String bpstring=(charsProcessed<100000 ? ""+charsProcessed : charsProcessed<100000000 ? (charsProcessed/1000)+"k" : (charsProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Lines Processed:    "+rpstring+" \t"+String.format("%.2fk lines/sec", rpnano*1000000));
-		outstream.println("Chars Processed:    "+bpstring+" \t"+String.format("%.2fm chars/sec", bpnano*1000));
+		outstream.println(Tools.timeLinesBytesProcessed(t, linesProcessed, charsProcessed, 8));
 		
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -213,8 +192,6 @@ public class MergeBigelow {
 	
 	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){assert(false) : "printOptions: TODO";}
-	
 	/*--------------------------------------------------------------*/
 
 	private String in1=null;
@@ -222,7 +199,7 @@ public class MergeBigelow {
 	private String out1=null;
 	
 	private String delimiter="\t";
-	private HashMap<String, String[]> table; 
+	private HashMap<String, String[]> table;
 	
 	/*--------------------------------------------------------------*/
 

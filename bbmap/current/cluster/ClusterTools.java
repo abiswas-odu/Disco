@@ -3,9 +3,9 @@ package cluster;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLongArray;
 
+import dna.AminoAcid;
 import jgi.Dedupe;
 import shared.Tools;
-import dna.AminoAcid;
 
 /**
  * @author Brian Bushnell
@@ -14,12 +14,6 @@ import dna.AminoAcid;
  */
 public class ClusterTools {
 	
-	/**
-	 * @param bases
-	 * @param object
-	 * @param k
-	 * @return
-	 */
 	public static int[] toKmerCounts(byte[] bases, Object object, int k) {
 		// TODO Auto-generated method stub
 		return null;
@@ -44,7 +38,7 @@ public class ClusterTools {
 			int x2=Dedupe.baseToComplementNumber[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
-//			if(b=='N'){len=0;}else{len++;} //This version will transform 'N' into 'A'
+//			if(b=='N'){len=0; rkmer=0;}else{len++;} //This version will transform 'N' into 'A'
 			if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k), Tools.min(i+1, k)));}
 			if(len>=k){
 				array[j]=Tools.min(kmer, rkmer);
@@ -74,7 +68,7 @@ public class ClusterTools {
 			int x2=Dedupe.baseToComplementNumber[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
-//			if(b=='N'){len=0;}else{len++;} //This version will transform 'N' into 'A'
+//			if(b=='N'){len=0; rkmer=0;}else{len++;} //This version will transform 'N' into 'A'
 			if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k), Tools.min(i+1, k)));}
 			if(len>=k){
 				array[Tools.min(kmer, rkmer)]++;

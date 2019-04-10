@@ -19,7 +19,7 @@ public class Solver {
 	}
 	
 	
-	public static final void findWorstGreedy(final int[] offsets, final int[] lengths, 
+	public static final void findWorstGreedy(final int[] offsets, final int[] lengths,
 			final int chunk, final int[] lists, int[] r){
 		assert(r!=null && r.length==2);
 		
@@ -28,7 +28,7 @@ public class Solver {
 		for(int i=0; i<lists.length; i++){
 			long value=valueOfElement(offsets, lengths, 1f, chunk, lists, i);
 			if(value<min){
-				if(min<EARLY_TERMINATION_SCORE){//Can speed up greedy algo 
+				if(min<EARLY_TERMINATION_SCORE){//Can speed up greedy algo
 					r[0]=i;
 					r[1]=(value<Integer.MIN_VALUE ? Integer.MIN_VALUE : value>Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)value);
 					return;
@@ -43,7 +43,7 @@ public class Solver {
 	}
 	
 	
-	public static final void findWorstGreedy(final int[] offsets, final int[] lengths, 
+	public static final void findWorstGreedy(final int[] offsets, final int[] lengths,
 			final float[] weights, final int chunk, final int[] lists, int[] r){
 		assert(r!=null && r.length==2);
 		
@@ -53,7 +53,7 @@ public class Solver {
 //		for(int i=lists.length-1; i>=0; i--){
 			long value=valueOfElement(offsets, lengths, weights[i], chunk, lists, i);
 			if(value<min){
-				if(min<EARLY_TERMINATION_SCORE && i!=0){//Can speed up greedy algo 
+				if(min<EARLY_TERMINATION_SCORE && i!=0){//Can speed up greedy algo
 					r[0]=i;
 					r[1]=(value<Integer.MIN_VALUE ? Integer.MIN_VALUE : value>Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)value);
 //					System.out.print(".");
@@ -69,7 +69,7 @@ public class Solver {
 	}
 	
 	
-	public static long valueOfElement(final int[] offsets, final int[] lengths, float keyWeight, 
+	public static long valueOfElement(final int[] offsets, final int[] lengths, float keyWeight,
 			final int chunk, final int[] lists, int index){
 		
 		final int numlists=lists.length;

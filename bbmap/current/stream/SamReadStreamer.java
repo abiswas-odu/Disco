@@ -1,13 +1,11 @@
 package stream;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
-import fileIO.ByteFile;
 import fileIO.FileFormat;
-import shared.Shared;
-import shared.Timer;
+import shared.KillSwitch;
+import structures.ListNum;
 
 /**
  * Loads sam files rapidly with multiple threads.
@@ -24,35 +22,33 @@ public class SamReadStreamer extends SamStreamer {
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamReadStreamer(String fname_, int threads_){
-		this(FileFormat.testInput(fname_, FileFormat.SAM, null, true, false), threads_);
+	public SamReadStreamer(String fname_, int threads_, boolean saveHeader_){
+		this(FileFormat.testInput(fname_, FileFormat.SAM, null, true, false), threads_, saveHeader_);
 	}
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamReadStreamer(FileFormat ffin_){
-		this(ffin_, DEFAULT_THREADS);
+	public SamReadStreamer(FileFormat ffin_, boolean saveHeader_){
+		this(ffin_, DEFAULT_THREADS, saveHeader_);
 	}
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamReadStreamer(FileFormat ffin_, int threads_){
-		super(ffin_, threads_);
-		outq=new ArrayBlockingQueue<ArrayList<Read>>(threads+1);
+	public SamReadStreamer(FileFormat ffin_, int threads_, boolean saveHeader_){
+		super(ffin_, threads_, saveHeader_);
+		outq=new ArrayBlockingQueue<ListNum<Read>>(threads+1);
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Outer Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public ArrayList<Read> nextReads(){
-		ArrayList<Read> list=null;
+	@Override
+	public ListNum<Read> nextReads(){
+		ListNum<Read> list=null;
 		while(list==null){
 			try {
 				list=outq.take();
@@ -76,7 +72,8 @@ public class SamReadStreamer extends SamStreamer {
 		return list;
 	}
 	
-	public ArrayList<SamLine> nextLines(){
+	@Override
+	public ListNum<SamLine> nextLines(){
 		KillSwitch.kill("Unsupported.");
 		return null;
 	}
@@ -87,6 +84,7 @@ public class SamReadStreamer extends SamStreamer {
 	
 	
 	/** Spawn process threads */
+	@Override
 	void spawnThreads(){
 		
 		//Do anything necessary prior to processing
@@ -126,6 +124,7 @@ public class SamReadStreamer extends SamStreamer {
 		}
 		
 		//Called by start()
+		@Override
 		public void run(){
 			//Do anything necessary prior to processing
 			
@@ -141,36 +140,7 @@ public class SamReadStreamer extends SamStreamer {
 		}
 		
 		void processBytes(){
-			if(verbose){outstream.println("tid "+tid+" started processBytes.");}
-
-//			ByteFile.FORCE_MODE_BF1=true;
-			ByteFile.FORCE_MODE_BF2=true;
-			ByteFile bf=ByteFile.makeByteFile(ffin, false);
-			
-			ArrayList<byte[]> list=new ArrayList<byte[]>(LIST_SIZE);
-			for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
-				assert(line!=null);
-//				outstream.println("a");
-				list.add(line);
-				if(list.size()>=LIST_SIZE){
-//					outstream.println("b");
-//					outstream.println(inq.size()+", "+inq.remainingCapacity());
-					putBytes(list);
-//					outstream.println("c");
-					list=new ArrayList<byte[]>(LIST_SIZE); 
-				}
-//				outstream.println("d");
-			}
-			if(verbose){outstream.println("tid "+tid+" ran out of input.");}
-			if(list.size()>0){
-				putBytes(list);
-				list=null;
-			}
-			if(verbose || verbose2){outstream.println("tid "+tid+" done reading bytes.");}
-			putBytes(POISON_BYTES);
-			if(verbose || verbose2){outstream.println("tid "+tid+" done poisoning.");}
-			bf.close();
-			if(verbose || verbose2){outstream.println("tid "+tid+" closed stream.");}
+			processBytes0(tid);
 			
 			success=true;
 			
@@ -207,21 +177,7 @@ public class SamReadStreamer extends SamStreamer {
 			
 		}
 		
-		void putBytes(ArrayList<byte[]> list){
-			if(verbose){outstream.println("tid "+tid+" putting blist size "+list.size());}
-			while(list!=null){
-				try {
-					inq.put(list);
-					list=null;
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-			if(verbose){outstream.println("tid "+tid+" done putting blist");}
-		}
-		
-		void putReads(ArrayList<Read> list){
+		void putReads(ListNum<Read> list){
 			if(verbose){outstream.println("tid "+tid+" putting rlist size "+list.size());}
 			while(list!=null){
 				try {
@@ -235,36 +191,23 @@ public class SamReadStreamer extends SamStreamer {
 			if(verbose){outstream.println("tid "+tid+" done putting rlist");}
 		}
 		
-		ArrayList<byte[]> takeBytes(){
-			if(verbose){outstream.println("tid "+tid+" taking blist");}
-			ArrayList<byte[]> list=null;
-			while(list==null){
-				try {
-					list=inq.take();
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-			if(verbose){outstream.println("tid "+tid+" took blist size "+list.size());}
-			return list;
-		}
-		
 		/** Iterate through the reads */
 		void makeReads(){
 			if(verbose){outstream.println("tid "+tid+" started makeReads.");}
 			
-			ArrayList<byte[]> list=takeBytes();
+			ListNum<byte[]> list=takeBytes();
 			while(list!=POISON_BYTES){
-				ArrayList<Read> reads=new ArrayList<Read>(list.size());
+				ListNum<Read> reads=new ListNum<Read>(new ArrayList<Read>(list.size()), list.id);
 				for(byte[] line : list){
 					if(line[0]=='@'){
 						//ignore;
 					}else{
 						SamLine sl=new SamLine(line);
 						Read r=sl.toRead(false);
+//						assert(!r.mapped()) : sl+"\n"+r;
 						if(!r.validated()){r.validate(true);}
 						r.obj=sl;
+						
 						reads.add(r);
 						
 						readsProcessedT++;
@@ -301,6 +244,6 @@ public class SamReadStreamer extends SamStreamer {
 	/*----------------         Final Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	final ArrayBlockingQueue<ArrayList<Read>> outq;
+	final ArrayBlockingQueue<ListNum<Read>> outq;
 	
 }

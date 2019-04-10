@@ -2,7 +2,7 @@ AddAdapters Guide
 Written by Brian Bushnell
 Last updated December 22, 2015
 
-AddAdapters is designed for grading the performance of adapter-trimming tools.  It can add adapters to reads, and annotate the reads with their correct post-trimming length; and it can be run on trimmed reads, to calculate the rates of correct and incorrect trimming.  However, it does not understand insert size, so for adding adapters to paired reads, it's better to use RandomReads.
+AddAdapters is designed for grading the performance of adapter-trimming tools.  It can add adapters to reads, and annotate the reads with their correct post-trimming length; and it can be run on trimmed reads, to calculate the rates of correct and incorrect trimming.  However, it does not understand insert size, so for adding adapters to paired reads, it's better to use RandomReads.  As such, this is deprecated for paired reads.
 
 
 *Usage Examples*

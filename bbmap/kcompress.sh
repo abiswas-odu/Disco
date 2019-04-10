@@ -1,19 +1,14 @@
 #!/bin/bash
-#tadpole in=<infile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 19, 2015
+Last modified July 16, 2018
 
 Description:  Compresses sequence data into a fasta file containing each kmer
 exactly once.  Allows arbitrary kmer set operations via multiple passes.
 
-Usage:
-Generation:   kcompress.sh in=<reads> out=<contigs> min=<1> max=<2147483647>
-
-Input may be fasta or fastq, compressed or uncompressed.
-
+Usage:  kcompress.sh in=<reads> out=<contigs> min=<1> max=<2147483647>
 
 Input parameters:
 in=<file>           Primary input file for reads to use as kmer data.
@@ -23,7 +18,8 @@ reads=-1            Only process this number of reads, then quit (-1 means all).
 Output parameters:
 out=<file>          Write contigs (in contig mode).
 showstats=t         Print assembly statistics after writing contigs.
-fuse=0              Fuse output sequences into chunks at least this long.
+fuse=0              Fuse output sequences into chunks at least this long,
+                    padded with 1 N between sequences.
 
 Prefiltering parameters:
 prefilter=0         If set to a positive integer, use a countmin sketch
@@ -46,18 +42,23 @@ threads=X           Spawn X threads (default is number of logical processors).
 
 Assembly parameters:
 mincount=1          (min) Only retain kmers that occur at least this many times.
-maxcount=2147483647 (max) Only retain kmers that occur at most this many times.
+maxcount=BIG        (max) Only retain kmers that occur at most this many times.
 requiresamecount    (rsc) Only build contigs from kmers with exactly the same count.
 rcomp=t             Store forward and reverse kmers together.  Setting this to
                     false will only use forward kmers.
 
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+                    The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -74,6 +75,7 @@ CP="$DIR""current/"
 z="-Xmx14g"
 z2="-Xms14g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -94,12 +96,25 @@ calcXmx () {
 calcXmx "$@"
 
 kcompress() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP assemble.KmerCompressor $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP assemble.KmerCompressor $@"
 	echo $CMD >&2
 	eval $CMD
 }

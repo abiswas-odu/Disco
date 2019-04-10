@@ -2,15 +2,14 @@ package align2;
 
 import java.util.Arrays;
 
-import stream.Read;
-import stream.SiteScore;
-
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
 import shared.Tools;
+import stream.Read;
+import stream.SiteScore;
 
-/** 
+/**
  * Based on MSA9ts, with transform scores tweaked for PacBio. */
 public final class MultiStateAligner9PacBioAdapter {
 	
@@ -44,8 +43,8 @@ public final class MultiStateAligner9PacBioAdapter {
 			for(int i=0; i<=maxRows; i++){
 				
 				int prevScore=(i<2 ? 0 : packed[matrix][i-1][0]);
-				int score=(i<2 ? (i*POINTSoff_INS) : 
-					(i<LIMIT_FOR_COST_3 ? prevScore+POINTSoff_INS2 : 
+				int score=(i<2 ? (i*POINTSoff_INS) :
+					(i<LIMIT_FOR_COST_3 ? prevScore+POINTSoff_INS2 :
 						(i<LIMIT_FOR_COST_4 ? prevScore+POINTSoff_INS3 : prevScore+POINTSoff_INS4)));
 				
 				packed[matrix][i][0]=score;
@@ -60,14 +59,14 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	
-	/** return new int[] {rows, maxC, maxS, max}; 
+	/** return new int[] {rows, maxC, maxS, max};
 	 * Will not fill areas that cannot match minScore */
 	public final int[] fillLimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore){
 		return fillLimitedX(read, ref, refStartLoc, refEndLoc, minScore);
 	}
 	
 	
-	/** return new int[] {rows, maxC, maxS, max}; 
+	/** return new int[] {rows, maxC, maxS, max};
 	 * Will not fill areas that cannot match minScore */
 	private final int[] fillLimitedX(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore){
 //		minScore=0;
@@ -207,7 +206,7 @@ public final class MultiStateAligner9PacBioAdapter {
 				final int scoreFromDiag_INS=packed[MODE_MS][row-1][col]&SCOREMASK;
 				final int scoreFromIns_INS=packed[MODE_INS][row-1][col]&SCOREMASK;
 				
-//				if(scoreFromDiag_MS<limit3 && scoreFromDel_MS<limit3 && scoreFromIns_MS<limit3 
+//				if(scoreFromDiag_MS<limit3 && scoreFromDel_MS<limit3 && scoreFromIns_MS<limit3
 //						&& scoreFromDiag_DEL<limit && scoreFromDel_DEL<limit && scoreFromDiag_INS<limit && scoreFromIns_INS<limit){
 //					iterationsLimited--; //A "fast" iteration
 //				}
@@ -257,7 +256,7 @@ public final class MultiStateAligner9PacBioAdapter {
 							
 							int scoreMS;
 							if(ref1!='N' && call1!='N'){
-								scoreMS=scoreFromDiag_MS+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) : 
+								scoreMS=scoreFromDiag_MS+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) :
 									(streak==0 ? POINTSoff_SUB : streak<LIMIT_FOR_COST_3 ? POINTSoff_SUB2 : POINTSoff_SUB3));
 							}else{
 								scoreMS=scoreFromDiag_MS+POINTSoff_NOCALL;
@@ -329,7 +328,7 @@ public final class MultiStateAligner9PacBioAdapter {
 					final int streak=packed[MODE_DEL][row][col-1]&TIMEMASK;
 					
 					int scoreMS=scoreFromDiag_DEL+POINTSoff_DEL;
-					int scoreD=scoreFromDel_DEL+(streak==0 ? POINTSoff_DEL : 
+					int scoreD=scoreFromDel_DEL+(streak==0 ? POINTSoff_DEL :
 						streak<LIMIT_FOR_COST_3 ? POINTSoff_DEL2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_DEL3 : POINTSoff_DEL4);
 //					int scoreI=scoreFromIns+POINTSoff_DEL;
@@ -391,8 +390,8 @@ public final class MultiStateAligner9PacBioAdapter {
 					
 					int scoreMS=scoreFromDiag_INS+POINTSoff_INS;
 //					int scoreD=scoreFromDel+POINTSoff_INS;
-					int scoreI=scoreFromIns_INS+(streak==0 ? POINTSoff_INS : 
-						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 : 
+					int scoreI=scoreFromIns_INS+(streak==0 ? POINTSoff_INS :
+						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_INS3 : POINTSoff_INS4);
 					
 					
@@ -490,7 +489,7 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	
-	/** return new int[] {rows, maxC, maxS, max}; 
+	/** return new int[] {rows, maxC, maxS, max};
 	 * Does not require a min score (ie, same as old method) */
 	private final int[] fillUnlimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc){
 		rows=read.length;
@@ -575,7 +574,7 @@ public final class MultiStateAligner9PacBioAdapter {
 							
 							int scoreMS;
 							if(ref1!='N' && call1!='N'){
-								scoreMS=scoreFromDiag+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) : 
+								scoreMS=scoreFromDiag+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) :
 									(streak==0 ? POINTSoff_SUB : streak<LIMIT_FOR_COST_3 ? POINTSoff_SUB2 : POINTSoff_SUB3));
 							}else{
 								scoreMS=scoreFromDiag+POINTSoff_NOCALL;
@@ -622,7 +621,7 @@ public final class MultiStateAligner9PacBioAdapter {
 					final int scoreFromDel=packed[MODE_DEL][row][col-1]&SCOREMASK;
 					
 					int scoreMS=scoreFromDiag+POINTSoff_DEL;
-					int scoreD=scoreFromDel+(streak==0 ? POINTSoff_DEL : 
+					int scoreD=scoreFromDel+(streak==0 ? POINTSoff_DEL :
 						streak<LIMIT_FOR_COST_3 ? POINTSoff_DEL2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_DEL3 : POINTSoff_DEL4);
 //					int scoreI=scoreFromIns+POINTSoff_DEL;
@@ -666,8 +665,8 @@ public final class MultiStateAligner9PacBioAdapter {
 					
 					int scoreMS=scoreFromDiag+POINTSoff_INS;
 //					int scoreD=scoreFromDel+POINTSoff_INS;
-					int scoreI=scoreFromIns+(streak==0 ? POINTSoff_INS : 
-						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 : 
+					int scoreI=scoreFromIns+(streak==0 ? POINTSoff_INS :
+						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_INS3 : POINTSoff_INS4);
 					
 //					System.err.println("("+row+","+col+")\t"+scoreFromDiag+"+"+POINTSoff_INS+"="+scoreM+", "+
@@ -790,7 +789,7 @@ public final class MultiStateAligner9PacBioAdapter {
 							
 						}else{
 
-							int scoreMS=scoreFromDiag+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) : 
+							int scoreMS=scoreFromDiag+(prevMatch ? (streak<=1 ? POINTSoff_SUBR : POINTSoff_SUB) :
 								(streak==0 ? POINTSoff_SUB : streak<LIMIT_FOR_COST_3 ? POINTSoff_SUB2 : POINTSoff_SUB3));
 							int scoreD=scoreFromDel+POINTSoff_SUB; //+2 to move it as close as possible to the deletion / insertion
 							int scoreI=scoreFromIns+POINTSoff_SUB;
@@ -833,7 +832,7 @@ public final class MultiStateAligner9PacBioAdapter {
 					final int scoreFromDel=packed[MODE_DEL][row][col-1]&SCOREMASK;
 					
 					int scoreMS=scoreFromDiag+POINTSoff_DEL;
-					int scoreD=scoreFromDel+(streak==0 ? POINTSoff_DEL : 
+					int scoreD=scoreFromDel+(streak==0 ? POINTSoff_DEL :
 						streak<LIMIT_FOR_COST_3 ? POINTSoff_DEL2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_DEL3 : POINTSoff_DEL4);
 //					int scoreI=scoreFromIns+POINTSoff_DEL;
@@ -870,8 +869,8 @@ public final class MultiStateAligner9PacBioAdapter {
 					
 					int scoreMS=scoreFromDiag+POINTSoff_INS;
 //					int scoreD=scoreFromDel+POINTSoff_INS;
-					int scoreI=scoreFromIns+(streak==0 ? POINTSoff_INS : 
-						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 : 
+					int scoreI=scoreFromIns+(streak==0 ? POINTSoff_INS :
+						streak<LIMIT_FOR_COST_3 ? POINTSoff_INS2 :
 							streak<LIMIT_FOR_COST_4 ? POINTSoff_INS3 : POINTSoff_INS4);
 					
 //					System.err.println("("+row+","+col+")\t"+scoreFromDiag+"+"+POINTSoff_INS+"="+scoreM+", "+
@@ -944,7 +943,7 @@ public final class MultiStateAligner9PacBioAdapter {
 //			byte prev0=(byte)(packed[state][row][col]&MODEMASK);
 
 			final int time=packed[state][row][col]&TIMEMASK;
-			final byte prev;	
+			final byte prev;
 				
 //			System.err.println("state="+state+", prev="+prev+", row="+row+", col="+col+", score="+scores[state][row][col]);
 			
@@ -1039,18 +1038,18 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	/** @return {score, bestRefStart, bestRefStop} */
-	public final int[] score(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc, 
+	public final int[] score(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc,
 			final int maxRow, final int maxCol, final int maxState){
 		
 		int row=maxRow;
 		int col=maxCol;
 		int state=maxState;
 
-		assert(maxState>=0 && maxState<packed.length) : 
+		assert(maxState>=0 && maxState<packed.length) :
 			maxState+", "+maxRow+", "+maxCol+"\n"+new String(read)+"\n"+toString(ref, refStartLoc, refEndLoc);
-		assert(maxRow>=0 && maxRow<packed[0].length) : 
+		assert(maxRow>=0 && maxRow<packed[0].length) :
 			maxState+", "+maxRow+", "+maxCol+"\n"+new String(read)+"\n"+toString(ref, refStartLoc, refEndLoc);
-		assert(maxCol>=0 && maxCol<packed[0][0].length) : 
+		assert(maxCol>=0 && maxCol<packed[0][0].length) :
 			maxState+", "+maxRow+", "+maxCol+"\n"+new String(read)+"\n"+toString(ref, refStartLoc, refEndLoc);
 		
 		int score=packed[maxState][maxRow][maxCol]&SCOREMASK; //Or zero, if it is to be recalculated
@@ -1171,29 +1170,27 @@ public final class MultiStateAligner9PacBioAdapter {
 	
 	
 
-	public final int scoreNoIndels(byte[] read, SiteScore ss){
+	public final static int scoreNoIndels(byte[] read, SiteScore ss){
 		ChromosomeArray cha=Data.getChromosome(ss.chrom);
 		return scoreNoIndels(read, cha.array, ss.start, ss);
 	}
 
-	public final int scoreNoIndels(byte[] read, final int chrom, final int refStart){
+	public final static int scoreNoIndels(byte[] read, final int chrom, final int refStart){
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		return scoreNoIndels(read, cha.array, refStart, null);
 	}
 	
-	public final int scoreNoIndels(byte[] read, SiteScore ss, byte[] baseScores){
+	public final static int scoreNoIndels(byte[] read, SiteScore ss, byte[] baseScores){
 		ChromosomeArray cha=Data.getChromosome(ss.chrom);
 		return scoreNoIndels(read, cha.array, baseScores, ss.start, ss);
 	}
 
-	public final int scoreNoIndels(byte[] read, final int chrom, final int refStart, byte[] baseScores){
+	public final static int scoreNoIndels(byte[] read, final int chrom, final int refStart, byte[] baseScores){
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		return scoreNoIndels(read, cha.array, baseScores, refStart, null);
 	}
-	
 
-
-	public final int scoreNoIndels(byte[] read, byte[] ref, final int refStart, final SiteScore ss){
+	public final static int scoreNoIndels(byte[] read, byte[] ref, final int refStart, final SiteScore ss){
 		
 		int score=0;
 		int mode=-1;
@@ -1258,7 +1255,7 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 
-	public final int scoreNoIndels(byte[] read, byte[] ref, byte[] baseScores, final int refStart, SiteScore ss){
+	public final static int scoreNoIndels(byte[] read, byte[] ref, byte[] baseScores, final int refStart, SiteScore ss){
 		
 		int score=0;
 		int mode=-1;
@@ -1325,7 +1322,7 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	
-	public final int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, byte[] baseScores, final int refStart, byte[][] matchReturn){
+	public final static int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, byte[] baseScores, final int refStart, byte[][] matchReturn){
 		int score=0;
 		int mode=-1;
 		int timeInMode=0;
@@ -1348,7 +1345,7 @@ public final class MultiStateAligner9PacBioAdapter {
 			score+=POINTS_NOREF*dif;
 		}
 		assert(refStart+readStop<=ref.length) : "readStart="+readStart+", readStop="+readStop+
-		", refStart="+refStart+", refStop="+refStop+", ref.length="+ref.length+", read.length="+read.length; 
+		", refStart="+refStart+", refStop="+refStop+", ref.length="+ref.length+", read.length="+read.length;
 		
 		assert(matchReturn!=null);
 		assert(matchReturn.length==1);
@@ -1400,7 +1397,7 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	
-	public final int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, final int refStart, byte[][] matchReturn){
+	public final static int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, final int refStart, byte[][] matchReturn){
 		int score=0;
 		int mode=-1;
 		int timeInMode=0;
@@ -1423,7 +1420,7 @@ public final class MultiStateAligner9PacBioAdapter {
 			score+=POINTS_NOREF*dif;
 		}
 		assert(refStart+readStop<=ref.length) : "readStart="+readStart+", readStop="+readStop+
-		", refStart="+refStart+", refStop="+refStop+", ref.length="+ref.length+", read.length="+read.length; 
+		", refStart="+refStart+", refStop="+refStop+", ref.length="+ref.length+", read.length="+read.length;
 		
 		assert(matchReturn!=null);
 		assert(matchReturn.length==1);
@@ -1473,15 +1470,15 @@ public final class MultiStateAligner9PacBioAdapter {
 		return score;
 	}
 	
-	public final static int maxQuality(int numBases){
+	public static final int maxQuality(int numBases){
 		return POINTS_MATCH+(numBases-1)*(POINTS_MATCH2);
 	}
 	
-	public final static int maxQuality(byte[] baseScores){
+	public static final int maxQuality(byte[] baseScores){
 		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sumInt(baseScores);
 	}
 	
-	public final static int maxImperfectScore(int numBases){
+	public static final int maxImperfectScore(int numBases){
 //		int maxQ=maxQuality(numBases);
 ////		maxImperfectSwScore=maxQ-(POINTS_MATCH2+POINTS_MATCH2)+(POINTS_MATCH+POINTS_SUB);
 //		int maxI=maxQ+POINTS_DEL;
@@ -1494,7 +1491,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return maxI;
 	}
 	
-	public final static int maxImperfectScore(byte[] baseScores){
+	public static final int maxImperfectScore(byte[] baseScores){
 //		int maxQ=maxQuality(numBases);
 ////		maxImperfectSwScore=maxQ-(POINTS_MATCH2+POINTS_MATCH2)+(POINTS_MATCH+POINTS_SUB);
 //		int maxI=maxQ+POINTS_DEL;
@@ -1507,7 +1504,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return maxI;
 	}
 	
-	public final static String toString(int[] a){
+	public static final String toString(int[] a){
 		
 		int width=7;
 		
@@ -1523,7 +1520,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return sb.toString();
 	}
 	
-	public final static String toTimePacked(int[] a){
+	public static final String toTimePacked(int[] a){
 		int width=7;
 		
 		StringBuilder sb=new StringBuilder((a.length+1)*width+2);
@@ -1539,7 +1536,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return sb.toString();
 	}
 	
-	public final static String toScorePacked(int[] a){
+	public static final String toScorePacked(int[] a){
 		int width=7;
 
 		String minString=" -";
@@ -1561,7 +1558,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return sb.toString();
 	}
 	
-	public final static String toString(byte[] a){
+	public static final String toString(byte[] a){
 		
 		int width=6;
 		
@@ -1577,7 +1574,7 @@ public final class MultiStateAligner9PacBioAdapter {
 		return sb.toString();
 	}
 	
-	public final static String toString(byte[] ref, int startLoc, int stopLoc){
+	public static final String toString(byte[] ref, int startLoc, int stopLoc){
 		StringBuilder sb=new StringBuilder(stopLoc-startLoc+1);
 		for(int i=startLoc; i<=stopLoc; i++){sb.append((char)ref[i]);}
 		return sb.toString();

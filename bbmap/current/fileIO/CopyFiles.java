@@ -2,8 +2,6 @@ package fileIO;
 
 import java.io.File;
 
-import dna.Data;
-
 
 public class CopyFiles {
 	

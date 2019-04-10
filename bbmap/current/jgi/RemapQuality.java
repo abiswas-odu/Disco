@@ -24,6 +24,7 @@ public class RemapQuality extends BBTool_ST {
 		bbt.process(t);
 	}
 	
+	@Override
 	void setDefaults(){}
 
 	/**

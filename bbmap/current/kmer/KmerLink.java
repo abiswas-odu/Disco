@@ -1,11 +1,13 @@
 package kmer;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
-import stream.ByteBuilder;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -32,20 +34,20 @@ public class KmerLink extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final int incrementAndReturnNumCreated(long kmer) {
-		int x=increment(kmer);
-		return x==1 ? 1 : 0;
+	public final int incrementAndReturnNumCreated(final long kmer, final int incr) {
+		int x=increment(kmer, incr);
+		return x==incr ? 1 : 0;
 	}
 	
 	@Override
-	public int increment(long kmer){
-		if(pivot<0){pivot=kmer; return (value=1);} //Allows initializing empty nodes to -1
+	public int increment(final long kmer, final int incr){
+		if(pivot<0){pivot=kmer; return (value=incr);} //Allows initializing empty nodes to -1
 		if(kmer==pivot){
-			if(value<Integer.MAX_VALUE){value++;}
+			if(value<Integer.MAX_VALUE){value+=incr;}
 			return value;
 		}
-		if(next==null){next=new KmerLink(kmer, 1); return 1;}
-		return next.increment(kmer);
+		if(next==null){next=new KmerLink(kmer, incr); return 1;}
+		return next.increment(kmer, incr);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -53,6 +55,7 @@ public class KmerLink extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	/** Returns number of nodes added */
+	@Override
 	public int set(long kmer, int value_){
 		if(pivot<0){pivot=kmer; value=value_; return 1;} //Allows initializing empty nodes to -1
 		if(kmer==pivot){value=value_; return 0;}
@@ -61,6 +64,7 @@ public class KmerLink extends AbstractKmerTable {
 	}
 	
 	/** Returns number of nodes added */
+	@Override
 	public int setIfNotPresent(long kmer, int value_){
 		if(pivot<0){pivot=kmer; value=value_; return 1;} //Allows initializing empty nodes to -1
 		if(kmer==pivot){return 0;}
@@ -68,6 +72,7 @@ public class KmerLink extends AbstractKmerTable {
 		return next.setIfNotPresent(kmer, value_);
 	}
 	
+	@Override
 	KmerLink get(long kmer){
 		if(kmer==pivot){return this;}
 		return next==null ? null : next.get(kmer);
@@ -80,6 +85,7 @@ public class KmerLink extends AbstractKmerTable {
 		return next.insert(n);
 	}
 	
+	@Override
 	public boolean contains(long kmer){
 		KmerLink node=get(kmer);
 		return node!=null;
@@ -177,7 +183,7 @@ public class KmerLink extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public int set(long kmer, int[] vals) {
+	public int set(long kmer, int[] vals, int vlen) {
 		throw new RuntimeException("Unimplemented.");
 	}
 	
@@ -208,40 +214,44 @@ public class KmerLink extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		if(value<1){return true;}
-		if(value>=mincount){bsw.printlnKmer(pivot, value, k);}
-		if(next!=null){next.dumpKmersAsBytes(bsw, k, mincount);}
+		if(value>=mincount){
+			if(remaining!=null && remaining.decrementAndGet()<0){return true;}
+			bsw.printlnKmer(pivot, value, k);
+		}
+		if(next!=null){next.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);}
 		return true;
 	}
 	
 	@Override
-	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		if(value<1){return true;}
 		if(value>=mincount){
+			if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 			toBytes(pivot, value, k, bb);
-			bb.append('\n');
+			bb.nl();
 			if(bb.length()>=16000){
 				ByteBuilder bb2=new ByteBuilder(bb);
 				synchronized(bsw){bsw.addJob(bb2);}
 				bb.clear();
 			}
 		}
-		if(next!=null){next.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
+		if(next!=null){next.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);}
 		return true;
 	}
 	
 	@Override
-	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount) {
-		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount));
+	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount) {
+		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount, maxcount));
 		return true;
 	}
 	
-	private final StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount){
+	private final StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount, int maxcount){
 		if(value<1){return sb;}
 		if(sb==null){sb=new StringBuilder(32);}
 		if(value>=mincount){sb.append(AbstractKmerTable.toText(pivot, value, k)).append('\n');}
-		if(next!=null){next.dumpKmersAsText(sb, k, mincount);}
+		if(next!=null){next.dumpKmersAsText(sb, k, mincount, maxcount);}
 		return sb;
 	}
 	
@@ -250,6 +260,13 @@ public class KmerLink extends AbstractKmerTable {
 		if(value<1){return;}
 		ca[Tools.min(value, max)]++;
 		if(next!=null){next.fillHistogram(ca, max);}
+	}
+	
+	@Override
+	public final void fillHistogram(SuperLongList sll){
+		if(value<1){return;}
+		sll.add(value);
+		if(next!=null){next.fillHistogram(sll);}
 	}
 	
 	@Override

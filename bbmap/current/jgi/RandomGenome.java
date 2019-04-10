@@ -1,10 +1,18 @@
 package jgi;
 
+import java.io.PrintStream;
 import java.util.Random;
 
 import dna.AminoAcid;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
+import fileIO.ByteStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
+import structures.ByteBuilder;
 
 /**
  * @author Brian Bushnell
@@ -14,41 +22,173 @@ import fileIO.TextStreamWriter;
 public class RandomGenome {
 	
 	public static void main(String[] args){
-		ReadWrite.ZIPLEVEL=2;
-		Random randy=new Random();
-		int chroms=Integer.parseInt(args[0]);
-		int len=Integer.parseInt(args[1]);
+		//Start a timer immediately upon code entrance.
+		Timer t=new Timer();
 		
-		String fname=args[2];
-		TextStreamWriter tsw=new TextStreamWriter(fname, false, false, true);
-		tsw.start();
+		//Create an instance of this class
+		RandomGenome x=new RandomGenome(args);
 		
-		for(int chrom=1; chrom<=chroms; chrom++){
-			tsw.println(">"+chrom);
-			StringBuilder sb=new StringBuilder(101);
-			for(int i=0, j=0; i<len; i++, j++){
-				char c;
-				if((i/10000)%4==3){
-					c='N';
-				}else{
-					c=(char)AminoAcid.numberToBase[randy.nextInt(4)];
-				}
-				sb.append(c);
-				if(j==100){
-					sb.append('\n');
-					tsw.print(sb);
-					sb=new StringBuilder(101);
-					j=0;
-				}
-			}
-			if(sb.length()>0){
-				sb.append('\n');
-				tsw.print(sb);
+		//Run the object
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
+	}
+	
+	public RandomGenome(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
+		
+		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
+		
+		Parser parser=new Parser();
+		for(int i=0; i<args.length; i++){
+			String arg=args[i];
+			String[] split=arg.split("=");
+			String a=split[0].toLowerCase();
+			String b=split.length>1 ? split[1] : null;
+			if(b!=null && b.equalsIgnoreCase("null")){b=null;}
+
+			if(a.equals("chroms")){
+				chroms=Tools.parseIntKMG(b);
+			}else if(a.equals("len") || a.equals("length") || a.equals("size")){
+				totalLength=Tools.parseKMG(b);
+			}else if(a.equals("pad")){
+				pad=Tools.max(0, Tools.parseIntKMG(b));
+			}else if(a.equals("gc")){
+				gc=Float.parseFloat(b);
+			}else if(a.equals("verbose")){
+				verbose=Tools.parseBoolean(b);
+				ReadWrite.verbose=verbose;
+			}else if(a.equals("nohomopolymers") || a.equals("banhomopolymers") || a.equals("nopoly")){
+				noPoly=Tools.parseBoolean(b);
+			}else if(parser.parse(arg, a, b)){
+				//do nothing
+			}else{
+				outstream.println("Unknown parameter "+args[i]);
+				assert(false) : "Unknown parameter "+args[i];
+				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
-		tsw.poison();
-		tsw.waitForFinish();
 		
+		{//Process parser fields
+			overwrite=parser.overwrite;
+			append=parser.append;
+
+			out=parser.out1;
+		}
+
+		wrap=Shared.FASTA_WRAP;
+		assert(wrap>0) : "Wrap is too small.";
+		assert(chroms>0) : "Chroms must be greater than 0.";
+		assert(totalLength>=chroms) : "Length must be at least chroms.";
+		assert(2*pad+totalLength/chroms<Shared.MAX_ARRAY_LEN) : "Length per chrom must be at most "+Shared.MAX_ARRAY_LEN;
+		chromLength=(int)(totalLength/chroms);
+
+		if(out!=null && out.equalsIgnoreCase("null")){out=null;}
+		
+		if(!Tools.testOutputFiles(overwrite, append, false, out)){
+			outstream.println((out==null)+", "+out);
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out+"\n");
+		}
+
+		ffout=FileFormat.testOutput(out, FileFormat.FA, null, true, overwrite, append, false);
 	}
+	
+	void process(Timer t){
+		
+		ByteStreamWriter bsw=new ByteStreamWriter(ffout);
+		bsw.start();
+		
+		for(int chrom=1; chrom<=chroms; chrom++){
+			bsw.print('>').println(chrom);
+			ByteBuilder bb=new ByteBuilder(wrap+1);
+			byte prev='N';
+			final int max=chromLength+2*pad;
+			final int pad2=chromLength+pad;
+			if(gc==0.5f){
+				for(int i=0; i<max; ){
+					for(int j=0; j<wrap && i<max; i++, j++){
+						byte b;
+						if(i<pad || i>=pad2){b='N';}
+						else{
+							b=AminoAcid.numberToBase[randy.nextInt(4)];
+							while(noPoly && b==prev){b=AminoAcid.numberToBase[randy.nextInt(4)];}
+						}
+						bb.append(b);
+						prev=b;
+					}
+					bb.nl();
+					bsw.print(bb);
+					bb.clear();
+				}
+			}else{
+				for(int i=0; i<max; ){
+					for(int j=0; j<wrap && i<max; i++, j++){
+						boolean at=randy.nextFloat()>=gc;
+						char b;
+						if(i<pad || i>=pad2){b='N';}
+						else{
+							if(at){
+								b=randy.nextBoolean() ? 'A' : 'T';
+							}else{
+								b=randy.nextBoolean() ? 'C' : 'G';
+							}
+							while(noPoly && b==prev){
+								if(at){
+									b=randy.nextBoolean() ? 'A' : 'T';
+								}else{
+									b=randy.nextBoolean() ? 'C' : 'G';
+								}
+							}
+						}
+						bb.append(b);
+						prev=(byte)b;
+					}
+					bb.nl();
+					bsw.print(bb);
+					bb.clear();
+				}
+			}
+		}
+		bsw.poison();
+		bsw.waitForFinish();
+	}
+	
+	/*--------------------------------------------------------------*/
+	
+	private String out=null;
+	
+	int chroms=1;
+	long totalLength=1000000;
+	float gc=0.5f;
+	final int chromLength;
+	final int wrap;
+	int pad=0;
+	boolean noPoly=false;
+	
+	/*--------------------------------------------------------------*/
+
+	Random randy=new Random();
+	
+	private long linesOut=0;
+	private long bytesOut=0;
+	
+	/*--------------------------------------------------------------*/
+	
+	private final FileFormat ffout;
+	
+	/*--------------------------------------------------------------*/
+	
+	private PrintStream outstream=System.err;
+	public static boolean verbose=false;
+	public boolean errorState=false;
+	private boolean overwrite=false;
+	private boolean append=false;
 	
 }

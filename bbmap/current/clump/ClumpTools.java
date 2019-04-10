@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import bloom.KCountArray;
 import fileIO.ReadWrite;
+import shared.Shared;
 import stream.ConcurrentCollectionReadInputStream;
 import stream.Read;
 
@@ -23,7 +24,7 @@ public class ClumpTools {
 		table=null;
 		ConcurrentCollectionReadInputStream cris=new ConcurrentCollectionReadInputStream(reads, null, -1);
 		cris.start();
-		table=PivotSet.makeKcaStatic(cris, k, minCount);
+		table=PivotSet.makeKcaStatic(cris, k, minCount, Shared.AMINO_IN);
 		ReadWrite.closeStream(cris);
 		return table;
 	}

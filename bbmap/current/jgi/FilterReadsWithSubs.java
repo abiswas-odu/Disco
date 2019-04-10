@@ -1,16 +1,15 @@
 package jgi;
 
-import stream.Read;
-import stream.SamLine;
-import dna.AminoAcid;
 import shared.Timer;
 import shared.Tools;
+import stream.Read;
+import stream.SamLine;
 
 /**
  * Filters to select only reads with substitution errors
  * for bases with quality scores in a certain interval.
- * Used for manually examining specific reads that may have 
- * incorrectly calibrated quality scores, for example. 
+ * Used for manually examining specific reads that may have
+ * incorrectly calibrated quality scores, for example.
  * @author Brian Bushnell
  * @date May 5, 2015
  *
@@ -38,10 +37,10 @@ public class FilterReadsWithSubs extends BBTool_ST {
 	public boolean parseArgument(String arg, String a, String b) {
 //		System.err.println("Calling parseArgument("+arg+","+a+","+b+")");
 		if(a.equals("minq")){
-			minq=(int)Tools.parseKMG(b);
+			minq=Tools.parseIntKMG(b);
 			return true;
 		}else if(a.equals("maxq")){
-			maxq=(int)Tools.parseKMG(b);
+			maxq=Tools.parseIntKMG(b);
 			return true;
 		}else if(a.equals("keepperfect")){
 			keepPerfect=Tools.parseBoolean(b);
@@ -55,6 +54,7 @@ public class FilterReadsWithSubs extends BBTool_ST {
 		return false;
 	}
 	
+	@Override
 	void setDefaults(){
 		SamLine.SET_FROM_OK=true;
 		minq=0;

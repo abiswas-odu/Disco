@@ -1,13 +1,13 @@
 #!/bin/bash
-#bbmask in=<infile> out=<outfile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified June 9, 2016
+Last modified October 17, 2017
 
 Description:  Masks sequences of low-complexity, or containing repeat kmers, or covered by mapped reads.
 By default this program will mask using entropy with a window=80 and entropy=0.75
+Please read bbmap/docs/guides/BBMaskGuide.txt for more information.
 
 Usage:   bbmask.sh in=<file> out=<file> sam=<file,file,...file>
 
@@ -15,7 +15,6 @@ Input may be stdin or a fasta or fastq file, raw or gzipped.
 sam is optional, but may be a comma-delimited list of sam files to mask.
 Sam files may also be used as arguments without sam=, so you can use *.sam for example.
 If you pipe via stdin/stdout, please include the file type; e.g. for gzipped fasta input, set in=stdin.fa.gz
-
 
 Input parameters:
 in=<file>           Input sequences to mask. 'in=stdin.fa' will pipe from standard in.
@@ -55,13 +54,18 @@ pigz=t              Use pigz to compress.  If argument is a number, that will se
 unpigz=t            Use pigz to decompress.
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+                    The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -78,6 +82,7 @@ CP="$DIR""current/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -98,12 +103,25 @@ calcXmx () {
 calcXmx "$@"
 
 bbmask() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP jgi.BBMask $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP jgi.BBMask $@"
 	echo $CMD >&2
 	eval $CMD
 }

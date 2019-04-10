@@ -3,8 +3,10 @@ package ukmer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import shared.KillSwitch;
 import shared.Primes;
 import shared.Tools;
+import structures.SuperLongList;
 
 /**
  * Stores kmers in a long[] and counts in an int[], with a victim cache.
@@ -18,10 +20,15 @@ public final class HashArrayU1D extends HashArrayU {
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public HashArrayU1D(int initialSize, int mult_, boolean autoResize_){
-		super(initialSize, mult_, autoResize_, false);
+	public HashArrayU1D(int[] schedule_, int k_, int kbig_){
+		super(schedule_, k_, kbig_, false);
 		values=allocInt1D(prime+extra);
 	}
+	
+//	public HashArrayU1D(int initialSize, int k_, int kbig_, boolean autoResize_){
+//		super(initialSize, k_, kbig_, autoResize_, false);
+//		values=allocInt1D(prime+extra);
+//	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Public Methods        ----------------*/
@@ -62,7 +69,7 @@ public final class HashArrayU1D extends HashArrayU {
 //		assert((a==-1 && b==1) || (a+1==b)) : a+", "+b+", "+kmer+"\n"+kmer.arraysToString()+"\n"+Arrays.toString(arrays[0])+"\n"+Arrays.toString(values);
 //		return x;
 //	}
-//	
+//
 //	public final int incrementAndReturnNumCreated0(final Kmer kmer){
 		final int cell=findKmerOrEmpty(kmer);
 //		assert(victims.size<size+100);
@@ -102,6 +109,17 @@ public final class HashArrayU1D extends HashArrayU {
 		}
 	}
 	
+	@Override
+	public final void fillHistogram(SuperLongList sll){
+		for(int i=0; i<values.length; i++){
+			int count=values[i];
+			if(count>0){sll.add(count);}
+		}
+		if(victims!=null){
+			victims.fillHistogram(sll);
+		}
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------      Nonpublic Methods       ----------------*/
 	/*--------------------------------------------------------------*/
@@ -130,6 +148,7 @@ public final class HashArrayU1D extends HashArrayU {
 		values[cell]=vals[0];
 	}
 	
+	@Override
 	protected long[] cellToArray(int cell){
 		long[] r=new long[mult];
 		for(int i=0; i<mult; i++){r[i]=arrays[i][cell];}
@@ -143,55 +162,106 @@ public final class HashArrayU1D extends HashArrayU {
 	@Override
 	public final boolean canRebalance() {return false;}
 	
+//	@Override
+//	protected synchronized void resize(){
+//		if(verbose){System.err.println("Resizing from "+prime+"; load="+(size*1f/prime));}
+//		final int oldPrime=prime;
+//		if(prime>=maxPrime){
+//			sizeLimit=0xFFFFFFFFFFFFL;
+//			return;
+//		}
+//		
+//		final long oldSize=size, oldVSize=victims.size;
+//		final long totalSize=oldSize+oldVSize;
+//		
+//		final long maxAllowedByLoadFactor=(long)(totalSize*minLoadMult);
+//		final long minAllowedByLoadFactor=(long)(totalSize*maxLoadMult);
+//
+////		sizeLimit=Tools.min((long)(maxLoadFactor*prime), maxPrime);
+//		
+//		assert(maxAllowedByLoadFactor>=minAllowedByLoadFactor);
+//		if(maxAllowedByLoadFactor<prime){
+//			sizeLimit=(long)(maxLoadFactor*prime);
+//			return;
+//		}
+//		
+//		long x=10+(long)(prime*resizeMult);
+//		x=Tools.max(x, minAllowedByLoadFactor);
+//		x=Tools.min(x, maxAllowedByLoadFactor);
+//		
+//		int prime2=(int)Tools.min(maxPrime, Primes.primeAtLeast(x));
+//		
+//		if(prime2<=prime){
+//			sizeLimit=(long)(maxLoadFactor*prime);
+//			assert(prime2==prime) : "Resizing to smaller array? "+totalSize+", "+prime+", "+x;
+//			return;
+//		}
+//		
+//		prime=prime2;
+//		
+//	}
+	
+
+	
 	@Override
 	protected synchronized void resize(){
 		if(verbose){System.err.println("Resizing from "+prime+"; load="+(size*1f/prime));}
-		final int oldPrime=prime;
 		if(prime>=maxPrime){
-			sizeLimit=0xFFFFFFFFFFFFL;
-			return;
+//			sizeLimit=0xFFFFFFFFFFFFL;
+//			return;
+			KillSwitch.memKill(new OutOfMemoryError());
 		}
-		
+
+		final int oldPrime=prime;
 		final long oldSize=size, oldVSize=victims.size;
 		final long totalSize=oldSize+oldVSize;
 		
-		final long maxAllowedByLoadFactor=(long)(totalSize*minLoadMult);
-		final long minAllowedByLoadFactor=(long)(totalSize*maxLoadMult);
+		if(schedule!=null){
+			prime=nextScheduleSize();
+			if(prime<=oldPrime){KillSwitch.memKill(new OutOfMemoryError());}
+			sizeLimit=(long)((atMaxSize() ? maxLoadFactorFinal : maxLoadFactor)*prime);
+		}else{//Old method
+			final long maxAllowedByLoadFactor=(long)(totalSize*minLoadMult);
+			final long minAllowedByLoadFactor=(long)(totalSize*maxLoadMult);
 
-//		sizeLimit=Tools.min((long)(maxLoadFactor*prime), maxPrime);
-		
-		assert(maxAllowedByLoadFactor>=minAllowedByLoadFactor);
-		if(maxAllowedByLoadFactor<prime){
+			//		sizeLimit=Tools.min((long)(maxLoadFactor*prime), maxPrime);
+
+			assert(maxAllowedByLoadFactor>=minAllowedByLoadFactor);
+			if(maxAllowedByLoadFactor<prime){
+				sizeLimit=(long)(maxLoadFactor*prime);
+				return;
+			}
+
+			long x=10+(long)(prime*resizeMult);
+			x=Tools.max(x, minAllowedByLoadFactor);
+			x=Tools.min(x, maxAllowedByLoadFactor);
+
+			int prime2=(int)Tools.min(maxPrime, Primes.primeAtLeast(x));
+
+			if(prime2<=prime){
+				sizeLimit=(long)(maxLoadFactor*prime);
+				assert(prime2==prime) : "Resizing to smaller array? "+totalSize+", "+prime+", "+x;
+				return;
+			}
+
+			prime=prime2;
 			sizeLimit=(long)(maxLoadFactor*prime);
-			return;
 		}
 		
-		long x=10+(long)(prime*resizeMult);
-		x=Tools.max(x, minAllowedByLoadFactor);
-		x=Tools.min(x, maxAllowedByLoadFactor);
 		
-		int prime2=(int)Tools.min(maxPrime, Primes.primeAtLeast(x));
-		
-		if(prime2<=prime){
-			sizeLimit=(long)(maxLoadFactor*prime);
-			assert(prime2==prime) : "Resizing to smaller array? "+totalSize+", "+prime+", "+x;
-			return;
-		}
-		
-		prime=prime2;
+
 //		System.err.println("Resized to "+prime+"; load="+(size*1f/prime));
 		long[][] oldk=arrays;
 		int[] oldc=values;
 //		KmerNodeU[] oldv=victims.array;
-		arrays=allocLong2D(mult, prime2+extra);
+		arrays=allocLong2D(mult, prime+extra);
 		for(int i=0; i<mult; i++){
 			Arrays.fill(arrays[i], NOT_PRESENT);
 		}
-		values=allocInt1D(prime2+extra);
+		values=allocInt1D(prime+extra);
 		ArrayList<KmerNodeU> list=victims.toList();
 		victims.clear();
 		size=0;
-		sizeLimit=Long.MAX_VALUE;
 //		assert(false);
 		final Kmer kmer=new Kmer(kbig);
 //		long kmersProcessed=0; //123
@@ -239,8 +309,6 @@ public final class HashArrayU1D extends HashArrayU {
 			"\noldArray:"+Arrays.toString(oldk[0])+
 			"\nnewArray:"+Arrays.toString(arrays[0])
 			) : "");
-		
-		sizeLimit=(long)(maxLoadFactor*prime);
 	}
 	
 	@Deprecated

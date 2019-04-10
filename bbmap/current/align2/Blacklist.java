@@ -2,9 +2,8 @@ package align2;
 
 import java.util.HashSet;
 
-import stream.Read;
-
 import fileIO.TextFile;
+import stream.Read;
 
 /**
  * @author Brian Bushnell
@@ -58,7 +57,7 @@ public class Blacklist {
 			if(whitelist==null){whitelist=new HashSet<String>(4001);}
 			set=whitelist;
 		}
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		String line=tf.nextLine();
 		if(line==null){return 0;}
 		final boolean fasta=(line.charAt(0)=='>');

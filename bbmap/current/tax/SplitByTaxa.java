@@ -3,23 +3,23 @@ package tax;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * Filters sequences according to their taxonomy,
@@ -42,8 +42,11 @@ public class SplitByTaxa {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		SplitByTaxa as=new SplitByTaxa(args);
-		as.process(t);
+		SplitByTaxa x=new SplitByTaxa(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -52,30 +55,22 @@ public class SplitByTaxa {
 	 */
 	public SplitByTaxa(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether interleaved was explicitly set.
-		
-		//Set some shared static variables regarding PIGZ
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
+		//Set some shared static variables
 		Shared.capBuffers(4);
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.USE_PIGZ=false;
 		ReadWrite.USE_GZIP=false;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 
-		String tableFile=null;
-		String treeFile=null;
+		boolean setInterleaved=false; //Whether interleaved was explicitly set.
+		String giTableFile=null;
+		String taxTreeFile=null;
 		
 		//Create a parser object
 		Parser parser=new Parser();
@@ -88,28 +83,26 @@ public class SplitByTaxa {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(parser.parse(arg, a, b)){//Parse standard flags in the parser
 				//do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("taxlevel") || a.equals("level")){
-				taxLevel=Integer.parseInt(b);
+				taxLevelE=TaxTree.parseLevelExtended(b);
 			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
-				tableFile=b;
-				if("auto".equalsIgnoreCase(b)){tableFile=TaxTree.defaultTableFile();}
+				giTableFile=b;
 			}else if(a.equals("tree") || a.equals("taxtree")){
-				treeFile=b;
-				if("auto".equalsIgnoreCase(b)){treeFile=TaxTree.defaultTreeFile();}
+				taxTreeFile=b;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		
+		if("auto".equalsIgnoreCase(taxTreeFile)){taxTreeFile=TaxTree.defaultTreeFile();}
+		if("auto".equalsIgnoreCase(giTableFile)){giTableFile=TaxTree.defaultTableFile();}
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -144,6 +137,7 @@ public class SplitByTaxa {
 		
 		assert(out1==null || out1.contains("%")) : "Output filename must contain % symbol.";
 		assert(out2==null || out2.contains("%")) : "Output filename must contain % symbol.";
+		assert(taxTreeFile!=null) : "This requires a taxtree file.  On NERSC systems, set tree=auto.";
 		
 		//Adjust interleaved detection based on the number of input files
 		if(in2!=null){
@@ -154,10 +148,7 @@ public class SplitByTaxa {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -165,12 +156,7 @@ public class SplitByTaxa {
 		}
 		
 		//Ensure out2 is not set without out1
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		//Adjust interleaved settings based on number of output files
 		if(!setInterleaved){
@@ -195,7 +181,7 @@ public class SplitByTaxa {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure that no file was specified multiple times
@@ -207,8 +193,8 @@ public class SplitByTaxa {
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 		
-		TaxFilter.loadGiTable(tableFile);
-		tree=TaxFilter.loadTree(treeFile);
+		TaxFilter.loadGiTable(giTableFile);
+		tree=TaxFilter.loadTree(taxTreeFile);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -249,28 +235,10 @@ public class SplitByTaxa {
 		}
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			outstream.println("Reads In:               \t"+readsProcessed+" reads       \t"+basesProcessed+" bases");
-			outstream.println();
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
+		t.stop();
+		outstream.println("Reads In:               \t"+readsProcessed+" reads       \t"+basesProcessed+" bases");
+		outstream.println();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
@@ -294,7 +262,7 @@ public class SplitByTaxa {
 			}
 			
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				//Loop through each read in the list
@@ -306,21 +274,21 @@ public class SplitByTaxa {
 					final int initialLength2=(r1.mateLength());
 					
 					//Increment counters
-					readsProcessed+=1+r1.mateCount();
+					readsProcessed+=r1.pairCount();
 					basesProcessed+=initialLength1+initialLength2;
 					
-					TaxNode tn=tree.getNode(r1.id);
+					TaxNode tn=tree.parseNodeFromHeader(r1.id, true);
 					if(tn==null){tn=tree.getNodeByName(r1.id);}
 					if(tn==null){tn=unknown;}
-					while(tn.level<taxLevel && tn.id!=tn.pid){tn=tree.getNode(tn.pid);}
+					while(tn.levelExtended<taxLevelE && tn.id!=tn.pid){tn=tree.getNode(tn.pid);}
 					
 					if(out1!=null){
 						ConcurrentReadOutputStream ros=map.get(tn.name);
 						if(ros==null){
 							final int buff=4;
 							FileFormat ffout1=null, ffout2=null;
-							ffout1=FileFormat.testOutput(out1.replaceFirst("%", tn.name.replaceAll("\\s+", "_").replaceAll("[/\\\\]", "")), FileFormat.FASTQ, extout, false, overwrite, append, ordered);
-							if(out2!=null){ffout2=FileFormat.testOutput(out2.replaceFirst("%", tn.name.replaceAll("\\s+", "_").replaceAll("[/\\\\]", "")), FileFormat.FASTQ, extout, false, overwrite, append, ordered);}
+							ffout1=FileFormat.testOutput(out1.replaceFirst("%", tn.name.replaceAll("\\s+", "_").replaceAll("[/\\\\]", "")), FileFormat.FASTQ, extout, false, overwrite, append, false);
+							if(out2!=null){ffout2=FileFormat.testOutput(out2.replaceFirst("%", tn.name.replaceAll("\\s+", "_").replaceAll("[/\\\\]", "")), FileFormat.FASTQ, extout, false, overwrite, append, false);}
 							ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, null, null, buff, null, false);
 							ros.start(); //Start the stream
 							map.put(tn.name, ros);
@@ -332,7 +300,7 @@ public class SplitByTaxa {
 				}
 				
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				
 				//Fetch a new list
@@ -354,11 +322,6 @@ public class SplitByTaxa {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
@@ -379,7 +342,7 @@ public class SplitByTaxa {
 	private String extout=null;
 	
 	/** The actual filter */
-	private int taxLevel=TaxTree.stringToLevel("phylum");
+	private int taxLevelE=TaxTree.stringToLevelExtended("phylum");
 	
 	/*--------------------------------------------------------------*/
 
@@ -402,7 +365,7 @@ public class SplitByTaxa {
 	
 	private final TaxTree tree;
 	
-	private final TaxNode unknown=new TaxNode(-99, -99, taxLevel, "UNKNOWN");
+	private final TaxNode unknown=new TaxNode(-99, -99, TaxTree.LIFE, TaxTree.LIFE_E, "UNKNOWN");
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Common Fields         ----------------*/

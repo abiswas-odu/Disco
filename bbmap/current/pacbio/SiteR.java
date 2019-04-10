@@ -1,8 +1,8 @@
 package pacbio;
 
+import shared.Shared;
 import stream.SiteScore;
 import stream.SiteScoreR;
-import dna.Gene;
 
 /**
  * @author Brian Bushnell
@@ -23,7 +23,7 @@ public class SiteR {
 		}else{
 			idPairnum=-numericID;
 		}
-		if(strand==Gene.PLUS){
+		if(strand==Shared.PLUS){
 			chromStrand=chrom;
 		}else{
 			chromStrand=-chrom;
@@ -68,6 +68,7 @@ public class SiteR {
 		return sb;
 	}
 	
+	@Override
 	public String toString(){
 		return toText().toString();
 	}

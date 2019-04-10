@@ -14,7 +14,7 @@ public class CollateSpikeIn {
 
 		System.out.println("jobID\t%Control (BBMap)\t%Accuracy (BBMap)");
 		
-		TextFile tf=new TextFile(args[0], false, false);
+		TextFile tf=new TextFile(args[0], false);
 		String file=null, mapped=null, acc=null;
 		String line=tf.nextLine();
 		while(line!=null){

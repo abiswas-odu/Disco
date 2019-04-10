@@ -22,6 +22,7 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 		
 	}
 	
+	@Override
 	public synchronized ListNum<Read> nextList() {
 		ArrayList<Read> list=null;
 		if(verbose){System.err.println("**************** nextList() was called; shutdown="+shutdown+", depot.full="+depot.full.size());}
@@ -45,6 +46,7 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 		return ln;
 	}
 	
+	@Override
 	public void returnList(long listNumber, boolean poison){
 		if(poison){
 			if(verbose){System.err.println("crisC:    A: Adding empty list to full.");}
@@ -176,7 +178,7 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 	public synchronized void restart(){
 		shutdown=false;
 		depot=new ConcurrentDepot<Read>(BUF_LEN, NUM_BUFFS);
-		generated=0;	
+		generated=0;
 		basesIn=0;
 		readsIn=0;
 		nextProgress=PROGRESS_INCR;
@@ -272,7 +274,9 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 		}
 	}
 	
+	@Override
 	public long basesIn(){return basesIn;}
+	@Override
 	public long readsIn(){return readsIn;}
 	
 	@Override
@@ -285,6 +289,7 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 	
 	private Thread[] threads;
 	
+	@Override
 	public Object[] producers(){return new Object[] {producer1, producer2};}
 	
 	public final List<Read> producer1;
@@ -302,8 +307,5 @@ public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStre
 	public static boolean verbose=false;
 	
 	private static final ArrayList<Read> poison=new ArrayList<Read>(0);
-
-	public static boolean SHOW_PROGRESS=false;
-	public static long PROGRESS_INCR=1000000;
 	
 }

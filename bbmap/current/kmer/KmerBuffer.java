@@ -1,6 +1,6 @@
 package kmer;
 
-import stream.ByteBuilder;
+import structures.ByteBuilder;
 import structures.IntList;
 import structures.LongList;
 
@@ -20,6 +20,14 @@ public class KmerBuffer {
 	public int add(long kmer){
 		assert(values==null);
 		kmers.add(kmer);
+		assert(values==null);
+		return kmers.size;
+	}
+	
+	public int addMulti(long kmer, int times){
+		assert(values==null);
+		for(int i=0; i<times; i++){kmers.add(kmer);}
+		assert(values==null);
 		return kmers.size;
 	}
 	
@@ -38,6 +46,7 @@ public class KmerBuffer {
 	//Returns raw size of kmers array, rather than actual number of kmers
 	final int size(){return kmers.size;}
 	
+	@Override
 	public String toString(){
 		ByteBuilder bb=new ByteBuilder();
 		for(int i=0; i<kmers.size; i++){

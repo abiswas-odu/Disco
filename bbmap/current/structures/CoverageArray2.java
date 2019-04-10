@@ -1,17 +1,15 @@
 package structures;
-import java.io.Serializable;
+import java.util.Locale;
 
 import dna.Data;
-import dna.Gene;
-import stream.KillSwitch;
-
 import driver.Translator2;
-
 import fileIO.ReadWrite;
+import shared.KillSwitch;
+import shared.Shared;
 import shared.Timer;
 
 
-public class CoverageArray2 extends CoverageArray implements Serializable {
+public class CoverageArray2 extends CoverageArray {
 	
 	/**
 	 * 
@@ -45,7 +43,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		}
 		
 		System.out.println("minIndex="+ca.minIndex+", maxIndex="+ca.maxIndex+", length="+ca.array.length+
-				"; time="+String.format("%.3f seconds", (time2-time1)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time2-time1)/1000000000d));
 
 		long time3=System.nanoTime();
 		ReadWrite.write(ca, outfile, false);
@@ -55,7 +53,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		long time4=System.nanoTime();
 		
 		System.out.println("minIndex="+ca.minIndex+", maxIndex="+ca.maxIndex+", length="+ca.array.length+
-				"; time="+String.format("%.3f seconds", (time4-time3)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time4-time3)/1000000000d));
 		
 		
 	}
@@ -89,7 +87,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 			out[chrom]=new CoverageArray2(chrom, 500);
 		}
 		
-		final byte PLUS=Gene.PLUS;
+		final byte PLUS=Shared.PLUS;
 		
 		for(int chrom=1; chrom<=25; chrom++){
 			String infile=root+"coverage-chr"+chrom+"-build"+inBuild+".ca.zip";
@@ -120,7 +118,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 //	public CoverageArray2(){
 //		this((int)-1);
 //	}
-//	
+//
 //	public CoverageArray2(int chrom){
 //		this(chrom, 1<<24);
 //	}
@@ -134,6 +132,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 	 * @param loc
 	 * @param amt
 	 */
+	@Override
 	public void increment(int loc, int amt) {
 		set(loc, get(loc)+amt);
 	}
@@ -141,10 +140,17 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 	/**
 	 * @param loc
 	 */
+	@Override
 	public void increment(int loc) {
 		set(loc, get(loc)+1);
 	}
 
+	@Override
+	public synchronized void incrementRangeSynchronized(int min, int max, int amt) {
+		incrementRange(min, max, amt);
+	}
+
+	@Override
 	public void incrementRange(int min, int max, int amt) {
 		if(min<0){min=0;}
 		if(max>=array.length){//Increase size
@@ -158,7 +164,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 			if(val>Character.MAX_VALUE){
 				val=Character.MAX_VALUE;
 				 if(!OVERFLOWED){
-					 System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE));
+					 System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE)+"; please use the flag 32bit for higher values.");
 					 OVERFLOWED=true;
 				 }
 			}
@@ -169,6 +175,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 	}
 	
 	
+	@Override
 	public void set(int loc, int val){
 		
 		if(loc>=array.length){//Increase size
@@ -183,7 +190,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		}
 		
 		if(val>Character.MAX_VALUE && !OVERFLOWED){
-			System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE));
+			System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE)+"; please use the flag 32bit for higher values.");
 			OVERFLOWED=true;
 		}
 		array[loc]=(val>Character.MAX_VALUE ? Character.MAX_VALUE : (char)val);
@@ -191,10 +198,12 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		maxIndex=max(loc, maxIndex);
 	}
 	
+	@Override
 	public int get(int loc){
 		return loc>=array.length || loc<0 ? 0 : array[loc];
 	}
 	
+	@Override
 	public void resize(int newlen){
 //		System.err.println("Resized CoverageArray "+chromosome+" to "+newlen);
 		char[] temp=KillSwitch.allocChar1D(newlen);
@@ -206,6 +215,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		array=temp;
 	}
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
@@ -218,7 +228,9 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 	}
 	
 	public char[] array;
+	@Override
 	public int length(){return maxIndex-minIndex+1;}
+	@Override
 	public int arrayLength(){return array.length;}
 	
 	private static boolean OVERFLOWED=false;

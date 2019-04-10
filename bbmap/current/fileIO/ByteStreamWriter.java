@@ -1,18 +1,22 @@
 package fileIO;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import assemble.Contig;
+import dna.AminoAcid;
+import dna.Data;
 import kmer.AbstractKmerTable;
 import shared.Shared;
 import shared.Timer;
-import stream.ByteBuilder;
+import shared.Tools;
 import stream.Read;
+import structures.ByteBuilder;
 import ukmer.AbstractKmerTableU;
-
-import dna.AminoAcid;
-import dna.Data;
 
 
 
@@ -44,7 +48,7 @@ public class ByteStreamWriter extends Thread {
 		}
 		bsw.poisonAndWait();
 		t.stop();
-		System.err.println("MB/s: \t"+String.format("%.2f", ((alen*iters)/(t.elapsed/1000.0))));
+		System.err.println("MB/s: \t"+String.format(Locale.ROOT, "%.2f", ((alen*iters)/(t.elapsed/1000.0))));
 		System.err.println("Time: \t"+t);
 	}
 	
@@ -53,7 +57,7 @@ public class ByteStreamWriter extends Thread {
 	}
 	
 	public ByteStreamWriter(String fname_, boolean overwrite_, boolean append_, boolean allowSubprocess_, int format){
-		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, append_, true));
+		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, append_, false));
 	}
 	
 	public ByteStreamWriter(FileFormat ff){
@@ -71,25 +75,44 @@ public class ByteStreamWriter extends Thread {
 		overwrite=ff.overwrite();
 		append=ff.append();
 		allowSubprocess=ff.allowSubprocess();
+		ordered=ff.ordered();
 		assert(!(overwrite&append));
-		assert(ff.canWrite()) : "File "+fname+" exists and overwrite=="+overwrite;
+		assert(ff.canWrite()) : "File "+fname+" exists "+(new File(ff.name()).canWrite() ? 
+				("and overwrite="+overwrite+".\nPlease add the flag ow to overwrite the file.\n") : 
+					"and is read-only.");
 		if(append && !(ff.raw() || ff.gzip())){throw new RuntimeException("Can't append to compressed files.");}
 		
-		if(!BAM || !Data.SAMTOOLS() || !Data.SH()){
+		if(!BAM || !(Data.SAMTOOLS() /*|| Data.SAMBAMBA()*/) /*|| !Data.SH()*/){
 			outstream=ReadWrite.getOutputStream(fname, append, true, allowSubprocess);
 		}else{
-			outstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true, true);
+			if(Data.SAMTOOLS()){
+				outstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true, true);
+			}else{
+				outstream=ReadWrite.getOutputStreamFromProcess(fname, "sambamba view -S -f bam -h ", true, append, true, true); //Sambamba does not support stdin
+			}
 		}
 		
 		queue=new ArrayBlockingQueue<ByteBuilder>(5);
-		buffer=new ByteBuilder(initialLen);
+		if(ordered){
+			buffer=null;
+			map=new HashMap<Long, ByteBuilder>(MAX_CAPACITY);
+		}else{
+			buffer=new ByteBuilder(initialLen);
+			map=null;
+		}
 	}
 	
+	public static ByteStreamWriter makeBSW(FileFormat ff){
+		if(ff==null){return null;}
+		ByteStreamWriter bsw=new ByteStreamWriter(ff);
+		bsw.start();
+		return bsw;
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Primary Method        ----------------*/
 	/*--------------------------------------------------------------*/
-	
+
 	
 	@Override
 	public void run() {
@@ -100,10 +123,23 @@ public class ByteStreamWriter extends Thread {
 			started=true;
 			this.notify();
 		}
-		
-		ByteBuilder job=null;
 
 		if(verbose){System.err.println("waiting for jobs");}
+		
+		processJobs();
+		
+		if(verbose){System.err.println("null/poison job");}
+//		assert(false);
+		open=false;
+		ReadWrite.finishWriting(null, outstream, fname, allowSubprocess);
+		if(verbose){System.err.println("finish writing");}
+		synchronized(this){notifyAll();}
+		if(verbose){System.err.println("done");}
+	}
+	
+	public void processJobs() {
+		
+		ByteBuilder job=null;
 		while(job==null){
 			try {
 				job=queue.take();
@@ -135,15 +171,7 @@ public class ByteStreamWriter extends Thread {
 				}
 			}
 		}
-		if(verbose){System.err.println("null/poison job");}
-//		assert(false);
-		open=false;
-		ReadWrite.finishWriting(null, outstream, fname, allowSubprocess);
-		if(verbose){System.err.println("finish writing");}
-		synchronized(this){notifyAll();}
-		if(verbose){System.err.println("done");}
 	}
-	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------      Control and Helpers     ----------------*/
@@ -151,7 +179,7 @@ public class ByteStreamWriter extends Thread {
 	
 	
 	@Override
-	public void start(){
+	public synchronized void start(){
 		super.start();
 		if(verbose){System.err.println(this.getState());}
 		synchronized(this){
@@ -179,7 +207,12 @@ public class ByteStreamWriter extends Thread {
 		}
 		
 		if(!open){return;}
-		addJob(buffer);
+		
+		if(ordered){
+			addOrdered(POISON2, maxJobID+1);
+		}else{
+			if(buffer!=null){addJob(buffer);}
+		}
 		buffer=null;
 //		System.err.println("Poisoned!");
 //		assert(false);
@@ -235,6 +268,10 @@ public class ByteStreamWriter extends Thread {
 		}
 	}
 	
+	public final void forceFlushBuffer(){
+		flushBuffer(true);
+	}
+	
 	/** Called after every write to the buffer */
 	private final void flushBuffer(boolean force){
 		final int x=buffer.length();
@@ -246,9 +283,100 @@ public class ByteStreamWriter extends Thread {
 	
 	
 	/*--------------------------------------------------------------*/
-	/*----------------            Print             ----------------*/
+	/*----------------           Ordering           ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public synchronized void add(ByteBuilder job, long jobID){
+		
+		if(ordered){
+			int size=map.size();
+//			System.err.print(size+", ");
+//			System.err.println("A.Adding job "+jobID+"; next="+nextJobID+"; max="+maxJobID+", map="+map.keySet());
+			final boolean flag=(size>=HALF_LIMIT);
+			if(jobID>nextJobID && size>=ADD_LIMIT){
+//				if(printBufferNotification){
+//					System.err.println("Output buffer became full; key "+jobID+" waiting on "+nextJobID+".");
+//					printBufferNotification=false;
+//				}
+				while(jobID>nextJobID && size>=HALF_LIMIT){
+					try {
+						this.wait(2000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					size=map.size();
+				}
+//				if(printBufferNotification){
+//					System.err.println("Output buffer became clear for key "+jobID+"; next="+nextJobID+", size="+size);
+//				}
+			}
+//			System.err.println("B.Adding ordered job "+jobID+"; next="+nextJobID+"; max="+maxJobID);
+			addOrdered(job, jobID);
+			assert(jobID!=nextJobID);
+			if(flag && jobID<nextJobID){this.notifyAll();}
+		}else{
+			addDisordered(job);
+		}
+	}
+	
+	private synchronized void addOrdered(ByteBuilder job, long jobID){
+//		System.err.println("addOrdered "+jobID+"; nextJobID="+nextJobID);
+//		assert(false);
+		assert(ordered);
+		assert(job!=null) : jobID;
+		assert(jobID>=nextJobID) : jobID+", "+nextJobID;
+		maxJobID=Tools.max(maxJobID, jobID);
+		ByteBuilder old=map.put(jobID, job);
+		assert(old==null);
+//		System.err.println("C.Adding ordered job "+jobID+"; next="+nextJobID+"; max="+maxJobID+", map="+map.keySet());
+		
+		if(jobID==nextJobID){
+			do{
+				ByteBuilder value=map.remove(nextJobID);
+				//			System.err.println("Removing and queueing "+nextJobID+": "+value.toString());
+				addJob(value);
+				nextJobID++;
+				//			System.err.println("D.nextJobID="+nextJobID);
+			}while(map.containsKey(nextJobID));
+			
+			if(map.isEmpty()){notifyAll();}
+		}else{
+			assert(!map.containsKey(nextJobID));
+		}
+	}
+	
+	private synchronized void addDisordered(ByteBuilder job){
+		assert(!ordered);
+		assert(buffer==null || buffer.isEmpty());
+		addJob(job);
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Print             ----------------*/
+	/*--------------------------------------------------------------*/
+
+	/** 
+	 * Skip the  buffers and print directly.
+	 * Mainly for headers with ordered streams.
+	 * @param s String to print.
+	 */
+	public void forcePrint(String s){
+		forcePrint(s.getBytes());
+	}
+	
+	/** 
+	 * Skip the  buffers and print directly.
+	 * Mainly for headers with ordered streams.
+	 * @param b Data to print.
+	 */
+	public void forcePrint(byte[] b){
+		try {
+			outstream.write(b, 0, b.length);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	
 	@Deprecated
 	/** Avoid using this if possible. */
@@ -277,103 +405,125 @@ public class ByteStreamWriter extends Thread {
 		flushBuffer(false);
 	}
 	
-	public void print(int x){
+	public ByteStreamWriter print(int x){
 		if(verbose){System.err.println("Added line '"+(x)+"'");}
 		assert(open) : x;
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(long x){
+	public ByteStreamWriter print(long x){
 		if(verbose){System.err.println("Added line '"+(x)+"'");}
 		assert(open) : x;
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(float x){
+	public ByteStreamWriter print(float x){
 		if(verbose){System.err.println("Added line '"+(x)+"'");}
 		assert(open) : x;
-		buffer.append(x);
+		buffer.appendSlow(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(double x){
+	public ByteStreamWriter print(double x){
 		if(verbose){System.err.println("Added line '"+(x)+"'");}
 		assert(open) : x;
-		buffer.append(x);
+		buffer.appendSlow(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(byte x){
+	public ByteStreamWriter print(byte x){
 		if(verbose){System.err.println("Added line '"+((char)x)+"'");}
 		assert(open) : ((char)x);
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(char x){
+	public ByteStreamWriter print(char x){
 		if(verbose){System.err.println("Added line '"+(x)+"'");}
 		assert(open) : (x);
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(byte[] x){
+	public ByteStreamWriter print(byte[] x){
 		if(verbose){System.err.println("Added line '"+new String(x)+"'");}
 		assert(open) : new String(x);
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(char[] x){
+	public ByteStreamWriter print(char[] x){
 		if(verbose){System.err.println("Added line '"+new String(x)+"'");}
 		assert(open) : new String(x);
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(ByteBuilder x){
+	public ByteStreamWriter print(ByteBuilder x){
 		if(verbose){System.err.println("Added line '"+x+"'");}
 		assert(open) : x;
 		buffer.append(x);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void print(ByteBuilder x, boolean destroy){
+	public ByteStreamWriter print(ByteBuilder x, boolean destroy){
 		if(!destroy || buffer.length()>0){print(x);}
 		else{
 			if(verbose){System.err.println("Added line '"+x+"'");}
 			assert(open) : x;
 			addJob(x);
 		}
+		return this;
 	}
 	
-	public void print(Read r){
+	public ByteStreamWriter print(Read r){
 		assert(!OTHER);
-		ByteBuilder x=(FASTQ ? r.toFastq(buffer) : FASTA ? r.toFasta(FASTA_WRAP, buffer) : SAM ? r.toSam(buffer) : 
-			SITES ? r.toSitesB(buffer) : INFO ? r.toInfoB(buffer) : r.toText(true, buffer));
+		ByteBuilder x=(FASTQ ? r.toFastq(buffer) : FASTA ? r.toFasta(FASTA_WRAP, buffer) : SAM ? r.toSam(buffer) :
+			SITES ? r.toSites(buffer) : INFO ? r.toInfo(buffer) : r.toText(true, buffer));
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void printKmer(long kmer, int count, int k){
+	public ByteStreamWriter print(Contig c){
+		assert(!OTHER);
+		c.toFasta(FASTA_WRAP, buffer);
+		flushBuffer(false);
+		return this;
+	}
+	
+	public ByteStreamWriter printKmer(long kmer, int count, int k){
 		AbstractKmerTable.toBytes(kmer, count, k, buffer);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void printKmer(long kmer, int[] values, int k){
+	public ByteStreamWriter printKmer(long kmer, int[] values, int k){
 		AbstractKmerTable.toBytes(kmer, values, k, buffer);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void printKmer(long[] array, int count, int k){
+	public ByteStreamWriter printKmer(long[] array, int count, int k){
 		AbstractKmerTableU.toBytes(array, count, k, buffer);
 		flushBuffer(false);
+		return this;
 	}
 	
-	public void printKmer(long[] array, int[] values, int k){
+	public ByteStreamWriter printKmer(long[] array, int[] values, int k){
 		AbstractKmerTableU.toBytes(array, values, k, buffer);
 		flushBuffer(false);
+		return this;
 	}
 	
 	
@@ -403,6 +553,7 @@ public class ByteStreamWriter extends Thread {
 	public void printlnKmer(long[] array, int count, int k){printKmer(array, count, k); print('\n');}
 	public void printlnKmer(long[] array, int[] values, int k){printKmer(array, values, k); print('\n');}
 	public void println(Read r){print(r); print('\n');}
+	public void println(Contig c){print(c); print('\n');}
 
 	
 	public void println(Read r, boolean paired){
@@ -422,8 +573,15 @@ public class ByteStreamWriter extends Thread {
 	public final boolean append;
 	public final boolean allowSubprocess;
 	public final String fname;
+	public final boolean ordered;
 	private final OutputStream outstream;
 	private final ArrayBlockingQueue<ByteBuilder> queue;
+	
+	/** For ordered output */
+	private final HashMap<Long, ByteBuilder> map;
+	private long nextJobID=0;
+	private long maxJobID=-1;
+	
 	private boolean open=true;
 	private volatile boolean started=false;
 	
@@ -449,5 +607,9 @@ public class ByteStreamWriter extends Thread {
 	private static final ByteBuilder POISON2=new ByteBuilder(1);
 	
 	public static boolean verbose=false;
+	/** Number of lists held before the stream blocks */
+	private final int MAX_CAPACITY=256;
+	private final int ADD_LIMIT=MAX_CAPACITY/2;
+	private final int HALF_LIMIT=ADD_LIMIT/4;
 	
 }

@@ -11,8 +11,8 @@ public class LongM implements Comparable<LongM> {
 	public LongM(long v){value=v;}
 
 	/**
-	 * @param key
-	 * @param b
+	 * @param v Value
+	 * @param mut Mutable
 	 */
 	public LongM(long v, boolean mut) {
 		value=v;
@@ -53,6 +53,7 @@ public class LongM implements Comparable<LongM> {
 	public boolean equals(Object b){
 		return equals((LongM)b);
 	}
+	@Override
 	public String toString(){return Long.toString(value);}
 	public String toHexString(){return Long.toHexString(value);}
 	public String toBinaryString(){return Long.toBinaryString(value);}

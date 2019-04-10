@@ -3,13 +3,14 @@ package kmer;
 import java.io.PrintStream;
 import java.util.BitSet;
 
+import dna.AminoAcid;
 import jgi.Dedupe;
+import shared.PreParser;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import stream.Read;
 import structures.IntList;
-import dna.AminoAcid;
-import dna.Parser;
 
 /**
  * @author Brian Bushnell
@@ -27,16 +28,16 @@ public class TableReader {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			assert(false) : "TODO";
-			System.exit(0);
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, null, false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
 		Timer t=new Timer();
 		
-		AbstractKmerTable[] tables=TableLoaderLockFree.makeTables(AbstractKmerTable.ARRAY1D, 128000, true);
+		AbstractKmerTable[] tables=TableLoaderLockFree.makeTables(AbstractKmerTable.ARRAY1D, 12, -1L, false, 1.0);
 		
 		int k=31;
 		int mink=0;
@@ -61,17 +62,20 @@ public class TableReader {
 		long kmers=loader.processData(refs, literals, keepNames, useRefNames, false);
 		t.stop();
 
-		System.err.println("Load Time:\t"+t);
-		System.err.println("Return:   \t"+kmers);
-		System.err.println("refKmers: \t"+loader.refKmers);
-		System.err.println("refBases: \t"+loader.refBases);
-		System.err.println("refReads: \t"+loader.refReads);
+		outstream.println("Load Time:\t"+t);
+		outstream.println("Return:   \t"+kmers);
+		outstream.println("refKmers: \t"+loader.refKmers);
+		outstream.println("refBases: \t"+loader.refBases);
+		outstream.println("refReads: \t"+loader.refReads);
 		
 		int qskip=0;
 		int qhdist=0;
 		TableReader tr=new TableReader(k, mink, speed, qskip, qhdist, rcomp, maskMiddle);
 		
 		//TODO: Stuff...
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	public TableReader(int k_){
@@ -107,10 +111,10 @@ public class TableReader {
 	 */
 	public final int kMask(final Read r, final AbstractKmerTable[] sets){
 		if(r==null){return 0;}
-		if(verbose){System.err.println("KMasking read "+r.id);}
+		if(verbose){outstream.println("KMasking read "+r.id);}
 		
 		BitSet bs=markBits(r, sets);
-		if(verbose){System.err.println("Null bitset.");}
+		if(verbose){outstream.println("Null bitset.");}
 		if(bs==null){return 0;}
 
 		final byte[] bases=r.bases, quals=r.quality;
@@ -121,7 +125,7 @@ public class TableReader {
 		for(int i=0; i<bases.length; i++){
 			if(bs.get(i)){
 				if(kmaskLowercase){
-					bases[i]=(byte)Character.toLowerCase(bases[i]);
+					bases[i]=(byte)Tools.toLowerCase(bases[i]);
 				}else{
 					bases[i]=trimSymbol;
 					if(quals!=null && trimSymbol=='N'){quals[i]=0;}
@@ -146,7 +150,7 @@ public class TableReader {
 		final int minlen2=(maskMiddle ? k/2 : k);
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		long kmer=0;
 		long rkmer=0;
 		int found=0;
@@ -158,17 +162,17 @@ public class TableReader {
 		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
 		for(int i=start; i<stop; i++){
 			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
+			long x=AminoAcid.baseToNumber0[b];
+			long x2=AminoAcid.baseToComplementNumber0[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			if(b=='N' && forbidNs){len=0; rkmer=0;}else{len++;}
+			if(verbose){outstream.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 			if(len>=minlen2 && i>=minlen){
 				final int id=getValue(kmer, rkmer, k, qHammingDistance, i, sets);
-				if(verbose){System.err.println("Testing kmer "+kmer+"; id="+id);}
+				if(verbose){outstream.println("Testing kmer "+kmer+"; id="+id);}
 				if(id>0){
-					if(verbose){System.err.println("Found = "+(found+1)+"/"+minHits);}
+					if(verbose){outstream.println("Found = "+(found+1)+"/"+minHits);}
 					if(found>=minHits){
 						return (found=found+1); //Early exit
 					}
@@ -195,7 +199,7 @@ public class TableReader {
 		final int minlen2=(maskMiddle ? k/2 : k);
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		long kmer=0;
 		long rkmer=0;
 		int len=0;
@@ -207,19 +211,19 @@ public class TableReader {
 		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
 		for(int i=start; i<stop; i++){
 			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
+			long x=AminoAcid.baseToNumber0[b];
+			long x2=AminoAcid.baseToComplementNumber0[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			if(b=='N' && forbidNs){len=0; rkmer=0;}else{len++;}
+			if(verbose){outstream.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 			if(len>=minlen2 && i>=minlen){
 				final int id=getValue(kmer, rkmer, k, qHammingDistance, i, sets);
 				if(id>0){
 					countArray[id]++;
 					if(countArray[id]==1){idList.add(id);}
 					found++;
-					if(verbose){System.err.println("Found = "+found+"/"+minHits);}
+					if(verbose){outstream.println("Found = "+found+"/"+minHits);}
 				}
 			}
 		}
@@ -251,27 +255,27 @@ public class TableReader {
 	 */
 	public final BitSet markBits(final Read r, final AbstractKmerTable[] sets){
 		if(r==null || r.length()<Tools.max(1, (useShortKmers ? Tools.min(k, mink) : k))){
-			if(verbose){System.err.println("Read too short.");}
+			if(verbose){outstream.println("Read too short.");}
 			return null;
 		}
 		if((skipR1 && r.pairnum()==0) || (skipR2 && r.pairnum()==1)){
-			if(verbose){System.err.println("Skipping read.");}
+			if(verbose){outstream.println("Skipping read.");}
 			return null;
 		}
-		if(verbose){System.err.println("Marking bitset for read "+r.id);}
+		if(verbose){outstream.println("Marking bitset for read "+r.id);}
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		long kmer=0;
 		long rkmer=0;
 		int found=0;
 		int len=0;
 		int id0=-1; //ID of first kmer found.
 		
-		BitSet bs=new BitSet(bases.length+trimPad+1); 
+		BitSet bs=new BitSet(bases.length+trimPad+1);
 		
 		final int minus=k-1-trimPad;
 		final int plus=trimPad+1;
@@ -282,20 +286,20 @@ public class TableReader {
 		//Scan for normal kmers
 		for(int i=start; i<stop; i++){
 			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
+			long x=AminoAcid.baseToNumber0[b];
+			long x2=AminoAcid.baseToComplementNumber0[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			if(b=='N' && forbidNs){len=0; rkmer=0;}else{len++;}
+			if(verbose){outstream.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 			if(len>=minlen2 && i>=minlen){
 				final int id=getValue(kmer, rkmer, k, qHammingDistance, i, sets);
 				if(id>0){
 					if(id0<0){id0=id;}
 					if(verbose){
-						System.err.println("a: Found "+kmer);
-						System.err.println("Setting "+Tools.max(0, i-minus)+", "+(i+plus));
-						System.err.println("i="+i+", minus="+minus+", plus="+plus+", trimpad="+trimPad+", k="+k);
+						outstream.println("a: Found "+kmer);
+						outstream.println("Setting "+Tools.max(0, i-minus)+", "+(i+plus));
+						outstream.println("i="+i+", minus="+minus+", plus="+plus+", trimpad="+trimPad+", k="+k);
 					}
 					bs.set(Tools.max(0, i-minus), i+plus);
 					found++;
@@ -320,19 +324,19 @@ public class TableReader {
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=rkmer|(x2<<(2*len));
 					len++;
-					if(verbose){System.err.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(verbose){outstream.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=mink){
 						
 						if(verbose){
-							System.err.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
-							System.err.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
+							outstream.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
+							outstream.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
 						}
 						final int id=getValue(kmer, rkmer, len, qHammingDistance2, i, sets);
 						if(id>0){
 							if(id0<0){id0=id;}
 							if(verbose){
-								System.err.println("b: Found "+kmer);
-								System.err.println("Setting "+0+", "+(i+plus));
+								outstream.println("b: Found "+kmer);
+								outstream.println("Setting "+0+", "+(i+plus));
 							}
 							bs.set(0, i+plus);
 							found++;
@@ -354,18 +358,18 @@ public class TableReader {
 					kmer=kmer|(x<<(2*len));
 					rkmer=((rkmer<<2)|x2)&mask;
 					len++;
-					if(verbose){System.err.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(verbose){outstream.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=mink){
 						if(verbose){
-							System.err.println("Looking for right kmer "+
+							outstream.println("Looking for right kmer "+
 									AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+"; value="+toValue(kmer, rkmer, lengthMasks[len])+"; kmask="+lengthMasks[len]);
 						}
 						final int id=getValue(kmer, rkmer, len, qHammingDistance2, i, sets);
 						if(id>0){
 							if(id0<0){id0=id;}
 							if(verbose){
-								System.err.println("c: Found "+kmer);
-								System.err.println("Setting "+Tools.max(0, i-trimPad)+", "+bases.length);
+								outstream.println("c: Found "+kmer);
+								outstream.println("Setting "+Tools.max(0, i-trimPad)+", "+bases.length);
 							}
 							bs.set(Tools.max(0, i-trimPad), bases.length);
 							found++;
@@ -376,7 +380,7 @@ public class TableReader {
 		}
 		
 		
-		if(verbose){System.err.println("found="+found+", bitset="+bs);}
+		if(verbose){outstream.println("found="+found+", bitset="+bs);}
 		
 		if(found==0){return null;}
 		assert(found>0) : "Overflow in 'found' variable.";
@@ -459,10 +463,13 @@ public class TableReader {
 	public final int getValueWithMask(final long kmer, final long rkmer, final long lengthMask, final AbstractKmerTable[] sets){
 		assert(lengthMask==0 || (kmer<lengthMask && rkmer<lengthMask)) : lengthMask+", "+kmer+", "+rkmer;
 		
-		final long max=(rcomp ? Tools.max(kmer, rkmer) : kmer);
-		final long key=(max&middleMask)|lengthMask;
+//		final long max=(rcomp ? Tools.max(kmer, rkmer) : kmer);
+//		final long key=(max&middleMask)|lengthMask;
+		
+		final long key=toValue(kmer, rkmer, lengthMask);
+		
 		if(noAccel || ((key/WAYS)&15)>=speed){
-			if(verbose){System.err.println("Testing key "+key);}
+			if(verbose){outstream.println("Testing key "+key);}
 			AbstractKmerTable set=sets[(int)(key%WAYS)];
 			final int id=set.getValue(key);
 			return id;
@@ -489,7 +496,7 @@ public class TableReader {
 	 * @param loose Counter array
 	 * @param packed Unique values
 	 * @param counts Counts of values
-	 * @return
+	 * @return Highest observed count
 	 */
 	public static int condenseLoose(int[] loose, IntList packed, IntList counts){
 		counts.size=0;
@@ -504,6 +511,12 @@ public class TableReader {
 			max=Tools.max(max, c);
 		}
 		return max;
+	}
+	
+	public final int kmerToWay(final long kmer){
+//		final int way=(int)((kmer&coreMask)%WAYS);
+//		return way;
+		return (int)(kmer%WAYS);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -529,7 +542,7 @@ public class TableReader {
 	/** If positive, only look for kmer matches the rightmost X bases */
 	public int restrictRight=0;
 	
-	/** Don't allow a read 'N' to match a reference 'A'.  
+	/** Don't allow a read 'N' to match a reference 'A'.
 	 * Reduces sensitivity when hdist>0 or edist>0.  Default: false. */
 	public boolean forbidNs=false;
 	
@@ -568,7 +581,7 @@ public class TableReader {
 	
 	/** Look for reverse-complements as well as forward kmers.  Default: true */
 	private final boolean rcomp;
-	/** AND bitmask with 0's at the middle base */ 
+	/** AND bitmask with 0's at the middle base */
 	private final long middleMask;
 	
 	/** Normal kmer length */
@@ -594,7 +607,7 @@ public class TableReader {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Number of tables (and threads, during loading) */ 
+	/** Number of tables (and threads, during loading) */
 	private static final int WAYS=7; //123
 	/** Verbose messages */
 	public static final boolean verbose=false; //123

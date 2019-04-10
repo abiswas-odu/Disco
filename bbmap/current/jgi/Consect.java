@@ -5,21 +5,22 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import dna.AminoAcid;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * Generates a consensus from multiple error correction results.
@@ -40,8 +41,11 @@ public class Consect {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		Consect as=new Consect(args);
-		as.process(t);
+		Consect x=new Consect(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -50,20 +54,13 @@ public class Consect {
 	 */
 	public Consect(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		//Set some shared static variables regarding PIGZ
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
+		//Set shared static variables
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -80,11 +77,9 @@ public class Consect {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(a.equals("in") || a.equals("in")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				in.clear();
 				String[] split2=b.split(",");
 				for(String s : split2){in.add(s);}
@@ -122,10 +117,7 @@ public class Consect {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in==null || in.size()<3){
-			printOptions();
-			throw new RuntimeException("\nError - at least three input files are required; one original and two error-corrected.");
-		}
+		if(in==null || in.size()<3){throw new RuntimeException("\nError - at least three input files are required; one original and two error-corrected.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -140,7 +132,7 @@ public class Consect {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in.toArray(new String[0]))){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure that no file was specified multiple times
@@ -149,7 +141,7 @@ public class Consect {
 		}
 		
 		//Create output FileFormat objects
-		ffout=FileFormat.testOutput(out, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
+		ffout=FileFormat.testOutput(out, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		//Create input FileFormat objects
 		ffin=new FileFormat[in.size()];
@@ -217,21 +209,7 @@ public class Consect {
 			outstream.println("Reads Error Free:         \t"+readsErrorFree);
 			outstream.println();
 			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		}
 		
 		//Throw an exception of there was an error in a thread
@@ -354,7 +332,7 @@ public class Consect {
 				
 //				if(tooShort>0){
 //					if(maxIndex!=x0){localDisagreements++;}
-//				}else 
+//				}else
 				
 				if(max==sum && tooShort==0){
 					if(maxIndex!=x0){localCorrections++;}
@@ -392,11 +370,6 @@ public class Consect {
 		}
 		
 		return localCorrections;
-	}
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
 	}
 	
 	/*--------------------------------------------------------------*/

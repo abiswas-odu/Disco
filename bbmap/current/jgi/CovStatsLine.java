@@ -2,6 +2,7 @@ package jgi;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Locale;
 
 import shared.Tools;
 
@@ -88,8 +89,9 @@ public class CovStatsLine {
 		underMin=underMin+csl.underMin;
 	}
 	
+	@Override
 	public String toString(){
-		return String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f", id, avgFold, length,
+		return String.format(Locale.ROOT, "%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f", id, avgFold, length,
 				refGC, coveredPercent(), coveredBases, plusReads, minusReads, median, underMin, readGC, stdDev);
 	}
 	

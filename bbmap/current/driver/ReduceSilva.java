@@ -2,23 +2,24 @@ package driver;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -37,8 +38,11 @@ public class ReduceSilva {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		ReduceSilva mb=new ReduceSilva(args);
-		mb.process(t);
+		ReduceSilva x=new ReduceSilva(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -47,20 +51,15 @@ public class ReduceSilva {
 	 */
 	public ReduceSilva(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		
 		Parser parser=new Parser();
@@ -69,8 +68,6 @@ public class ReduceSilva {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -105,10 +102,7 @@ public class ReduceSilva {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -195,11 +189,11 @@ public class ReduceSilva {
 		while(bostring.length()<digits){bostring=" "+bostring;}
 		
 		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
+		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 		outstream.println();
-		outstream.println("Reads Out:          "+rostring+" \t"+String.format("%.2f%%", readsOut*100.0/readsProcessed));
-		outstream.println("Bases Out:          "+bostring+" \t"+String.format("%.2f%%", basesOut*100.0/basesProcessed));
+		outstream.println("Reads Out:          "+rostring+" \t"+String.format(Locale.ROOT, "%.2f%%", readsOut*100.0/readsProcessed));
+		outstream.println("Bases Out:          "+bostring+" \t"+String.format(Locale.ROOT, "%.2f%%", basesOut*100.0/basesProcessed));
 		
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -222,7 +216,7 @@ public class ReduceSilva {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -247,7 +241,7 @@ public class ReduceSilva {
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -275,11 +269,6 @@ public class ReduceSilva {
 		if(present){return false;}
 		table.add(taxa);
 		return true;
-	}
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
 	}
 	
 	/*--------------------------------------------------------------*/

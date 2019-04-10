@@ -1,12 +1,13 @@
 #!/bin/bash
 
 #This is a version of BBMap designed to final all sites above a given threshold,
-#rather than the single best site.
+#rather than the single best site.  Syntax is the same as BBMap.
 
 usage(){
 	bash "$DIR"bbmap.sh
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -24,6 +25,7 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -44,12 +46,31 @@ calcXmx () {
 calcXmx "$@"
 
 mapPacBioSkimmer() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
+	#local CMD="java $EA $z -cp $CP align2.BBMapPacBioSkimmer build=1 overwrite=true minratio=0.40 fastareadlen=6000 ambig=all minscaf=100 startpad=10000 stoppad=10000 midpad=6000 $@"
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMapPacBioSkimmer build=1 overwrite=true minratio=0.40 fastareadlen=6000 ambig=all minscaf=100 startpad=10000 stoppad=10000 midpad=6000 $@"
 	echo $CMD >&2
 	eval $CMD

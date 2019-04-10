@@ -3,12 +3,13 @@ package fileIO;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
-
-import stream.Read;
 
 import dna.Data;
 import shared.Shared;
+import stream.Read;
+import structures.ByteBuilder;
 
 
 
@@ -28,7 +29,7 @@ public class TextStreamWriter extends Thread {
 	}
 	
 	public TextStreamWriter(String fname_, boolean overwrite_, boolean append_, boolean allowSubprocess_, int format){
-		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, append_, true));
+		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, append_, false));
 	}
 	
 	public TextStreamWriter(FileFormat ff){
@@ -130,7 +131,7 @@ public class TextStreamWriter extends Thread {
 	
 	
 	@Override
-	public void start(){
+	public synchronized void start(){
 		super.start();
 		if(verbose){System.err.println(this.getState());}
 		synchronized(this){
@@ -226,8 +227,9 @@ public class TextStreamWriter extends Thread {
 	/*----------------            Print             ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	
+
 	public void print(CharSequence cs){
+		if(cs==null){cs="null";}
 //		System.err.println("Added line '"+cs+"'");
 //		System.err.println("Adding "+cs.length()+" chars.");
 		assert(open) : cs;
@@ -240,13 +242,31 @@ public class TextStreamWriter extends Thread {
 		}
 	}
 	
+	public void print(long number){
+		print(Long.toString(number));
+	}
+	
 	public void print(Read r){
 		assert(!OTHER);
-		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() : 
+		ByteBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() :
 			SITES ? r.toSites() : INFO ? r.toInfo() : r.toText(true));
 		print(sb);
 	}
 	
+	public synchronized void writeOrdered(CharSequence cs, long key){
+		assert(cs!=null) : key;
+		assert(key>=nextKey) : key+", "+nextKey;
+		assert(!map.containsKey(key));
+
+		map.put(key, cs);
+
+		while(map.containsKey(nextKey)){
+			//		System.err.println("Writing list "+first.get(0).numericID);
+			CharSequence value=map.remove(nextKey);
+			print(value);
+			nextKey++;
+		}
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------           Println            ----------------*/
@@ -263,7 +283,7 @@ public class TextStreamWriter extends Thread {
 	
 	public void println(Read r){
 		assert(!OTHER);
-		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() : 
+		ByteBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() :
 			SITES ? r.toSites() : INFO ? r.toInfo() : r.toText(true)).append('\n');
 		print(sb);
 	}
@@ -290,6 +310,9 @@ public class TextStreamWriter extends Thread {
 	
 	/** TODO */
 	public boolean errorState=false;
+	
+	private HashMap<Long, CharSequence> map=new HashMap<Long, CharSequence>();
+	private long nextKey=0;
 	
 	/*--------------------------------------------------------------*/
 	

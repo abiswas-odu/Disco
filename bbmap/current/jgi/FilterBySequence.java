@@ -3,25 +3,25 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import dna.AminoAcid;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * Filters by exact sequence matches.
@@ -46,10 +46,13 @@ public class FilterBySequence {
 		Timer t=new Timer();
 		
 		//Create an instance of this class
-		FilterBySequence as=new FilterBySequence(args);
+		FilterBySequence x=new FilterBySequence(args);
 		
 		//Run the object
-		as.process(t);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -58,21 +61,15 @@ public class FilterBySequence {
 	 */
 	public FilterBySequence(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		boolean setInterleaved=false; //Whether interleaved was explicitly set.
 		
-		//Set some shared static variables regarding PIGZ
+		//Set shared static variables
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 //		FASTQ.FORCE_INTERLEAVED=false;
@@ -89,13 +86,8 @@ public class FilterBySequence {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
 			
-			
-			if(parser.parse(arg, a, b)){//Parse standard flags in the parser
-				//do nothing
-			}else if(a.equals("verbose")){
+			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered")){
 				ordered=Tools.parseBoolean(b);
@@ -118,6 +110,8 @@ public class FilterBySequence {
 			}else if(a.equals("literal")){
 				if(b==null){literal=null;}
 				else{literal=b.split(",");}
+			}else if(parser.parse(arg, a, b)){//Parse standard flags in the parser
+				//do nothing
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -168,10 +162,7 @@ public class FilterBySequence {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -179,12 +170,7 @@ public class FilterBySequence {
 		}
 		
 		//Ensure out2 is not set without out1
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		//Adjust interleaved settings based on number of output files
 		if(!setInterleaved){
@@ -209,7 +195,7 @@ public class FilterBySequence {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure ref files can be read
@@ -313,37 +299,11 @@ public class FilterBySequence {
 		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			{
-				String rpstring=(""+readsProcessed);
-				String bpstring=(""+basesProcessed);
-				
-				//Format the strings so they have they are right-justified
-				while(rpstring.length()<12){rpstring=" "+rpstring;}
-				while(bpstring.length()<12){bpstring=" "+bpstring;}
-
-				outstream.println();
-				outstream.println("Time:                            \t"+t);
-				outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-				outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-			}
-			{
-				String rpstring=(""+readsOut);
-				String bpstring=(""+basesOut);
-				
-				//Format the strings so they have they are right-justified
-				outstream.println();
-				while(rpstring.length()<12){rpstring=" "+rpstring;}
-				while(bpstring.length()<12){bpstring=" "+bpstring;}
-				outstream.println("Reads Out:          "+rpstring);
-				outstream.println("Bases Out:          "+bpstring);
-			}
-		}
+		t.stop();
+		outstream.println();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 12));
+		outstream.println();
+		outstream.println(Tools.readsBasesOut(readsProcessed, basesProcessed, readsOut, basesOut, 12, false));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
@@ -463,11 +423,6 @@ public class FilterBySequence {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO"); //TODO
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
 	/*--------------------------------------------------------------*/
@@ -482,6 +437,7 @@ public class FilterBySequence {
 		}
 		
 		//Called by start()
+		@Override
 		public void run(){
 			//Do anything necessary prior to processing
 			
@@ -509,7 +465,7 @@ public class FilterBySequence {
 			}
 
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 //				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
 
 				//Loop through each read in the list
@@ -526,7 +482,7 @@ public class FilterBySequence {
 					final int initialLength2=r1.mateLength();
 
 					//Increment counters
-					readsProcessedT+=1+r1.mateCount();
+					readsProcessedT+=r1.pairCount();
 					basesProcessedT+=initialLength1+initialLength2;
 					
 					{
@@ -534,7 +490,7 @@ public class FilterBySequence {
 						boolean keep=processReadPair(r1, r2);
 						if(!keep){reads.set(idx, null);}
 						else{
-							readsOutT+=1+r1.mateCount();
+							readsOutT+=r1.pairCount();
 							basesOutT+=initialLength1+initialLength2;
 						}
 					}
@@ -544,7 +500,7 @@ public class FilterBySequence {
 				if(ros!=null){ros.add(reads, ln.id);}
 
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 //				if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
 
 				//Fetch a new list
@@ -602,6 +558,7 @@ public class FilterBySequence {
 		}
 		
 		//Called by start()
+		@Override
 		public void run(){
 			//Do anything necessary prior to processing
 			
@@ -631,7 +588,7 @@ public class FilterBySequence {
 			LinkedHashSet<Code> codes=new LinkedHashSet<Code>(4000);
 			
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 //				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
 
 				//Loop through each read in the list
@@ -648,7 +605,7 @@ public class FilterBySequence {
 					final int initialLength2=r1.mateLength();
 
 					//Increment counters
-					readsProcessedT+=1+r1.mateCount();
+					readsProcessedT+=r1.pairCount();
 					basesProcessedT+=initialLength1+initialLength2;
 
 					if(r1!=null){codes.add(new Code(r1.bases));}
@@ -665,7 +622,7 @@ public class FilterBySequence {
 				}
 				
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 //				if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
 
 				//Fetch a new list
@@ -717,7 +674,7 @@ public class FilterBySequence {
 					bases=bases_.clone();
 					if(a!=fwd){AminoAcid.reverseComplementBasesInPlace(bases);}
 					for(int i=0; i<bases.length; i++){
-						bases[i]=(byte) Character.toUpperCase(bases[i]);
+						bases[i]=(byte) Tools.toUpperCase(bases[i]);
 					}
 				}
 			}else{

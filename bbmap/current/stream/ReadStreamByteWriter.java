@@ -6,6 +6,7 @@ import java.util.ArrayList;
 
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import structures.ByteBuilder;
 
 public class ReadStreamByteWriter extends ReadStreamWriter {
 	
@@ -130,7 +131,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	}
 	
 	/**
-	 * @throws IOException 
+	 * @throws IOException
 	 * 
 	 */
 	private void finishWriting(final ByteBuilder bb, final ByteBuilder bbq) throws IOException {
@@ -209,7 +210,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeBread(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -256,7 +257,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeAttachment(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -301,7 +302,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeHeader(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -343,7 +344,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeFasta(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -387,7 +388,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeOneline(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -431,7 +432,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeFastq(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		if(read1){
@@ -475,7 +476,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeFastr(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		bb.append(job.list.size()).append('\n');
@@ -533,7 +534,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	 * @param job
 	 * @param bb
 	 * @param os
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeSites(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 		assert(read1);
@@ -541,13 +542,13 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 			Read r2=(r==null ? null : r.mate);
 			
 			if(r!=null && r.sites!=null){
-				r.toSitesB(bb).append('\n');
+				r.toSites(bb).append('\n');
 
 				readsWritten++;
 				basesWritten+=r.length();
 			}
 			if(r2!=null){
-				r2.toSitesB(bb).append('\n');
+				r2.toSites(bb).append('\n');
 
 				readsWritten++;
 				basesWritten+=r2.length();
@@ -562,7 +563,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	/**
 	 * @param job
 	 * @param bb
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private void writeSam(Job job, ByteBuilder bb, OutputStream os) throws IOException {
 

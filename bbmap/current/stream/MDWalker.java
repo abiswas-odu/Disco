@@ -1,6 +1,7 @@
 package stream;
 
 import dna.AminoAcid;
+import shared.Tools;
 
 /**
  * @author Brian Bushnell
@@ -10,52 +11,70 @@ import dna.AminoAcid;
  */
 public class MDWalker {
 	
-	MDWalker(String tag, byte[] longmatch_){
+	MDWalker(String tag, String cigar_, byte[] longmatch_, SamLine sl_){//SamLine is just for debugging
 		mdTag=tag;
+		cigar=cigar_;
 		longmatch=longmatch_;
-		pos=(mdTag.startsWith("MD:Z:") ? 5 : 0);
+		sl=sl_;
+		mdPos=(mdTag.startsWith("MD:Z:") ? 5 : 0);
 		
-		mpos=0;
+		matchPos=0;
 		bpos=0;
 		rpos=0;
 		sym=0;
 		current=0;
 		mode=0;
 		
-		while(longmatch[mpos]=='C'){
-			mpos++;
+		while(longmatch[matchPos]=='C'){
+			matchPos++;
 			bpos++;
 		}
 	}
 	
 	void fixMatch(byte[] bases){
+		final boolean cigarContainsN=(cigar==null || cigar.indexOf('N')>=0);
 		sym=0;
-		while(pos<mdTag.length()){
-			char c=mdTag.charAt(pos);
-			pos++;
+		while(mdPos<mdTag.length()){
+			char c=mdTag.charAt(mdPos);
+			mdPos++;
 			
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 				mode=NORMAL;
 			}else{
-				int mpos2=mpos;
+				int matchPos2=matchPos;
 				if(current>0){
-					mpos2=mpos+current;
+					matchPos2=matchPos+current;
 //					System.err.println(mpos+", "+current+", "+mpos2);
 					assert(mode==NORMAL) : mode+", "+current;
-					current=0;	
+					current=0;
 				}
 				
-				while(mpos<mpos2 || (mpos<longmatch.length && longmatch[mpos]=='I')){
-					if(longmatch[mpos]=='I'){
+				//Fixes subs after dels getting ignored
+				if(mode==DEL && (matchPos<longmatch.length && longmatch[matchPos]!='D')){
+					mode=SUB;
+				}
+				
+				while(matchPos<matchPos2 || (matchPos<longmatch.length && (longmatch[matchPos]=='I' || false))){
+					assert(matchPos<longmatch.length) : longmatch.length+"\n"+sl.toString()+"\n"+new String(longmatch);
+					if(longmatch[matchPos]=='I'){
 //						System.err.println("I: mpos="+mpos+", bpos="+bpos);
-						mpos2++;
+						matchPos2++;
+						bpos++;
+						matchPos++;
+					}else if(longmatch[matchPos]=='D'){//This should only happen if the cigar string contains an 'N'
+						assert(cigarContainsN) : matchPos+"\n"+new String(longmatch)+"\n"+mdTag+"\n"+cigar;
+//						System.err.println("M: mpos="+mpos+", bpos="+bpos);
+						while(longmatch[matchPos]=='D' && matchPos<longmatch.length){
+							rpos++;
+							matchPos++;
+						}
 					}else{
 //						System.err.println("M: mpos="+mpos+", bpos="+bpos);
 						rpos++;
+						bpos++;
+						matchPos++;
 					}
-					mpos++;
-					bpos++;
 				}
 				
 //				while(mpos<longmatch.length && longmatch[mpos]=='I'){
@@ -70,7 +89,7 @@ public class MDWalker {
 				}else if(mode==DEL){
 //					System.err.println("c="+((char)c)+", mpos="+mpos+", rpos="+rpos+", bpos="+bpos+", mode="+mode+(mode==NORMAL ? "" : ", match="+(char)longmatch[mpos-1])+"\n"+new String(longmatch));
 					rpos++;
-					mpos++;
+					matchPos++;
 					sym=c;
 				}
 //				else if(longmatch[mpos]=='I'){
@@ -80,14 +99,21 @@ public class MDWalker {
 //					sym=c;
 //				}
 				else if(mode==NORMAL || mode==SUB){
-					assert(longmatch[mpos]!='D') : mpos+"\n"+new String(longmatch)+"\n"+mdTag;
-					longmatch[mpos]=(byte)'S';
-					if((bases!=null && !AminoAcid.isFullyDefined(bases[bpos])) || !AminoAcid.isFullyDefined(c)){longmatch[mpos]='N';}
+					if(longmatch[matchPos]=='D'){
+						assert(cigarContainsN) : matchPos+"\n"+new String(longmatch)+"\n"+mdTag+"\n"+cigar;
+						while(longmatch[matchPos]=='D' && matchPos<longmatch.length){
+							rpos++;
+							matchPos++;
+						}
+					}
+					assert(longmatch[matchPos]!='D') : matchPos+"\n"+new String(longmatch)+"\n"+mdTag+"\n"+cigar;
+					longmatch[matchPos]=(byte)'S';
+					if((bases!=null && !AminoAcid.isFullyDefined(bases[bpos])) || !AminoAcid.isFullyDefined(c)){longmatch[matchPos]='N';}
 					mode=SUB;
 //					System.err.println("c="+((char)c)+", mpos="+mpos+", rpos="+rpos+", bpos="+bpos+", mode="+mode+(mode==NORMAL ? "" : ", match="+(char)longmatch[mpos-1])+"\n"+new String(longmatch));
 					bpos++;
 					rpos++;
-					mpos++;
+					matchPos++;
 					sym=c;
 				}else{
 					assert(false);
@@ -97,43 +123,43 @@ public class MDWalker {
 			
 		}
 //		System.err.println();
-//		assert((bases==null || Read.calcMatchLength(longmatch)==bases.length)) : 
+//		assert((bases==null || Read.calcMatchLength(longmatch)==bases.length)) :
 //			bases.length+", "+Read.calcMatchLength(longmatch)+"\n"+new String(longmatch)+"\n"
 //					+ new String(Read.toShortMatchString(longmatch))+"\n"+mdTag;
 	}
 	
 	boolean nextSub(){
 		sym=0;
-		while(pos<mdTag.length()){
-			char c=mdTag.charAt(pos);
-			pos++;
+		while(mdPos<mdTag.length()){
+			char c=mdTag.charAt(mdPos);
+			mdPos++;
 			
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 				mode=NORMAL;
 			}else{
 				if(current>0){
 					bpos+=current;
 					rpos+=current;
-					mpos+=current; 
+					matchPos+=current;
 					assert(mode==NORMAL) : mode+", "+current;
-					current=0;	
+					current=0;
 				}
 				if(c=='^'){mode=DEL;}
 				else if(mode==DEL){
 					rpos++;
-					mpos++;
+					matchPos++;
 					sym=c;
-				}else if(longmatch[mpos]=='I'){
+				}else if(longmatch[matchPos]=='I'){
 					mode=INS;
 					bpos++;
-					mpos++;
+					matchPos++;
 					sym=c;
 				}else if(mode==NORMAL || mode==SUB || mode==INS){
 					mode=SUB;
 					bpos++;
 					rpos++;
-					mpos++;
+					matchPos++;
 					sym=c;
 //					System.err.println("c="+((char)c)+", mpos="+mpos+", rpos="+rpos+", bpos="+bpos+", mode="+mode+(mode==NORMAL ? "" : ", match="+(char)longmatch[mpos-1])+"\n"+new String(longmatch));
 					return true;
@@ -146,7 +172,7 @@ public class MDWalker {
 	}
 	
 	public int matchPosition(){
-		return mpos-1;
+		return matchPos-1;
 	}
 	
 	public int basePosition(){
@@ -163,7 +189,7 @@ public class MDWalker {
 	}
 
 	/** Position in match string (excluding clipping and insertions) */
-	private int mpos;
+	private int matchPos;
 	/** Position in read bases (excluding clipping and insertions) */
 	private int bpos;
 	/** Position in reference bases (excluding clipping) */
@@ -171,10 +197,13 @@ public class MDWalker {
 	private char sym;
 	
 	private String mdTag;
+	private String cigar; //Optional; for debugging
 	private byte[] longmatch;
-	private int pos;
+	private int mdPos;
 	private int current;
 	private int mode;
+	
+	private SamLine sl;
 	
 //	private int dels=0, subs=0, normals=0;
 	private static final int NORMAL=0, SUB=1, DEL=2, INS=3;

@@ -1,10 +1,10 @@
 package stream;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import fileIO.ByteFile;
 import fileIO.FileFormat;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
 
@@ -36,7 +36,7 @@ public class OnelineReadInputStream extends ReadInputStream {
 //		assert(false) : "TODO: Detect interleaved.";
 		interleaved=FASTQ.FORCE_INTERLEAVED; //(ff.stdio()) ? FASTQ_X.FORCE_INTERLEAVED : FASTQ_X.isInterleaved(ff.name(), false);
 		
-		tf=ByteFile.makeByteFile(ff, false);
+		tf=ByteFile.makeByteFile(ff);
 //		assert(false) : interleaved;
 	}
 
@@ -108,7 +108,7 @@ public class OnelineReadInputStream extends ReadInputStream {
 			String id=new String(line, 0, index);
 			byte[] bases=KillSwitch.copyOfRange(line, index+1, line.length);
 			sum+=bases.length;
-			Read r=new Read(bases, null, nextReadID, id);
+			Read r=new Read(bases, null, id, nextReadID);
 			if(r1==null){
 				r1=r;
 			}else{
@@ -126,6 +126,7 @@ public class OnelineReadInputStream extends ReadInputStream {
 		return list;
 	}
 	
+	@Override
 	public boolean close(){
 		if(verbose){System.err.println("Closing "+this.getClass().getName()+" for "+tf.name()+"; errorState="+errorState);}
 		errorState|=tf.close();
@@ -147,6 +148,7 @@ public class OnelineReadInputStream extends ReadInputStream {
 	public boolean paired() {return interleaved;}
 	
 	/** Return true if this stream has detected an error */
+	@Override
 	public boolean errorState(){return errorState;}
 
 	private ArrayList<Read> buffer=null;
@@ -155,8 +157,8 @@ public class OnelineReadInputStream extends ReadInputStream {
 	private final ByteFile tf;
 	private final boolean interleaved;
 
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
-	private final long MAX_DATA=Shared.READ_BUFFER_MAX_DATA; //TODO - lot of work for unlikely case of super-long fastq reads.  Must be disabled for paired-ends.
+	private final int BUF_LEN=Shared.bufferLen();;
+	private final long MAX_DATA=Shared.bufferData(); //TODO - lot of work for unlikely case of super-long fastq reads.  Must be disabled for paired-ends.
 
 	public long generated=0;
 	public long consumed=0;

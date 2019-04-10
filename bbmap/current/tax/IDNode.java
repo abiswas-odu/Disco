@@ -2,6 +2,7 @@ package tax;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Locale;
 import java.util.PriorityQueue;
 
 import shared.Tools;
@@ -125,7 +126,7 @@ public class IDNode implements Comparable<IDNode>{
 				sb.append(c);
 			}
 		}
-//		sb.append(String.format(":%.4f", max));
+//		sb.append(String.format(Locale.ROOT, ":%.4f", max));
 		if(parent!=null){
 			sb.append(':');
 			
@@ -136,13 +137,14 @@ public class IDNode implements Comparable<IDNode>{
 				len=Tools.max(left.max, right.max)-max;
 			}
 			
-			sb.append(String.format("%.4f", len));
+			sb.append(String.format(Locale.ROOT, "%.4f", len));
 //			assert(Tools.max(parent.left.max, parent.right.max)-parent.max<0.4) : parent+"\n"+parent.left+"\n"+parent.right+"\n";
 		}
 	}
 	
+	@Override
 	public String toString(){
-		return "("+number+/*" "+name+*/" "+String.format("%.4f", max)+" "+toString(array)+")";
+		return "("+number+/*" "+name+*/" "+String.format(Locale.ROOT, "%.4f", max)+" "+toString(array)+")";
 	}
 	
 	private static String toString(double[] array){
@@ -150,7 +152,7 @@ public class IDNode implements Comparable<IDNode>{
 		sb.append('[');
 		sb.append(' ');
 		for(double d : array){
-			sb.append(String.format("%.4f ", d));
+			sb.append(String.format(Locale.ROOT, "%.4f ", d));
 		}
 		sb.append(']');
 		return sb.toString();

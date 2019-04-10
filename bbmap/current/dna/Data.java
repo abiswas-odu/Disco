@@ -7,16 +7,9 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.HashMap;
-import java.util.Map;
-
-import shared.Primes;
-import shared.Shared;
-import shared.Tools;
-import stream.ByteBuilder;
-import var.Variation;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import align2.AbstractIndex;
 import align2.AbstractMapper;
@@ -28,6 +21,13 @@ import fileIO.ChainBlock;
 import fileIO.ChainLine;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
+import server.PercentEncoding;
+import shared.Primes;
+import shared.Shared;
+import shared.Tools;
+import structures.ByteBuilder;
+import structures.Range;
+import var.Variation;
 
 public class Data {
 	
@@ -178,7 +178,7 @@ public class Data {
 	}
 	
 	public static ChromosomeArray getChromosome(int chrom){
-		assert(chromosomePlusMatrix!=null); 
+		assert(chromosomePlusMatrix!=null);
 		assert(chromosomePlusMatrix.length>chrom) : chromosomePlusMatrix.length+", "+chrom;
 		if(chromosomePlusMatrix[chrom]==null){
 			synchronized(CHROMLOCKS[chrom%CHROMLOCKS.length]){
@@ -516,7 +516,7 @@ public class Data {
 		assert(loc2>=loc1);
 		
 //		boolean flag=(chrom==21 && loc1<38540895 && loc2>38540895);//TODO UNDO
-//		
+//
 //		if(flag){
 //			stdout.println(loc1+", "+loc2+", "+((loc1+loc2)/2));
 //			for(GeneSet gs : Data.geneNameTable[chrom].values()){
@@ -539,7 +539,7 @@ public class Data {
 //			stdout.println("r0: "+r0+"\n"+Arrays.toString((GeneSet[])r0.obj1)+"\n");
 //			stdout.println("r1: "+r1+"\n"+Arrays.toString((GeneSet[])r1.obj1)+"\n");
 //			stdout.println("r2: "+r2+"\n"+Arrays.toString((GeneSet[])r2.obj1)+"\n");
-//			
+//
 //		}
 //		if(flag){stdout.println("c");}
 		
@@ -649,7 +649,7 @@ public class Data {
 				if(geneIdToNameTable==null){
 
 					//			TextFile tf=new TextFile(ROOT_GENE+"gene_names_36.3.txt");
-					TextFile tf=new TextFile(ROOT_GENE+"gene_names_37.1.txt", false, false);
+					TextFile tf=new TextFile(ROOT_GENE+"gene_names_37.1.txt", false);
 					String[] lines=tf.toStringLines();
 					tf.close();
 					HashMap<Integer, String> table=new HashMap<Integer, String>((lines.length*3)/2);
@@ -752,13 +752,13 @@ public class Data {
 			if(overlap(a, b, starts[i], stops[i])){return true;}
 		}
 		return false;
-//		
+//
 //		return point>=(starts[index]-thresh) && point<=(stops[index]+thresh);
 	}
 	
 	private static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	
 	
@@ -820,7 +820,7 @@ public class Data {
 			FastaToChromArrays2.SUMMARY_LIST=null;
 		}else{
 			String s;
-			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/summary.txt", false, false);
+			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/summary.txt", false);
 			for(s=tf.nextLine(); s!=null; s=tf.nextLine()){
 				if(s.charAt(0)=='#'){
 					if(s.startsWith("#Version")){
@@ -906,7 +906,7 @@ public class Data {
 			FastaToChromArrays2.INFO_LIST=null;
 		}else{
 			String s;
-			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false, false);
+			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false);
 			for(s=tf.nextLine(); s!=null; s=tf.nextLine()){
 				if(s.charAt(0)=='#'){
 					if(s.startsWith("#Version")){
@@ -932,7 +932,7 @@ public class Data {
 						if(new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").exists()){new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").delete();}
 						sysout.println("Regenerating genome info in new format.");
 						dna.FastaToChromArrays2.writeInfo(GENOME_BUILD, numChroms, name, genomeSource, true, scaffoldPrefixes);
-						tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false, false);
+						tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false);
 					}
 				}
 				
@@ -1002,7 +1002,7 @@ public class Data {
 			}else{
 
 				String s;
-				TextFile tf=new TextFile(fname, false, false);
+				TextFile tf=new TextFile(fname, false);
 				for(s=tf.nextLine(); s!=null; s=tf.nextLine()){
 					if(s.charAt(0)=='#'){
 						if(s.startsWith("#Version")){
@@ -1041,7 +1041,7 @@ public class Data {
 	
 	
 //	public static String contigName(int x){return scaffoldName(x);}
-//	
+//
 //	public static String scaffoldName(int x){
 //		if(scaffoldNames==null){return "chr"+x;}
 //		return scaffoldNames[x][0];
@@ -1070,7 +1070,7 @@ public class Data {
 				}
 			}
 		}
-		return scaffoldNameTable; 
+		return scaffoldNameTable;
 	}
 
 
@@ -1134,7 +1134,7 @@ public class Data {
 		int upperBound=array[scaf+1];
 		
 		if(loc2<lowerBound || loc1>upperBound){return false;} //This could happen if a random read was generated in the start or stop padding.
-		assert(scaf==0 || scaf==array.length-1 || (loc1>=lowerBound && loc1<upperBound)) : 
+		assert(scaf==0 || scaf==array.length-1 || (loc1>=lowerBound && loc1<upperBound)) :
 			"chrom="+chrom+", loc1="+loc1+", lowerBound="+lowerBound+", loc2="+loc2+", upperBound="+upperBound;
 		return loc2<upperBound;
 	}
@@ -1225,7 +1225,7 @@ public class Data {
 				if(vb){System.err.println("Considering getResource");}
 				URL url=Primes.class.getResource("/"+fname);
 				if(url!=null){
-					String temp=url.toString().replace("%20", " ");
+					String temp=PercentEncoding.codeToSymbol(url.toString());
 					if(vb){System.err.println("Found URL "+temp);}
 					f=new File(temp);
 					//						if(f.exists()){fname=temp;}
@@ -1241,6 +1241,7 @@ public class Data {
 			}
 			if(!f.exists() && !path.startsWith("jar:")){
 				System.err.println("Warning!  Cannot find "+fname+" "+path);
+				new Exception().printStackTrace();
 				return null;
 			}
 		}
@@ -1325,26 +1326,9 @@ public class Data {
 	public static boolean ENV=(System.getenv()!=null);
 	public static boolean WINDOWS=(System.getenv().containsKey("OS") && System.getenv().get("OS").equalsIgnoreCase("Windows_NT"));
 	public static boolean GENEPOOL=(System.getenv().containsKey("NERSC_HOST") && System.getenv().get("NERSC_HOST").equalsIgnoreCase("genepool"));
-	public static int LOGICAL_PROCESSORS=CALC_LOGICAL_PROCESSORS();
+	public static boolean DENOVO=(System.getenv().containsKey("NERSC_HOST") && System.getenv().get("NERSC_HOST").equalsIgnoreCase("denovo"));
+	public static boolean CORI=(System.getenv().containsKey("NERSC_HOST") && System.getenv().get("NERSC_HOST").equalsIgnoreCase("cori"));
 	private static String HOSTNAME;
-	
-	private static int CALC_LOGICAL_PROCESSORS(){
-		final int procs=Tools.max(1, Runtime.getRuntime().availableProcessors());
-		int slots=procs;
-		Map<String,String> env=System.getenv();
-		String s=env.get("NSLOTS");
-		if(s!=null){
-			int x=slots;
-			try {
-				x=Tools.max(1, Integer.parseInt(s));
-			} catch (NumberFormatException e) {
-				//ignore
-			}
-			if(x<16){slots=x;}
-		}
-		if(slots>8 && (slots*2==procs || (slots==16 && procs==40))){return procs;}//hyperthreading
-		return Tools.min(slots, procs);
-	}
 	
 	public static String HOSTNAME(){
 		if(HOSTNAME==null){
@@ -1383,8 +1367,10 @@ public class Data {
 	public static String ROOT_QUALITY;
 	
 	static{
-		ROOT=(new File(Data.class.getClassLoader().getResource(Data.class.getName().replace('.', '/') + ".class")
-				.getFile()).getAbsolutePath().replace('\\', '/').replace("dna/Data.class", "").replace("%20", " "));
+		String s=new File(Data.class.getClassLoader().getResource(
+				Data.class.getName().replace('.', '/') + ".class").getFile()).getAbsolutePath();
+		s=PercentEncoding.codeToSymbol(s);
+		ROOT=s.replace('\\', '/').replace("dna/Data.class", "");
 		setPath(WINDOWS ? "?windows" : "?unix");
 		if(!WINDOWS || true){setPath("?local");}
 	}
@@ -1455,31 +1441,22 @@ public class Data {
 		}
 	}
 	
-	private static final int INTERN_MAP_SIZE=(1<<20);
-	private static final int INTERN_MAP_LIMIT=(1<<19);
+	private static final int INTERN_MAP_SIZE=20011; //Do NOT look up in primes; causes an init ordering issue.
+	private static final int INTERN_MAP_LIMIT=(int)(INTERN_MAP_SIZE*0.75f);
 	
-	private static final HashMap<String, String> INTERNMAP=new HashMap<String, String>(INTERN_MAP_SIZE);
+	private static final ConcurrentHashMap<String, String> INTERNMAP=new ConcurrentHashMap<String, String>(INTERN_MAP_SIZE);
 //	public static final void unloadInternMap(){
 //		INTERNMAP=new HashMap<String, String>(INTERN_MAP_SIZE);
 //	}
-	
-	private static String condense(String s){
-		//TODO - finish this
-		StringBuilder sb=new StringBuilder(s.length());
-		for(int i=0; i<s.length(); i++){
-			sb.append('A');
-		}
-		return sb.toString();
-	}
 	
 	public static final void intern(String[] s){
 		if(s==null){return;}
 		for(int i=0; i<s.length; i++){s[i]=intern(s[i]);}
 	}
 	public static String intern(String s){
-		if(s==null || s.length()>25){return new String(s);}
+		if(s==null || s.length()>25){return s;}
 //		calls++;
-//		
+//
 //		if(s.length()>0 && s.charAt(0)!='?'){
 //			s=condense(s);
 //		}
@@ -1504,30 +1481,27 @@ public class Data {
 		return forceIntern(s);
 	}
 	
-	public static String forceIntern(String s){
+	public static String forceIntern(final String s0){
+		assert(s0!=null);
 		calls++;
 		
 //		if(s.length()<2){return s.intern();}
 //		boolean acgtn=AminoAcid.containsOnlyACGTNQ(s);
-//		
+//
 //		if(acgtn){
 //			if(s.length()<4){return s.intern();}
 //		}
 		
-		String old=INTERNMAP.get(s);
-		if(old!=null){return old;}
-		
-		synchronized(INTERNMAP){
-//			System.err.print(INTERNMAP.size()+"~"+calls+": "+s+", ");
-			if(INTERNMAP.size()>INTERN_MAP_LIMIT){
-				System.err.println("INTERNMAP overflow caused by "+s);
-				INTERNMAP.clear();
+		if(INTERNMAP.size()>INTERN_MAP_LIMIT){
+			synchronized(INTERNMAP){
+				if(INTERNMAP.size()>INTERN_MAP_LIMIT){
+//					System.err.println("INTERNMAP overflow caused by "+s0);
+					INTERNMAP.clear();
+				}
 			}
-			if(INTERNMAP.containsKey(s)){return INTERNMAP.get(s);}
-			s=new String(s);
-			INTERNMAP.put(s, s);
 		}
-		return s;
+		String s=INTERNMAP.putIfAbsent(s0, s0);
+		return s==null ? s0 : s;
 	}
 	static int calls=0;
 	
@@ -1542,6 +1516,20 @@ public class Data {
 
 	public static boolean GUNZIP(){return GUNZIP==0 ? GZIP() : GUNZIP>0;}
 //	public static boolean UNPIGZ(){return UNPIGZ==0 ? PIGZ() : UNPIGZ>0;}
+	public static boolean BGZIP(){
+//		System.err.println("Looking for bgzip.");
+		if(BGZIP==0 && !WINDOWS){
+			synchronized(SUBPROCSYNC){
+				if(BGZIP==0){
+					ByteBuilder bb=new ByteBuilder();
+					BGZIP=testExecute("bgzip -h", bb);
+				}
+			}
+		}
+//		System.err.println("BGZIP="+BGZIP);
+		assert(BGZIP>0) : "bgzip not found.";
+		return BGZIP>0;
+	}
 	public static boolean GZIP(){
 		if(GZIP==0 && !WINDOWS){
 			synchronized(SUBPROCSYNC){
@@ -1550,7 +1538,7 @@ public class Data {
 					GZIP=testExecute("gzip --version", bb);
 				}
 			}
-		} 
+		}
 		return GZIP>0;
 	}
 	public static boolean PIGZ(){
@@ -1559,6 +1547,48 @@ public class Data {
 				if(PIGZ==0){
 					ByteBuilder bb=new ByteBuilder();
 					PIGZ=testExecute("pigz --version", bb);
+					
+					try {
+						if(PIGZ>0){
+							String[] lines=bb.toString().split("\n");
+							for(String line : lines){
+								if(line.startsWith("pigz")){
+									String[] split=line.split("\\s+");
+									if(split.length>1){
+										PIGZ_VERSION=split[1];
+										PIGZ_VERSION_23plus=false;
+										PIGZ_VERSION_231plus=false;
+
+										String[] ss=PIGZ_VERSION.split("\\.");
+										int[] is=new int[3];
+										for(int i=0; i<3 && i<ss.length; i++){
+											String s=ss[i];
+											int x=Integer.parseInt(s);
+											is[i]=x;
+										}
+										
+										if(is[0]>2){
+											PIGZ_VERSION_231plus=PIGZ_VERSION_23plus=true;
+										}else if(is[0]==2){
+											if(is[1]>3){
+												PIGZ_VERSION_231plus=PIGZ_VERSION_23plus=true;
+											}else if(is[1]==3){
+												PIGZ_VERSION_23plus=true;
+												if(is[2]>=1){
+													PIGZ_VERSION_231plus=true;
+												}
+											}
+										}
+									}
+								}
+							}
+//							System.err.println("Found pigz"+(PIGZ_VERSION==null ? "." : " "+PIGZ_VERSION));
+						}else{
+//							System.err.println("Could not find pigz.");
+						}
+					} catch (NumberFormatException e) {
+						System.err.println("Warning - trouble parsing pigz version:\n"+PIGZ_VERSION);
+					}
 				}
 			}
 		}
@@ -1572,7 +1602,7 @@ public class Data {
 					DSRC=testExecute("dsrc --version", bb);
 				}
 			}
-		} 
+		}
 		return DSRC>0;
 	}
 	public static boolean BZIP2(){
@@ -1583,7 +1613,7 @@ public class Data {
 					BZIP2=testExecute("bzip2 --version", bb);
 				}
 			}
-		} 
+		}
 		return BZIP2>0;
 	}
 	public static boolean PBZIP2(){
@@ -1594,8 +1624,19 @@ public class Data {
 					PBZIP2=testExecute("pbzip2 --version", bb);
 				}
 			}
-		} 
+		}
 		return PBZIP2>0;
+	}
+	public static boolean LBZIP2(){
+		if(LBZIP2==0 && !WINDOWS){
+			synchronized(SUBPROCSYNC){
+				if(LBZIP2==0){
+					ByteBuilder bb=new ByteBuilder();
+					LBZIP2=testExecute("lbzip2 --version", bb);
+				}
+			}
+		}
+		return LBZIP2>0;
 	}
 	public static boolean SAMTOOLS(){
 		if(SAMTOOLS==0 && !WINDOWS){
@@ -1624,6 +1665,18 @@ public class Data {
 		}
 		return SAMTOOLS>0;
 	}
+	public static boolean SAMBAMBA(){
+		if(SAMBAMBA==0 && !WINDOWS){
+			synchronized(SUBPROCSYNC){
+				if(SAMBAMBA==0){
+					ByteBuilder bb=new ByteBuilder();
+					SAMBAMBA=testExecute("sambamba", bb);
+					if(SAMBAMBA>0){System.err.println("Found sambamba.");}else{System.err.println("Could not find sambamba.");}
+				}
+			}
+		}
+		return SAMBAMBA>0;
+	}
 	public static boolean SH(){
 		if(SH==0 && !WINDOWS){
 			synchronized(SUBPROCSYNC){
@@ -1644,13 +1697,19 @@ public class Data {
 	private static int GUNZIP=-1;
 //	private static int UNPIGZ=0;
 	private static int GZIP=0;
+	private static int BGZIP=0;
 	private static int PIGZ=0;
 	private static int DSRC=0;
 	private static int BZIP2=0;
 	private static int PBZIP2=0;
+	private static int LBZIP2=0;
 	private static int SAMTOOLS=0;
-	private static String SAMTOOLS_VERSION=null;
+	private static int SAMBAMBA=0;
+	public static String SAMTOOLS_VERSION=null;
 	public static boolean SAMTOOLS_VERSION_1x=true;
+	public static String PIGZ_VERSION=null;
+	public static boolean PIGZ_VERSION_231plus=false; //Allows -I flag
+	public static boolean PIGZ_VERSION_23plus=false; //Allows -11 flag
 	private static int SH=0;
 	
 	private static int testExecute(String s, ByteBuilder bb){

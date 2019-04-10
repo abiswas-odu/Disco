@@ -2,14 +2,12 @@ package align2;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import stream.Read;
 import dna.Data;
-import dna.Parser;
+import shared.PreParser;
 import shared.Shared;
-import shared.Timer;
 import shared.Tools;
+import stream.Read;
 
 /**
  * @author Brian Bushnell
@@ -22,19 +20,18 @@ public class BBWrap {
 		BBWrap wrapper=new BBWrap();
 		ArrayList<String> list=wrapper.parse(args);
 		wrapper.execute(list);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 
 	private final ArrayList<String> parse(String[] args){
 
-		sysout.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-//			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		Timer t=new Timer();
 		
 		Read.TO_UPPER_CASE=true;
 		
@@ -43,8 +40,7 @@ public class BBWrap {
 			final String[] split=arg.split("=");
 			final String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-//			if("null".equalsIgnoreCase(b)){b=null;}
-//			System.err.println("Processing "+arg);
+			
 			if(a.equals("path") || a.equals("root")){
 				Data.setPath(b);
 				args[i]=null;
@@ -112,7 +108,7 @@ public class BBWrap {
 		
 	}
 	
-	private void add(String s, ArrayList<String> list){
+	private static void add(String s, ArrayList<String> list){
 		if(s!=null && !"null".equals(s.toLowerCase())){
 			String[] sa=s.split(",");
 			for(String ss : sa){
@@ -190,6 +186,6 @@ public class BBWrap {
 	
 	private boolean append=false;
 	
-	static PrintStream sysout=System.err;
+	static PrintStream outstream=System.err;
 	
 }

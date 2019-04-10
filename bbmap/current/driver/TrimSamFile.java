@@ -2,18 +2,18 @@ package driver;
 
 import java.util.HashSet;
 
-import stream.SamLine;
 import fileIO.TextFile;
 import shared.Tools;
+import stream.SamLine;
 
 public class TrimSamFile {
 	
 	public static void main(String[] args){
 		String fname=args[0];
 		String scaf=args[1];
-		int from=Integer.parseInt(args[2]); 
+		int from=Integer.parseInt(args[2]);
 		int to=Integer.parseInt(args[3]);
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		HashSet<String> set=findBadLines(tf, scaf, from, to);
 		tf.reset();
 		printExcludingSet(tf, set);

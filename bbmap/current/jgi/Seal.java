@@ -4,12 +4,23 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLongArray;
 
+import dna.AminoAcid;
+import dna.Data;
+import fileIO.ByteFile;
+import fileIO.ByteStreamWriter;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
 import kmer.AbstractKmerTable;
+import kmer.ScheduleMaker;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
@@ -17,25 +28,18 @@ import shared.Tools;
 import shared.TrimRead;
 import stream.ArrayListSet;
 import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.KillSwitch;
 import stream.MultiCros;
 import stream.Read;
 import stream.SamLine;
 import structures.IntList;
+import structures.IntList3;
 import structures.ListNum;
 import tax.GiToNcbi;
 import tax.TaxNode;
 import tax.TaxTree;
-import dna.AminoAcid;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ByteStreamWriter;
-import fileIO.ReadWrite;
-import fileIO.FileFormat;
-import fileIO.TextStreamWriter;
 
 /**
  * SEAL: Sequence Expression AnaLyzer
@@ -58,86 +62,45 @@ public class Seal {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
-		}
-		
 		//Create a new Seal instance
-		Seal pup=new Seal(args);
+		Seal x=new Seal(args);
 		
 		///And run it
-		pup.process();
+		x.process();
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
-	
-	/**
-	 * Display usage information.
-	 */
-	private static void printOptions(){
-		outstream.println("Please consult the shellscript (seal.sh) for usage information.");
-//		outstream.println("Syntax:\n");
-//		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.Seal in=<input file> out=<output file> ref=<contaminant files>");
-//		outstream.println("\nOptional flags:");
-//		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-//		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-//		outstream.println("out=<file>         \t(outmatch) 'out=stdout' will pipe to standard out.");
-//		outstream.println("out2=<file>        \t(outmatch2) Use this to write 2nd read of pairs to a different file.");
-//		outstream.println("outu=<file>        \t(outunmatched) Write unmatched reads here.");
-//		outstream.println("outu2=<file>       \t(outunmatched2) Use this to write 2nd read of pairs to a different file.");
-//		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
-//		outstream.println("rpkm=<file>        \tWrite coverage and RPKM/FPKM info.");
-//		outstream.println("");
-//		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-//		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-//		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-//		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-//		outstream.println("k=31               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
-//		outstream.println("maskmiddle=t       \t(mm) Treat the middle base of a kmer as a wildcard.");
-//		outstream.println("minkmerhits=0      \t(mh) Reads with more than this many contaminant kmers will be discarded.");
-//		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
-//		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
-//		outstream.println("                   \tValues: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming).");
-//		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
-//		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-//		outstream.println("trimq=6            \tTrim quality threshold.");
-//		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
-//		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-//		outstream.println("fastawrap=70       \tLength of lines in fasta output");
-//		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
-	}
-	
 	
 	/**
 	 * Constructor.
 	 * @param args Command line arguments
 	 */
 	public Seal(String[] args){
-		System.err.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		System.err.println("Seal version "+Shared.BBMAP_VERSION_STRING);
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), true);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		/* Set global defaults */
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.USE_PIGZ=true;
-		
-		
+		SamLine.SET_FROM_OK=true;
+		IntList3.defaultMode=IntList3.ASCENDING;
 		
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
-		SamLine.SET_FROM_OK=true;
 		
 		/* Initialize local variables with defaults */
-		boolean setOut=false, setOutb=false, qtrimRight_=false, qtrimLeft_=false;
 		boolean rcomp_=true;
 		boolean forbidNs_=false;
 		boolean prealloc_=false;
 		boolean useCountvector_=false;
-		int tableType_=AbstractKmerTable.ARRAYH;
+		int tableType_=AbstractKmerTable.ARRAYHF;//Fine as long as numbers are assigned in order per thread; otherwise use ARRAYH.
 		int k_=31;
 		int ways_=-1; //Currently disabled
 		int minKmerHits_=1;
@@ -167,12 +130,6 @@ public class Seal {
 		scaffoldKmers.add(0);
 		scaffolds.add(null);
 		
-		{
-			boolean b=false;
-			assert(b=true);
-			EA=b;
-		}
-		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
 
@@ -180,12 +137,8 @@ public class Seal {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseHist(arg, a, b)){
 				//do nothing
@@ -201,6 +154,8 @@ public class Seal {
 				//do nothing
 			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
+			}else if(parser.parseCardinality(arg, a, b)){
+				//do nothing
 			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
@@ -213,7 +168,6 @@ public class Seal {
 				qfin2=b;
 			}else if(a.equals("out") || a.equals("out1") || a.equals("outm") || a.equals("outm1") || a.equals("outmatched") || a.equals("outmatched1")){
 				outm1=b;
-				setOut=true;
 			}else if(a.equals("out2") || a.equals("outm") || a.equals("outm2") || a.equals("outmatched") || a.equals("outmatched2")){
 				outm2=b;
 			}else if(a.equals("outu") || a.equals("outu1") || a.equals("outunmatched") || a.equals("outunmatched1")){
@@ -231,7 +185,9 @@ public class Seal {
 			}else if(a.equals("tax") || a.equals("taxa") || a.equals("outtax")){
 				outtax=b;
 			}else if(a.equals("ref")){
-				ref=(b==null) ? null : (new File(b).exists() ? new String[] {b} : b.split(","));
+				ref.clear();
+				String[] b2=(b==null) ? null : (new File(b).exists() ? new String[] {b} : b.split(","));
+				for(String b3 : b2){ref.add(b3);}
 			}else if(a.equals("literal")){
 				literal=(b==null) ? null : b.split(",");
 //				assert(false) : b+", "+Arrays.toString(literal);
@@ -247,11 +203,14 @@ public class Seal {
 			}else if(a.equals("arrayh") || a.equals("hybrid")){
 				boolean x=Tools.parseBoolean(b);
 				if(x){tableType_=AbstractKmerTable.ARRAYH;}
+			}else if(a.equals("arrayhf") || a.equals("hybridfast")){
+				boolean x=Tools.parseBoolean(b);
+				if(x){tableType_=AbstractKmerTable.ARRAYHF;}
 			}else if(a.equals("ways")){
 				ways_=Integer.parseInt(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered_=Tools.parseBoolean(b);
-				System.err.println("Set ORDERED to "+ordered_);
+				outstream.println("Set ORDERED to "+ordered_);
 			}else if(a.equals("k")){
 				assert(b!=null) : "\nThe k key needs an integer value greater than 0, such as k=27\n";
 				k_=Integer.parseInt(b);
@@ -283,8 +242,6 @@ public class Seal {
 			}else if(a.equals("verbose")){
 				assert(false) : "Verbose flag is currently static final; must be recompiled to change.";
 				assert(WAYS>1) : "WAYS=1 is for debug mode.";
-//				verbose=Tools.parseBoolean(b); //123
-				if(verbose){outstream=System.err;} //For some reason System.out does not print in verbose mode.
 			}else if(a.equals("mm") || a.equals("maskmiddle")){
 				maskMiddle=Tools.parseBoolean(b);
 			}else if(a.equals("rcomp")){
@@ -344,7 +301,7 @@ public class Seal {
 			}else if(a.equals("refnames") || a.equals("userefnames")){
 				useRefNames_=Tools.parseBoolean(b);
 			}else if(a.equals("initialsize")){
-				initialSize=(int)Tools.parseKMG(b);
+				initialSize=Tools.parseIntKMG(b);
 			}else if(a.equals("dump")){
 				dump=b;
 			}else if(a.equals("countvector")){
@@ -364,15 +321,14 @@ public class Seal {
 				taxNodeFile=b;
 			}else if(a.equals("taxtree") || a.equals("tree")){
 				taxTreeFile=b;
-				if("auto".equalsIgnoreCase(b)){taxTreeFile=TaxTree.defaultTreeFile();}
 			}else if(a.equals("mincount")){
 				taxNodeCountLimit=Long.parseLong(b);
 			}else if(a.equals("maxnodes")){
 				taxNodeNumberLimit=Integer.parseInt(b);
 			}else if(a.equals("minlevel")){
-				taxNodeMinLevel=TaxTree.stringToLevel(b.toLowerCase());
+				taxNodeMinLevel=TaxTree.parseLevel(b);
 			}else if(a.equals("maxlevel")){
-				taxNodeMaxLevel=TaxTree.stringToLevel(b.toLowerCase());
+				taxNodeMaxLevel=TaxTree.parseLevel(b);
 			}else if(a.equals("clearzone") || a.equals("cz")){
 				clearzone_=Integer.parseInt(b);
 			}
@@ -384,17 +340,15 @@ public class Seal {
 				storeRefBases=Tools.parseBoolean(b);
 			}
 			
-			else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
-				in1=args[i];
-			}else if(i==1 && outu1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
-				outu1=args[i];
-				setOut=true;
-			}else if(i==2 && ref==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
-				ref=(new File(args[i]).exists() ? new String[] {args[i]} : args[i].split(","));
+			else if(b==null && new File(arg).exists()){
+				ref.add(arg);
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
-		}
+		}		
+		
+		if("auto".equals(taxTreeFile)){taxTreeFile=TaxTree.defaultTreeFile();}
+		if(ref.isEmpty()){ref=null;}
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -413,6 +367,7 @@ public class Seal {
 			qtrimLeft=parser.qtrimLeft;
 			qtrimRight=parser.qtrimRight;
 			trimq=parser.trimq;
+			trimE=parser.trimE();
 			minLenFraction=parser.minLenFraction;
 			minAvgQuality=parser.minAvgQuality;
 			minAvgQualityBases=parser.minAvgQualityBases;
@@ -427,25 +382,63 @@ public class Seal {
 //			minTrimLength=(parser.minTrimLength>=0 ? parser.minTrimLength : minTrimLength);
 //			requireBothBad=parser.requireBothBad;
 			removePairsIfEitherBad=!parser.requireBothBad;
+
+			loglog=(parser.loglog ? new LogLog(parser) : null);
+			loglogOut=(parser.loglogOut ? new LogLog(parser) : null);
 			
 			THREADS=Shared.threads();
 		}
 		
 		refNames.add(null);
+		
 		if(ref!=null){
 			ArrayList<String> temp=new ArrayList<String>();
 			for(String s : ref){
-				Tools.getFileOrFiles(s, temp, true, false, false, false);
+				if(s==null){
+					assert(false) : "Null reference file.";
+				}else if(new File(s).exists()){
+					Tools.getFileOrFiles(s, temp, true, false, false, false);
+				}else{
+					String fname=null;
+					if("phix".equalsIgnoreCase(s)){
+						fname=Data.findPath("?phix174_ill.ref.fa.gz");
+					}else if("lambda".equalsIgnoreCase(s)){
+						fname=Data.findPath("?lambda.fa.gz");
+					}else if("kapa".equalsIgnoreCase(s)){
+						fname=Data.findPath("?kapatags.L40.fa");
+					}else if("pjet".equalsIgnoreCase(s)){
+						fname=Data.findPath("?pJET1.2.fa");
+					}else if("mtst".equalsIgnoreCase(s)){
+						fname=Data.findPath("?mtst.fa");
+					}else if("adapters".equalsIgnoreCase(s)){
+						fname=Data.findPath("?adapters.fa");
+					}else if("artifacts".equalsIgnoreCase(s)){
+						fname=Data.findPath("?sequencing_artifacts.fa.gz");
+					}else{
+						assert(false) : "Can't find reference file "+s;
+					}
+					temp.add(fname);
+				}
 			}
-			ref=temp.toArray(new String[0]);
-			if(ref.length<1){ref=null;}
+			ref=temp;
+			if(ref.size()<1){ref=null;}
 			refNames.addAll(temp);
 		}
+		
+//		if(ref!=null){
+//			ArrayList<String> temp=new ArrayList<String>();
+//			for(String s : ref){
+//				Tools.getFileOrFiles(s, temp, true, false, false, false);
+//			}
+//			ref=temp.toArray(new String[0]);
+//			if(ref.length<1){ref=null;}
+//			refNames.addAll(temp);
+//		}
 		if(literal!=null){refNames.add("literal");}
 		refScafCounts=new int[refNames.size()];
 		
 		if(prealloc_){
-			System.err.println("Note - if this program runs out of memory, please disable the prealloc flag.");
+			outstream.println("Note - if this program runs out of memory, please disable the prealloc flag.");
 		}
 		
 		/* Set final variables; post-process and validate argument combinations */
@@ -456,7 +449,7 @@ public class Seal {
 		rcomp=rcomp_;
 		forbidNs=(forbidNs_ || hammingDistance<1);
 		skipreads=skipreads_;
-		ORDERED=ordered_;
+		ordered=ordered_;
 		restrictLeft=Tools.max(restrictLeft_, 0);
 		restrictRight=Tools.max(restrictRight_, 0);
 		ambigMode=ambigMode_;
@@ -485,8 +478,8 @@ public class Seal {
 		MAKE_IDHIST=ReadStats.COLLECT_IDENTITY_STATS;
 		
 		if((speed>0 && qSkip>1) || (qSkip>1 && refSkip>1) || (speed>0 && refSkip>1)){
-			System.err.println("WARNING: It is not recommended to use more than one of qskip, speed, and rskip together.");
-			System.err.println("qskip="+qSkip+", speed="+speed+", rskip="+refSkip);
+			outstream.println("WARNING: It is not recommended to use more than one of qskip, speed, and rskip together.");
+			outstream.println("qskip="+qSkip+", speed="+speed+", rskip="+refSkip);
 		}
 		
 		{
@@ -501,12 +494,12 @@ public class Seal {
 			}
 
 			if(initialSize<1){
-				final int factor=(tableType==AbstractKmerTable.ARRAY1D ? 12 : tableType==AbstractKmerTable.ARRAYH ? 22 : 27);
+				final int factor=(tableType==AbstractKmerTable.ARRAY1D ? 12 : tableType==AbstractKmerTable.ARRAYH ? 22 : tableType==AbstractKmerTable.ARRAYHF ? 22 : 27);
 				final long memOverWays=tableMemory/(factor*WAYS);
 				final double mem2=(prealloc_ ? preallocFraction : 1)*tableMemory;
 				initialSize=(prealloc_ || memOverWays<initialSizeDefault ? (int)Tools.min(2142000000, (long)(mem2/(factor*WAYS))) : initialSizeDefault);
 				if(initialSize!=initialSizeDefault){
-					System.err.println("Initial size set to "+initialSize);
+					outstream.println("Initial size set to "+initialSize);
 				}
 			}
 		}
@@ -528,10 +521,7 @@ public class Seal {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		if(in1!=null && in1.contains("#") && !new File(in1).exists()){
 			int pound=in1.lastIndexOf('#');
@@ -542,7 +532,7 @@ public class Seal {
 		}
 		if(in2!=null && (in2.contains("=") || in2.equalsIgnoreCase("null"))){in2=null;}
 		if(in2!=null){
-			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
+			if(FASTQ.FORCE_INTERLEAVED){outstream.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
 		
@@ -571,27 +561,15 @@ public class Seal {
 		}
 		
 		if((outu2!=null || outm2!=null) && (in1!=null && in2==null)){
-			if(!FASTQ.FORCE_INTERLEAVED){System.err.println("Forcing interleaved input because paired output was specified for a single input file.");}
+			if(!FASTQ.FORCE_INTERLEAVED){outstream.println("Forcing interleaved input because paired output was specified for a single input file.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
-		}
-
-		if(!setOut){
-			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
-//			out1="stdout";
-//			outstream=System.err;
-//			out2=null;
-			outu1=outu2=null;
-		}else if("stdout".equalsIgnoreCase(outu1) || "standarddout".equalsIgnoreCase(outu1)){
-			outu1="stdout.fq";
-			outstream=System.err;
-			outu2=null;
 		}
 
 		if(!Tools.testOutputFiles(overwrite, append, false, outu1, outu2, outm1, outm2, outpattern, outstats, outrpkm, outrefstats)){
 			throw new RuntimeException("\nCan't write to some output files; overwrite="+overwrite+"\n");
 		}
 		if(!Tools.testInputFiles(false, true, in1, in2, qfin1, qfin2, taxNameFile, taxNodeFile, giTableFile, taxTreeFile)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		if(!Tools.testInputFiles(true, true, ref)){
 			throw new RuntimeException("\nCan't read to some reference files.\n");
@@ -606,7 +584,7 @@ public class Seal {
 		assert(in2==null || in2.toLowerCase().startsWith("stdin") || in2.toLowerCase().startsWith("standardin") || new File(in2).exists()) : "Can't find "+in2;
 		
 		if(ref==null && literal==null){
-			System.err.println("ERROR: No reference sequences specified.  Use the -da flag to run anyway.");
+			outstream.println("ERROR: No reference sequences specified.  Use the -da flag to run anyway.");
 			assert(false) : "Please specify a reference.";
 		}
 				
@@ -619,7 +597,9 @@ public class Seal {
 		}
 		
 		//Initialize tables
-		keySets=AbstractKmerTable.preallocate(WAYS, tableType, initialSize, (!prealloc_ || preallocFraction<1));
+		ScheduleMaker scheduleMaker=new ScheduleMaker(WAYS, 14, prealloc_, (prealloc_ ? preallocFraction : 0.9));
+		int[] schedule=scheduleMaker.makeSchedule();
+		keySets=AbstractKmerTable.preallocate(WAYS, tableType, schedule, -1L);
 	}
 	
 	
@@ -640,36 +620,28 @@ public class Seal {
 		
 //		boolean dq0=FASTQ.DETECT_QUALITY;
 //		boolean ti0=FASTQ.TEST_INTERLEAVED;
-//		int rbl0=Shared.READ_BUFFER_LENGTH;
+//		int rbl0=Shared.bufferLen();;
 //		FASTQ.DETECT_QUALITY=false;
 //		FASTQ.TEST_INTERLEAVED=false;
-//		Shared.READ_BUFFER_LENGTH=16;
+//		Shared.setBufferLen(16;
 		
 		process2(t.time1);
 		
 //		FASTQ.DETECT_QUALITY=dq0;
 //		FASTQ.TEST_INTERLEAVED=ti0;
-//		Shared.READ_BUFFER_LENGTH=rbl0;
+//		Shared.setBufferLen(rbl0;
 		
 		/* Stop timer and calculate speed statistics */
 		t.stop();
+		lastReadsOut=readsUnmatched;
 		
 		
 		if(showSpeed){
-			double rpnano=readsIn/(double)(t.elapsed);
-			double bpnano=basesIn/(double)(t.elapsed);
-
-			//Format with k or m suffixes
-			String rpstring=(readsIn<100000 ? ""+readsIn : readsIn<100000000 ? (readsIn/1000)+"k" : (readsIn/1000000)+"m");
-			String bpstring=(basesIn<100000 ? ""+basesIn : basesIn<100000000 ? (basesIn/1000)+"k" : (basesIn/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			outstream.println("\nTime:   \t\t\t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println();
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsIn, basesIn, 8));
 		}
+		
+		if(outstream!=System.err && outstream!=System.out){outstream.close();}
 		
 		/* Throw an exception if errors were detected */
 		if(errorState){
@@ -723,7 +695,7 @@ public class Seal {
 			ByteStreamWriter bsw=new ByteStreamWriter(dump, overwrite, false, true);
 			bsw.start();
 			for(AbstractKmerTable set : keySets){
-				set.dumpKmersAsBytes(bsw, k, 0);
+				set.dumpKmersAsBytes(bsw, k, 0, Integer.MAX_VALUE, null);
 			}
 			bsw.poisonAndWait();
 		}
@@ -743,13 +715,15 @@ public class Seal {
 		
 		if(USE_TAXTREE){
 			if(giTableFile!=null){loadGiToNcbi();}
-			if(USE_TAXTREE){tree=TaxTree.loadTaxTree(taxTreeFile, taxNameFile, taxNodeFile, DISPLAY_PROGRESS ? outstream : null, false);}
+			if(USE_TAXTREE){tree=TaxTree.loadTaxTree(taxTreeFile, taxNameFile, taxNodeFile, null, DISPLAY_PROGRESS ? outstream : null, false, false);}
 			addToTree();
 		}
 		
 		/* Write statistics to files */
 		writeStats();
 		writeRPKM();
+		addToRqcMap();
+		
 		if(!BBSPLIT_STYLE){
 			writeRefStats();
 		}else{
@@ -777,13 +751,19 @@ public class Seal {
 			outstream.println("QTrimmed:               \t"+readsQTrimmed+" reads ("+toPercent(readsQTrimmed, readsIn)+") \t"+
 					basesQTrimmed+" bases ("+toPercent(basesQTrimmed, basesIn)+")");
 		}
-		if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimRight2>0 || forceTrimModulo>0){  
+		if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimRight2>0 || forceTrimModulo>0){
 			outstream.println("FTrimmed:               \t"+readsFTrimmed+" reads ("+toPercent(readsFTrimmed, readsIn)+") \t"+
 					basesFTrimmed+" bases ("+toPercent(basesFTrimmed, basesIn)+")");
 		}
 		if(minAvgQuality>0 || maxNs>=0){
 			outstream.println("Low quality discards:   \t"+readsQFiltered+" reads ("+toPercent(readsQFiltered, readsIn)+") \t"+
 					basesQFiltered+" bases ("+toPercent(basesQFiltered, basesIn)+")");
+		}
+		if(loglog!=null){
+			outstream.println("Unique "+loglog.k+"-mers:         \t"+loglog.cardinality());
+		}
+		if(loglogOut!=null){
+			outstream.println("Unique "+loglogOut.k+"-mers out:     \t"+loglogOut.cardinality());
 		}
 		if(parsecustom){
 			outstream.println();
@@ -794,9 +774,9 @@ public class Seal {
 //				basesMatched+" bases ("+toPercent(basesMatched*100.0/basesIn)+"%)");
 	}
 	
-	private String toPercent(long numerator, long denominator){
+	private static String toPercent(long numerator, long denominator){
 		if(denominator<1){return "0.00%";}
-		return String.format("%.2f%%",numerator*100.0/denominator);
+		return String.format(Locale.ROOT, "%.2f%%",numerator*100.0/denominator);
 	}
 	
 	/**
@@ -822,6 +802,25 @@ public class Seal {
 		scaffoldLengths=null;
 		scaffoldKmers=null;
 		scaffolds=null;
+	}
+	
+	private void addToRqcMap(){
+		BBDuk.putRqc("inputReads", readsIn, false, false);
+		BBDuk.putRqc("inputBases", basesIn, false, false);
+		if(qtrimLeft || qtrimRight){
+			BBDuk.putRqc("qtrimmedReads", readsQTrimmed, false, true);
+			BBDuk.putRqc("qtrimmedBases", basesQTrimmed, false, true);
+		}
+		BBDuk.putRqc("qfilteredReads", readsQFiltered, false, true);
+		BBDuk.putRqc("qfilteredBases", basesQFiltered, false, true);
+		
+		{//This is kind of a hack, to match BBDuk's syntax for RQCFilter.
+			BBDuk.putRqc("kfilteredReads", readsMatched, false, true);
+			BBDuk.putRqc("kfilteredBases", basesMatched, false, true);
+
+			BBDuk.putRqc("outputReads", readsUnmatched, true, false);
+			BBDuk.putRqc("outputBases", basesUnmatched, true, false);
+		}
 	}
 	
 	/**
@@ -853,22 +852,22 @@ public class Seal {
 		
 		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
 		if(STATS_COLUMNS==3){
-			tsw.print(String.format("#Total\t%d\n",readsIn));
-//			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum)); //With ambig=all, gives over 100%
-			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",readsMatched,rmult*readsMatched));
+			tsw.print(String.format(Locale.ROOT, "#Total\t%d\n",readsIn));
+//			tsw.print(String.format(Locale.ROOT, "#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum)); //With ambig=all, gives over 100%
+			tsw.print(String.format(Locale.ROOT, "#Matched\t%d\t%.5f%%\n",readsMatched,rmult*readsMatched));
 			tsw.print("#Name\tReads\tReadsPct\n");
 			for(int i=0; i<list.size(); i++){
 				StringCount sn=list.get(i);
-				tsw.print(String.format("%s\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult)));
+				tsw.print(String.format(Locale.ROOT, "%s\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult)));
 			}
 		}else{
-			tsw.print(String.format("#Total\t%d\t%d\n",readsIn,basesIn));
-//			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum,bsum,bsum*bmult)); //With ambig=all, gives over 100%
-			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",readsMatched,rmult*readsMatched,basesMatched,basesMatched*bmult));
+			tsw.print(String.format(Locale.ROOT, "#Total\t%d\t%d\n",readsIn,basesIn));
+//			tsw.print(String.format(Locale.ROOT, "#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum,bsum,bsum*bmult)); //With ambig=all, gives over 100%
+			tsw.print(String.format(Locale.ROOT, "#Matched\t%d\t%.5f%%\n",readsMatched,rmult*readsMatched,basesMatched,basesMatched*bmult));
 			tsw.print("#Name\tReads\tReadsPct\tBases\tBasesPct\n");
 			for(int i=0; i<list.size(); i++){
 				StringCount sn=list.get(i);
-				tsw.print(String.format("%s\t%d\t%.5f%%\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult),sn.bases,(sn.bases*bmult)));
+				tsw.print(String.format(Locale.ROOT, "%s\t%d\t%.5f%%\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult),sn.bases,(sn.bases*bmult)));
 			}
 		}
 		tsw.poisonAndWait();
@@ -900,10 +899,10 @@ public class Seal {
 		
 		/* Print header */
 		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
-		tsw.print(String.format("#Reads\t%d\n",readsIn));
-//		tsw.print(String.format("#Mapped\t%d\n",mappedReads));
-		tsw.print(String.format("#Mapped\t%d\n",readsMatched));
-		tsw.print(String.format("#RefSequences\t%d\n",Tools.max(0, scaffoldNames.size()-1)));
+		tsw.print(String.format(Locale.ROOT, "#Reads\t%d\n",readsIn));
+//		tsw.print(String.format(Locale.ROOT, "#Mapped\t%d\n",mappedReads));
+		tsw.print(String.format(Locale.ROOT, "#Mapped\t%d\n",readsMatched));
+		tsw.print(String.format(Locale.ROOT, "#RefSequences\t%d\n",Tools.max(0, scaffoldNames.size()-1)));
 		tsw.print("#Name\tLength\tBases\tCoverage\tReads\tRPKM\tFrags\tFPKM\n");
 
 		final float readMult=1000000000f/Tools.max(1, mappedReads);
@@ -920,7 +919,7 @@ public class Seal {
 			final double readMult2=readMult*invlen;
 			final double fragMult2=fragMult*invlen;
 			if(reads>0 || !printNonZeroOnly){
-				tsw.print(String.format("%s\t%d\t%d\t%.4f\t%d\t%.4f\t%d\t%.4f\n",s,len,bases,bases*invlen,reads,reads*readMult2,frags,frags*fragMult2));
+				tsw.print(String.format(Locale.ROOT, "%s\t%d\t%d\t%.4f\t%d\t%.4f\t%d\t%.4f\n",s,len,bases,bases*invlen,reads,reads*readMult2,frags,frags*fragMult2));
 			}
 		}
 		tsw.poisonAndWait();
@@ -959,9 +958,9 @@ public class Seal {
 		
 		/* Print header */
 		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
-		tsw.print(String.format("#Reads\t%d\n",readsIn));
-		tsw.print(String.format("#Mapped\t%d\n",mapped));
-		tsw.print(String.format("#References\t%d\n",refNames.size()-1));
+		tsw.print(String.format(Locale.ROOT, "#Reads\t%d\n",readsIn));
+		tsw.print(String.format(Locale.ROOT, "#Mapped\t%d\n",mapped));
+		tsw.print(String.format(Locale.ROOT, "#References\t%d\n",refNames.size()-1));
 		tsw.print("#Name\tLength\tScaffolds\tBases\tCoverage\tReads\tRPKM\tFrags\tFPKM\n");
 		
 		final float mult=1000000000f/Tools.max(1, mapped);
@@ -977,7 +976,7 @@ public class Seal {
 			final double invlen=1.0/Tools.max(1, len);
 			final double mult2=mult*invlen;
 			if(reads>0 || !printNonZeroOnly){
-				tsw.print(String.format("%s\t%d\t%d\t%d\t%.4f\t%d\t%.4f\t%d\t%.4f\n",name,len,scafs,bases,bases*invlen,reads,reads*mult2,frags,frags*mult2));
+				tsw.print(String.format(Locale.ROOT, "%s\t%d\t%d\t%d\t%.4f\t%d\t%.4f\t%d\t%.4f\n",name,len,scafs,bases,bases*invlen,reads,reads*mult2,frags,frags*mult2));
 			}
 		}
 		tsw.poisonAndWait();
@@ -1024,7 +1023,7 @@ public class Seal {
 			final double unambigReadP=rmult*reads;
 			final double ambigReadP=rmult*ambigReads;
 			if(reads>0 || !printNonZeroOnly){
-				tsw.print(String.format("%s\t%.5f\t%.5f\t%.5f\t%.5f\t%d\t%d\n",name,unambigReadP,unambigMB,ambigReadP,ambigMB,reads,ambigReads));
+				tsw.print(String.format(Locale.ROOT, "%s\t%.5f\t%.5f\t%.5f\t%.5f\t%d\t%d\n",name,unambigReadP,unambigMB,ambigReadP,ambigMB,reads,ambigReads));
 			}
 		}
 		tsw.poisonAndWait();
@@ -1046,16 +1045,17 @@ public class Seal {
 		tsw.start();
 		
 		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
-		tsw.print(String.format("#Reads\t%d\n",fragsIn));
-		tsw.print(String.format("#Mapped\t%d\n",mappedFrags));
-		tsw.print(String.format("#Limits\t%d\t%d\t%d\t%d\n", taxNodeCountLimit, taxNodeNumberLimit, taxNodeMinLevel, taxNodeMaxLevel));
+		tsw.print(String.format(Locale.ROOT, "#Reads\t%d\n",fragsIn));
+		tsw.print(String.format(Locale.ROOT, "#Mapped\t%d\n",mappedFrags));
+		tsw.print(String.format(Locale.ROOT, "#Limits\t%d\t%d\t%d\t%d\n", taxNodeCountLimit, taxNodeNumberLimit, taxNodeMinLevel, taxNodeMaxLevel));
 		tsw.print("#ID\tCount\tPercent\tLevel\tName\n");
 		
+//		assert(false) : taxNodeCountLimit+", "+taxNodeMinLevel+", "+taxNodeMaxLevel;
 		ArrayList<TaxNode> nodes=tree.gatherNodesAtLeastLimit(taxNodeCountLimit, taxNodeMinLevel, taxNodeMaxLevel);
 		
 		for(int i=0, cap=Tools.min(nodes.size(), (taxNodeNumberLimit>0 ? taxNodeNumberLimit : Integer.MAX_VALUE)); i<cap; i++){
 			TaxNode n=nodes.get(i);
-			tsw.print(String.format("%d\t%d\t%.4f\t%s\t%s\n", n.id, n.countSum, n.countSum*fragMult, n.levelString(), n.name));
+			tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.4f\t%s\t%s\n", n.id, n.countSum, n.countSum*fragMult, n.levelStringExtended(false), n.name));
 		}
 		
 		tsw.poisonAndWait();
@@ -1070,9 +1070,9 @@ public class Seal {
 //			final int scafs=refScafCounts[r];
 //			final int lim=s+scafs;
 //			final String name=ReadWrite.stripToCore(refNames.get(r));
-////			System.err.println("r="+r+", s="+s+", scafs="+scafs+", lim="+lim+", name="+name);
+////			outstream.println("r="+r+", s="+s+", scafs="+scafs+", lim="+lim+", name="+name);
 //			while(s<lim){
-////				System.err.println(r+", "+s+". Setting "+scaffoldNames.get(s)+" -> "+name);
+////				outstream.println(r+", "+s+". Setting "+scaffoldNames.get(s)+" -> "+name);
 //				scaffoldNames.set(s, name);
 //				s++;
 //			}
@@ -1130,8 +1130,8 @@ public class Seal {
 			long count=scaffoldFragCounts.get(i);
 			if(count>0){
 				String name=scaffoldNames.get(i);
-				assert(name.startsWith("ncbi|") || (name.startsWith("gi|") && GiToNcbi.isInitialized())) :
-					"\nFor taxonomy, all ref names must start with 'gi|' or 'ncbi|'.\n" +
+				assert(name.startsWith("ncbi|") || name.startsWith("tid|") || (name.startsWith("gi|") && GiToNcbi.isInitialized())) :
+					"\nFor taxonomy, all ref names must start with 'gi|' or 'ncbi|' or 'tid|'.\n" +
 					"If the names start with 'gi', the gi= flag must be set.\n";
 				int id=GiToNcbi.getID(name);
 				if(id>-1){
@@ -1148,8 +1148,11 @@ public class Seal {
 	 */
 	private long spawnLoadThreads(){
 		Timer t=new Timer();
-		if((ref==null || ref.length<1) && (literal==null || literal.length<1)){return 0;}
+		if((ref==null || ref.size()<1) && (literal==null || literal.length<1)){return 0;}
 		long added=0;
+		
+		final boolean oldParseCustom=FASTQ.PARSE_CUSTOM;
+		FASTQ.PARSE_CUSTOM=false;
 		
 		/* Create load threads */
 		LoadThread[] loaders=new LoadThread[WAYS];
@@ -1177,14 +1180,14 @@ public class Seal {
 				final String core=ReadWrite.stripToCore(refname);
 				if(useRefNames){
 					assert(refNum==scaffoldNames.size());
-					assert(!nameMap.containsKey(core));
+					assert(!nameMap.containsKey(core)) : "Duplicate file name: "+core;
 					Integer id=scaffoldNames.size();
 					scaffoldNames.add(core);
 					nameMap.put(core, id);
 				}
 				
 				/* Iterate through read lists from the input stream */
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					{
 						/* Assign a unique ID number to each scaffold */
 						ArrayList<Read> reads2=new ArrayList<Read>(reads);
@@ -1208,7 +1211,7 @@ public class Seal {
 							if(useRefNames){assert(refNum==id);}
 							
 							refScafCounts[refNum]++;
-							int len=r1.length()+r1.mateLength();
+							int len=r1.pairLength();
 							r1.obj=id;
 							if(r2!=null){r2.obj=id;}
 							
@@ -1235,12 +1238,12 @@ public class Seal {
 					}
 
 					/* Dispose of the old list and fetch a new one */
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				/* Cleanup */
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				errorState|=ReadWrite.closeStream(cris);
 				refNum++;
 			}
@@ -1256,11 +1259,11 @@ public class Seal {
 //				cris.start(); //4567
 //				ListNum<Read> ln=cris.nextList();
 //				ArrayList<Read> reads=(ln!=null ? ln.list : null);
-//				
+//
 //				final String core=ReadWrite.stripToCore(refname);
-//				
+//
 //				/* Iterate through read lists from the input stream */
-//				while(reads!=null && reads.size()>0){
+//				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 //					{
 //						/* Assign a unique ID number to each scaffold */
 //						ArrayList<Read> reads2=new ArrayList<Read>(reads);
@@ -1277,7 +1280,7 @@ public class Seal {
 //							}
 //							scaffoldLengths.add(len);
 //						}
-//						
+//
 //						if(REPLICATE_AMBIGUOUS){
 //							reads2=Tools.replicateAmbiguous(reads2, k);
 //						}
@@ -1298,12 +1301,12 @@ public class Seal {
 //					}
 //
 //					/* Dispose of the old list and fetch a new one */
-//					cris.returnList(ln.id, ln.list.isEmpty());
+//					cris.returnList(ln);
 //					ln=cris.nextList();
 //					reads=(ln!=null ? ln.list : null);
 //				}
 //				/* Cleanup */
-//				cris.returnList(ln.id, ln.list.isEmpty());
+//				cris.returnList(ln);
 //				errorState|=ReadWrite.closeStream(cris);
 //				refNum++;
 //			}
@@ -1312,7 +1315,7 @@ public class Seal {
 		/* If there are literal sequences to use as references */
 		if(literal!=null){
 			ArrayList<Read> list=new ArrayList<Read>(literal.length);
-			if(verbose){System.err.println("Adding literals "+Arrays.toString(literal));}
+			if(verbose){outstream.println("Adding literals "+Arrays.toString(literal));}
 
 			/* Assign a unique ID number to each literal sequence */
 			if(useRefNames){
@@ -1409,11 +1412,12 @@ public class Seal {
 			TextStreamWriter tsw=new TextStreamWriter("stdout", false, false, false, FileFormat.TEXT);
 			tsw.start();
 			for(AbstractKmerTable table : keySets){
-				table.dumpKmersAsText(tsw, k, 1);
+				table.dumpKmersAsText(tsw, k, 1, Integer.MAX_VALUE);
 			}
 			tsw.poisonAndWait();
 		}
 		
+		FASTQ.PARSE_CUSTOM=oldParseCustom;
 		return added;
 	}
 	
@@ -1441,22 +1445,22 @@ public class Seal {
 		final ConcurrentReadOutputStream rosm, rosu;
 		final MultiCros mcros;
 		if(outu1!=null){
-			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.threads()));
-			FileFormat ff1=FileFormat.testOutput(outu1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
-			FileFormat ff2=FileFormat.testOutput(outu2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
+			final int buff=(!ordered ? 12 : Tools.max(32, 2*Shared.threads()));
+			FileFormat ff1=FileFormat.testOutput(outu1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(outu2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosu=ConcurrentReadOutputStream.getStream(ff1, ff2, null, null, buff, null, true);
 			rosu.start();
 		}else{rosu=null;}
 		if(outm1!=null){
-			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.threads()));
-			FileFormat ff1=FileFormat.testOutput(outm1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
-			FileFormat ff2=FileFormat.testOutput(outm2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
+			final int buff=(!ordered ? 12 : Tools.max(32, 2*Shared.threads()));
+			FileFormat ff1=FileFormat.testOutput(outm1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(outm2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosm=ConcurrentReadOutputStream.getStream(ff1, ff2, null, null, buff, null, true);
 			rosm.start();
 		}else{rosm=null;}
 		if(outpattern!=null){
-			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.threads()));
-			mcros=new MultiCros(outpattern, null, ORDERED, overwrite, append, true, false, FileFormat.FASTQ, buff);
+			final int buff=(!ordered ? 12 : Tools.max(32, 2*Shared.threads()));
+			mcros=new MultiCros(outpattern, null, ordered, overwrite, append, true, false, FileFormat.FASTQ, buff);
 		}else{mcros=null;}
 		
 		if(rosu!=null || rosm!=null || mcros!=null){
@@ -1478,15 +1482,15 @@ public class Seal {
 				if(rosm!=null){rosm.add(new ArrayList<Read>(1), ln.id);}
 				if(rosu!=null){rosu.add(new ArrayList<Read>(1), ln.id);}
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(reads==null || reads.isEmpty()){
 				ReadWrite.closeStreams(cris, rosu, rosm);
 				ReadWrite.closeStreams(mcros);
-				System.err.println("Skipped all of the reads.");
+				outstream.println("Skipped all of the reads.");
 				System.exit(0);
 			}
 		}
@@ -1620,7 +1624,7 @@ public class Seal {
 			final byte[] bases=r.bases;
 			final int shift=2*k;
 			final int shift2=shift-2;
-			final long mask=~((-1L)<<shift);
+			final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 			final long kmask=lengthMasks[k];
 			long kmer=0;
 			long rkmer=0;
@@ -1648,12 +1652,12 @@ public class Seal {
 			if(skip>1){ //Process while skipping some kmers
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
+					long x=AminoAcid.baseToNumber[b];
+					long x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
-					if(b=='N'){len=0;}else{len++;}
-					if(verbose){System.err.println("Scanning1 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(x<0){len=0; rkmer=0;}else{len++;}
+					if(verbose){outstream.println("Scanning1 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
 						totalKmers++;
 						if(len%skip==0){
@@ -1665,12 +1669,12 @@ public class Seal {
 			}else{ //Process all kmers
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
+					long x=AminoAcid.baseToNumber[b];
+					long x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
-					if(b=='N'){len=0;}else{len++;}
-					if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+					if(x<0){len=0; rkmer=0;}else{len++;}
+					if(verbose){outstream.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
 						totalKmers++;
 						final long extraBase=(i>=bases.length-1 ? -1 : AminoAcid.baseToNumber[bases[i+1]]);
@@ -1699,14 +1703,14 @@ public class Seal {
 			
 			assert(kmask0==lengthMasks[len]) : kmask0+", "+len+", "+lengthMasks[len]+", "+Long.numberOfTrailingZeros(kmask0)+", "+Long.numberOfTrailingZeros(lengthMasks[len]);
 			
-			if(verbose){System.err.println("addToMap_A; len="+len+"; kMasks[len]="+lengthMasks[len]);}
+			if(verbose){outstream.println("addToMap_A; len="+len+"; kMasks[len]="+lengthMasks[len]);}
 			assert((kmer&kmask0)==0);
 			final long added;
 			if(hammingDistance==0){
 				final long key=toValue(kmer, rkmer, kmask0);
 				if(speed>0 && ((key/WAYS)&15)<speed){return 0;}
 				if(key%WAYS!=tnum){return 0;}
-				if(verbose){System.err.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+" = "+key);}
+				if(verbose){outstream.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+" = "+key);}
 //				int[] old=map.getValues(key, new int[1]);
 				
 //				int[] old=map.getValues(key, new int[1]); //123
@@ -1730,7 +1734,7 @@ public class Seal {
 			}else{
 				added=mutate(kmer, rkmer, len, id, hammingDistance, -1);
 			}
-			if(verbose){System.err.println("addToMap added "+added+" keys.");}
+			if(verbose){outstream.println("addToMap added "+added+" keys.");}
 			return added;
 		}
 
@@ -1751,11 +1755,11 @@ public class Seal {
 			
 			final long key=toValue(kmer, rkmer, lengthMasks[len]);
 			
-			if(verbose){System.err.println("mutate_A; len="+len+"; kmer="+kmer+"; rkmer="+rkmer+"; kMasks[len]="+lengthMasks[len]);}
+			if(verbose){outstream.println("mutate_A; len="+len+"; kmer="+kmer+"; rkmer="+rkmer+"; kMasks[len]="+lengthMasks[len]);}
 			if(key%WAYS==tnum){
-				if(verbose){System.err.println("mutate_B: "+AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+" = "+key);}
+				if(verbose){outstream.println("mutate_B: "+AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+" = "+key);}
 				int x=map.set(key, id);
-				if(verbose){System.err.println("mutate_B added "+x+" keys.");}
+				if(verbose){outstream.println("mutate_B added "+x+" keys.");}
 				added+=x;
 				assert(map.contains(key));
 			}
@@ -1827,7 +1831,7 @@ public class Seal {
 	/*--------------------------------------------------------------*/
 
 	/**
-	 * Matches read kmers against reference kmers, performs binning and/or trimming, and writes output. 
+	 * Matches read kmers against reference kmers, performs binning and/or trimming, and writes output.
 	 */
 	private class ProcessThread extends Thread{
 		
@@ -1837,7 +1841,7 @@ public class Seal {
 		 * @param rosu_ Unmatched read output stream (optional)
 		 * @param rosm_ Matched read output stream (optional)
 		 */
-		public ProcessThread(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream rosm_, ConcurrentReadOutputStream rosu_, 
+		public ProcessThread(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream rosm_, ConcurrentReadOutputStream rosu_,
 				MultiCros mcros_, boolean localArrays){
 			cris=cris_;
 			rosm=rosm_;
@@ -1845,7 +1849,7 @@ public class Seal {
 			mcros=mcros_;
 			
 			readstats=(MAKE_QUALITY_HISTOGRAM || MAKE_MATCH_HISTOGRAM || MAKE_BASE_HISTOGRAM || MAKE_QUALITY_ACCURACY ||
-					MAKE_EHIST || MAKE_INDELHIST || MAKE_LHIST || MAKE_GCHIST || MAKE_IDHIST) ? 
+					MAKE_EHIST || MAKE_INDELHIST || MAKE_LHIST || MAKE_GCHIST || MAKE_IDHIST) ?
 					new ReadStats() : null;
 			
 			final int alen=(scaffoldNames==null ? 0 : scaffoldNames.size());
@@ -1871,12 +1875,12 @@ public class Seal {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			final ArrayList<Read> mlist=(rosm==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-			final ArrayList<Read> ulist=(rosu==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-			final ArrayListSet als=(outpattern==null ? null : new ArrayListSet(ORDERED));
+			final ArrayList<Read> mlist=(rosm==null ? null : new ArrayList<Read>(Shared.bufferLen()));
+			final ArrayList<Read> ulist=(rosu==null ? null : new ArrayList<Read>(Shared.bufferLen()));
+			final ArrayListSet als=(outpattern==null ? null : new ArrayListSet(ordered));
 			
 			//While there are more reads lists...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
@@ -1905,11 +1909,13 @@ public class Seal {
 					final int minlen1=(int)Tools.max(initialLength1*minLenFraction, minReadLength);
 					final int minlen2=(int)Tools.max(initialLength2*minLenFraction, minReadLength);
 					
-					if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
+					if(loglog!=null){loglog.hash(r1);}
+					
+					if(verbose){outstream.println("Considering read "+r1.id+" "+new String(r1.bases));}
 					
 					fragsInT++;
 					readsInT+=(1+r1.mateCount());
-					basesInT+=(r1.length()+r1.mateLength());
+					basesInT+=r1.pairLength();
 					
 					boolean remove=false;
 					
@@ -1926,7 +1932,7 @@ public class Seal {
 						}
 					}
 					
-					if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimRight2>0 || forceTrimModulo>0){  
+					if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimRight2>0 || forceTrimModulo>0){
 						if(r1!=null && !r1.discarded()){
 							final int len=r1.length();
 							final int a=forceTrimLeft>0 ? forceTrimLeft : 0;
@@ -1964,34 +1970,34 @@ public class Seal {
 						int rlen1=0, rlen2=0;
 						if(r1!=null){
 							if(qtrimLeft || qtrimRight){
-								int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, 1);
+								int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, trimE, 1);
 								basesQTrimmedT+=x;
 								readsQTrimmedT+=(x>0 ? 1 : 0);
 							}
 							rlen1=r1.length();
 							if(rlen1<minlen1 || rlen1>maxReadLength){
 								r1.setDiscarded(true);
-								if(verbose){System.err.println(r1.id+" discarded due to length.");}
+								if(verbose){outstream.println(r1.id+" discarded due to length.");}
 							}
 						}
 						if(r2!=null){
 							if(qtrimLeft || qtrimRight){
-								int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, 1);
+								int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, trimE, 1);
 								basesQTrimmedT+=x;
 								readsQTrimmedT+=(x>0 ? 1 : 0);
 							}
 							rlen2=r2.length();
 							if(rlen2<minlen2 || rlen2>maxReadLength){
 								r2.setDiscarded(true);
-								if(verbose){System.err.println(r2.id+" discarded due to length.");}
+								if(verbose){outstream.println(r2.id+" discarded due to length.");}
 							}
 						}
 						
 						//Discard reads if too short
-						if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
+						if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) ||
 								(r1.discarded() && (r2==null || r2.discarded()))){
-							basesQFilteredT+=(r1.length()+r1.mateLength());
-							readsQTrimmedT+=1+r1.mateCount();
+							basesQFilteredT+=r1.pairLength();
+							readsQTrimmedT+=r1.pairCount();
 							remove=true;
 						}
 					}
@@ -2004,22 +2010,22 @@ public class Seal {
 						if(minAvgQuality>0){
 							if(r1!=null && r1.quality!=null && r1.avgQuality(false, minAvgQualityBases)<minAvgQuality){
 								r1.setDiscarded(true);
-								if(verbose){System.err.println(r1.id+" discarded due to low quality.");}
+								if(verbose){outstream.println(r1.id+" discarded due to low quality.");}
 							}
 							if(r2!=null && r2.quality!=null && r2.avgQuality(false, minAvgQualityBases)<minAvgQuality){
 								r2.setDiscarded(true);
-								if(verbose){System.err.println(r2.id+" discarded due to low quality.");}
+								if(verbose){outstream.println(r2.id+" discarded due to low quality.");}
 							}
 						}
 						//Determine whether to discard the reads based on the presence of Ns
 						if(maxNs>=0){
 							if(r1!=null && r1.countUndefined()>maxNs){
 								r1.setDiscarded(true);
-								if(verbose){System.err.println(r1.id+" discarded due to Ns.");}
+								if(verbose){outstream.println(r1.id+" discarded due to Ns.");}
 							}
 							if(r2!=null && r2.countUndefined()>maxNs){
 								r2.setDiscarded(true);
-								if(verbose){System.err.println(r2.id+" discarded due to Ns.");}
+								if(verbose){outstream.println(r2.id+" discarded due to Ns.");}
 							}
 						}
 						
@@ -2030,10 +2036,10 @@ public class Seal {
 						}
 						
 						//Discard reads if too short
-						if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
+						if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) ||
 								(r1.discarded() && (r2==null || r2.discarded()))){
-							basesQFilteredT+=(r1.length()+r1.mateLength());
-							readsQFilteredT+=1+r1.mateCount();
+							basesQFilteredT+=r1.pairLength();
+							readsQFilteredT+=r1.pairCount();
 							remove=true;
 						}
 					}
@@ -2062,7 +2068,7 @@ public class Seal {
 								countVector.size=0;
 								a=findBestMatch(r1, keySets, countVector);
 								b=findBestMatch(r2, keySets, countVector);
-								if(verbose){System.err.println("countVector: "+countVector);}
+								if(verbose){outstream.println("countVector: "+countVector);}
 								max=condenseLoose(countVector, idList1, countList1);
 							}else{
 								idList1.size=0;
@@ -2073,8 +2079,8 @@ public class Seal {
 							}
 							
 							if(verbose){
-								System.err.println("idList1: "+idList1);
-								System.err.println("countList1: "+countList1);
+								outstream.println("idList1: "+idList1);
+								outstream.println("countList1: "+countList1);
 							}
 							if(rename){
 								rename(r1, idList1, countList1);
@@ -2082,9 +2088,9 @@ public class Seal {
 							}
 							filterTopScaffolds(r1, r2, idList1, countList1, finalList1, max, clearzone);
 							if(verbose){
-								System.err.println("idList1: "+idList1);
-								System.err.println("countList1: "+countList1);
-								System.err.println("finalList1: "+finalList1);
+								outstream.println("idList1: "+idList1);
+								outstream.println("countList1: "+countList1);
+								outstream.println("finalList1: "+finalList1);
 							}
 							sites=finalList1.size;
 							
@@ -2092,8 +2098,8 @@ public class Seal {
 							if(max>=minhits){
 								assigned=assignTogether(r1, r2, als);
 							}else{
-								readsUnmatchedT+=1+r1.mateCount();
-								basesUnmatchedT+=r1.length()+r1.mateLength();
+								readsUnmatchedT+=r1.pairCount();
+								basesUnmatchedT+=r1.pairLength();
 								assigned=0;
 							}
 							
@@ -2133,7 +2139,10 @@ public class Seal {
 					}
 					
 					if(remove || assigned<1){
-						if(ulist!=null){ulist.add(r1);}
+						if(ulist!=null){
+							if(loglogOut!=null){loglogOut.hash(r1);}
+							ulist.add(r1);
+						}
 					}else{
 						if(mlist!=null){mlist.add(r1);}
 					}
@@ -2157,11 +2166,11 @@ public class Seal {
 				}
 				
 				//Fetch a new read list
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 		}
 		
 		/*--------------------------------------------------------------*/
@@ -2245,11 +2254,11 @@ public class Seal {
 			}
 
 			if(start<stop){
-				readsMatchedT+=1+r1.mateCount();
-				basesMatchedT+=r1.length()+r1.mateLength();
+				readsMatchedT+=r1.pairCount();
+				basesMatchedT+=r1.pairLength();
 			}else{
-				readsUnmatchedT+=1+r1.mateCount();
-				basesUnmatchedT+=r1.length()+r1.mateLength();
+				readsUnmatchedT+=r1.pairCount();
+				basesUnmatchedT+=r1.pairLength();
 			}
 			
 			return stop-start;
@@ -2410,7 +2419,7 @@ public class Seal {
 			int count=0;
 			for(int i=0; i<loose.size; i++){
 				int id=loose.get(i);
-//				System.err.println("i="+i+", id="+id+", count="+count+", prev="+prev);
+//				outstream.println("i="+i+", id="+id+", count="+count+", prev="+prev);
 				if(id==prev){
 					count++;
 				}else{
@@ -2544,9 +2553,11 @@ public class Seal {
 		private final void getValuesQHD_inner(final long kmer, final long rkmer, final long lengthMask, final int qPos, final int len, final int qHDist, final AbstractKmerTable[] sets, IntList list){
 			final int sizeLimit=10;
 			int[] ids=getValuesInner(kmer, rkmer, lengthMask, qPos, sets);
-			for(int x : ids){
-				if(x<0){break;}
-				if(list.size>sizeLimit || !list.contains(x)){list.add(x);}
+			if(ids!=null){
+				for(int x : ids){
+					if(x<0){break;}
+					if(list.size>sizeLimit || !list.contains(x)){list.add(x);}
+				}
 			}
 			if(qHDist>0){
 				final int qHDist2=qHDist-1;
@@ -2580,11 +2591,11 @@ public class Seal {
 			final long max=(rcomp ? Tools.max(kmer, rkmer) : kmer);
 			final long key=(max&middleMask)|lengthMask;
 			if(noAccel || ((key/WAYS)&15)>=speed){
-				if(verbose){System.err.println("Testing key "+key);}
+				if(verbose){outstream.println("Testing key "+key);}
 				AbstractKmerTable set=sets[(int)(key%WAYS)];
-				if(verbose){System.err.println("Found set "+set.arrayLength()+", "+set.size());}
+				if(verbose){outstream.println("Found set "+set.arrayLength()+", "+set.size());}
 				final int[] ids=set.getValues(key, singleton);
-				if(verbose){System.err.println("Found array "+(ids==null ? "null" : Arrays.toString(ids)));}
+				if(verbose){outstream.println("Found array "+(ids==null ? "null" : Arrays.toString(ids)));}
 				return ids;
 			}
 			return null;
@@ -2604,7 +2615,7 @@ public class Seal {
 			final int minlen2=(maskMiddle ? k/2 : k);
 			final int shift=2*k;
 			final int shift2=shift-2;
-			final long mask=~((-1L)<<shift);
+			final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 			final long kmask=lengthMasks[k];
 			long kmer=0;
 			long rkmer=0;
@@ -2616,12 +2627,12 @@ public class Seal {
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
-				long x=Dedupe.baseToNumber[b];
-				long x2=Dedupe.baseToComplementNumber[b];
+				long x=AminoAcid.baseToNumber0[b];
+				long x2=AminoAcid.baseToComplementNumber0[b];
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
-				if(b=='N' && forbidNs){len=0;}else{len++;}
-				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(b=='N' && forbidNs){len=0; rkmer=0;}else{len++;}
+				if(verbose){outstream.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 				if(len>=minlen2 && i>=minlen){
 					final int[] ids=getValues(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
 					if(ids!=null && ids[0]>-1){
@@ -2629,7 +2640,7 @@ public class Seal {
 							if(id==-1){break;}
 							hits.add(id);
 						}
-						if(verbose){System.err.println("Found = "+(found+1)+"/"+minKmerHits);}
+						if(verbose){outstream.println("Found = "+(found+1)+"/"+minKmerHits);}
 						found++;
 						//							assert(false) : (matchMode==MATCH_FIRST)+", "+(matchMode==MATCH_UNIQUE)+", "+ (ids.length==1 || ids[1]==-1);
 						if(matchMode==MATCH_FIRST || (matchMode==MATCH_UNIQUE && (ids.length==1 || ids[1]==-1))){break;}
@@ -2652,7 +2663,7 @@ public class Seal {
 			final int minlen2=(maskMiddle ? k/2 : k);
 			final int shift=2*k;
 			final int shift2=shift-2;
-			final long mask=~((-1L)<<shift);
+			final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 			final long kmask=lengthMasks[k];
 			long kmer=0;
 			long rkmer=0;
@@ -2664,12 +2675,12 @@ public class Seal {
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
-				long x=Dedupe.baseToNumber[b];
-				long x2=Dedupe.baseToComplementNumber[b];
+				long x=AminoAcid.baseToNumber0[b];
+				long x2=AminoAcid.baseToComplementNumber0[b];
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
-				if(b=='N' && forbidNs){len=0;}else{len++;}
-				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(b=='N' && forbidNs){len=0; rkmer=0;}else{len++;}
+				if(verbose){outstream.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 				if(len>=minlen2 && i>=minlen){
 					final int[] ids=getValues(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
 					if(ids!=null && ids[0]>-1){
@@ -2678,7 +2689,7 @@ public class Seal {
 							hits[id]++;
 							if(hits[id]==1){idList.add(id);}
 						}
-						if(verbose){System.err.println("Found = "+(found+1)+"/"+minKmerHits);}
+						if(verbose){outstream.println("Found = "+(found+1)+"/"+minKmerHits);}
 						found++;
 //						assert(false) : (matchMode==MATCH_FIRST)+", "+(matchMode==MATCH_UNIQUE)+", "+ (ids.length==1 || ids[1]==-1);
 						if(matchMode==MATCH_FIRST || (matchMode==MATCH_UNIQUE && (ids.length==1 || ids[1]==-1))){break;}
@@ -2758,6 +2769,10 @@ public class Seal {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	/** For calculating kmer cardinality */
+	final LogLog loglog;
+	final LogLog loglogOut;
+	
 	/** Has this class encountered errors while processing? */
 	public boolean errorState=false;
 	
@@ -2770,29 +2785,29 @@ public class Seal {
 	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in keySets[Y] */
 	private final AbstractKmerTable[] keySets;
-	/** A scaffold's name is stored at scaffoldNames.get(id).  
+	/** A scaffold's name is stored at scaffoldNames.get(id).
 	 * scaffoldNames[0] is reserved, so the first id is 1. */
 	private final ArrayList<String> scaffoldNames=new ArrayList<String>();
 	/** Names of reference files (refNames[0] is valid). */
 	private final ArrayList<String> refNames=new ArrayList<String>();
 	/** Number of scaffolds per reference. */
 	private final int[] refScafCounts;
-	/** scaffoldCounts[id] stores the number of reads with kmer matches to that scaffold */ 
+	/** scaffoldCounts[id] stores the number of reads with kmer matches to that scaffold */
 	private AtomicLongArray scaffoldReadCounts;
-	/** scaffoldFragCounts[id] stores the number of fragments (reads or pairs) with kmer matches to that scaffold */ 
+	/** scaffoldFragCounts[id] stores the number of fragments (reads or pairs) with kmer matches to that scaffold */
 	private AtomicLongArray scaffoldFragCounts;
-	/** scaffoldBaseCounts[id] stores the number of bases with kmer matches to that scaffold */ 
+	/** scaffoldBaseCounts[id] stores the number of bases with kmer matches to that scaffold */
 	private AtomicLongArray scaffoldBaseCounts;
-	/** Set to false to force threads to share atomic counter arrays. */ 
+	/** Set to false to force threads to share atomic counter arrays. */
 	private boolean ALLOW_LOCAL_ARRAYS=true;
-	/** scaffoldLengths[id] stores the length of that scaffold */ 
+	/** scaffoldLengths[id] stores the length of that scaffold */
 	private IntList scaffoldLengths=new IntList();
-	/** scaffoldLengths[id] stores the number of kmers in that scaffold (excluding mutants) */ 
+	/** scaffoldLengths[id] stores the number of kmers in that scaffold (excluding mutants) */
 	private IntList scaffoldKmers=new IntList();
-	/** scaffolds[id] stores the number of kmers in that scaffold */ 
+	/** scaffolds[id] stores the number of kmers in that scaffold */
 	private ArrayList<byte[]> scaffolds=new ArrayList<byte[]>();
 	/** Array of reference files from which to load kmers */
-	private String[] ref=null;
+	private ArrayList<String> ref=new ArrayList<String>();
 	/** Array of literal strings from which to load kmers */
 	private String[] literal=null;
 	/** Taxonomic tree */
@@ -2835,7 +2850,7 @@ public class Seal {
 	private long sampleseed=-1;
 	
 	/** Output reads in input order.  May reduce speed. */
-	private final boolean ORDERED;
+	private final boolean ordered;
 	/** Make the middle base in a kmer a wildcard to improve sensitivity */
 	private boolean maskMiddle=true;
 	
@@ -2851,7 +2866,7 @@ public class Seal {
 	private long taxNodeCountLimit=1;
 	private int taxNodeNumberLimit=-1;
 	private int taxNodeMinLevel=0;
-	private int taxNodeMaxLevel=TaxTree.stringToLevel("domain");
+	private int taxNodeMaxLevel=TaxTree.parseLevel("domain");
 	
 	/*--------------------------------------------------------------*/
 	/*----------------          Statistics          ----------------*/
@@ -2890,12 +2905,12 @@ public class Seal {
 	
 	/** Look for reverse-complements as well as forward kmers.  Default: true */
 	private final boolean rcomp;
-	/** Don't allow a read 'N' to match a reference 'A'.  
+	/** Don't allow a read 'N' to match a reference 'A'.
 	 * Reduces sensitivity when hdist>0 or edist>0.  Default: false. */
 	private final boolean forbidNs;
-	/** AND bitmask with 0's at the middle base */ 
+	/** AND bitmask with 0's at the middle base */
 	private final long middleMask;
-	/** Data structure to use.  Default: ARRAYH */
+	/** Data structure to use.  Default: ARRAYHF */
 	private final int tableType;
 	
 	/** Normal kmer length */
@@ -2920,9 +2935,11 @@ public class Seal {
 	/** Quality-trim the right side */
 	private final boolean qtrimRight;
 	/** Trim bases at this quality or below.  Default: 4 */
-	private final byte trimq;
-	/** Throw away reads below this average quality before trimming.  Default: 0 */
-	private final byte minAvgQuality;
+	private final float trimq;
+	/** Error rate for trimming (derived from trimq) */
+	private final float trimE;
+	/** Throw away reads below this average quality after trimming.  Default: 0 */
+	private final float minAvgQuality;
 	/** If positive, calculate average quality from the first X bases only.  Default: 0 */
 	private final int minAvgQualityBases;
 	/** Throw away reads failing chastity filter (:Y: in read header) */
@@ -2945,7 +2962,7 @@ public class Seal {
 	private final int forceTrimRight;
 	/** Trim this many rightmost bases of the read */
 	private final int forceTrimRight2;
-	/** Trim right bases of the read modulo this value. 
+	/** Trim right bases of the read modulo this value.
 	 * e.g. forceTrimModulo=50 would trim the last 3bp from a 153bp read. */
 	private final int forceTrimModulo;
 	
@@ -2954,8 +2971,6 @@ public class Seal {
 	/** If positive, only look for kmer matches the rightmost X bases */
 	private int restrictRight;
 	
-	/** True iff java was launched with the -ea' flag */
-	private final boolean EA;
 	/** Skip this many initial input reads */
 	private final long skipreads;
 
@@ -2963,15 +2978,15 @@ public class Seal {
 	 * Default: true. */
 	private final boolean removePairsIfEitherBad;
 	
-	/** Print only statistics for scaffolds that matched at least one read 
-	 * Default: true. */ 
+	/** Print only statistics for scaffolds that matched at least one read
+	 * Default: true. */
 	private final boolean printNonZeroOnly;
 	
 	/** Rename reads to indicate what they matched.
-	 * Default: false. */ 
+	 * Default: false. */
 	private final boolean rename;
 	/** Use names of reference files instead of scaffolds.
-	 * Default: false. */ 
+	 * Default: false. */
 	private final boolean useRefNames;
 	
 	/** Fraction of kmers to skip, 0 to 15 out of 16 */
@@ -2987,10 +3002,10 @@ public class Seal {
 	/** Pick a single scaffold per read pair, rather than per read */
 	private final boolean keepPairsTogether;
 	
-	/** Store match IDs in an IntList rather than int array */ 
+	/** Store match IDs in an IntList rather than int array */
 	private final boolean USE_COUNTVECTOR;
 	
-	/** Gather taxanomic information */ 
+	/** Gather taxanomic information */
 	private final boolean USE_TAXTREE;
 	
 	private final boolean MAKE_QUALITY_ACCURACY;
@@ -3008,11 +3023,13 @@ public class Seal {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Number of tables (and threads, during loading) */ 
+	/** Number of tables (and threads, during loading) */
 	private static final int WAYS=9; //123
 	/** Verbose messages */
 	public static final boolean verbose=false; //123
-	
+
+	/** Number of reads output in the last run */
+	public static long lastReadsOut;
 	/** Print messages to this stream */
 	private static PrintStream outstream=System.err;
 	/** Permission to overwrite existing files */

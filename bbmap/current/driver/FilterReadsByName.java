@@ -3,29 +3,29 @@ package driver;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import stream.ReadStreamWriter;
-import stream.SamLine;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import shared.TrimRead;
-import fileIO.FileFormat;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import stream.ReadStreamWriter;
+import stream.SamLine;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -36,39 +36,35 @@ public class FilterReadsByName {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		FilterReadsByName mb=new FilterReadsByName(args);
-		mb.process(t);
+		FilterReadsByName x=new FilterReadsByName(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public FilterReadsByName(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether it was explicitly set.
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		SamLine.SET_FROM_OK=true;
 		ReadStreamWriter.USE_ATTACHED_SAMLINE=true;
-		
+
+		boolean setInterleaved=false; //Whether it was explicitly set.
 		Parser parser=new Parser();
+		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
@@ -104,21 +100,24 @@ public class FilterReadsByName {
 			}else if(a.equals("prefix") || a.equals("prefixmode")){
 				prefixmode=Tools.parseBoolean(b);
 			}else if(a.equals("minlen") || a.equals("minlength")){
-				minLength=(int)Tools.parseKMG(b);
+				minLength=Tools.parseIntKMG(b);
 			}else if(a.equals("from")){
-				fromPos=(int)Tools.parseKMG(b);
+				fromPos=Tools.parseIntKMG(b);
 			}else if(a.equals("to")){
-				toPos=(int)Tools.parseKMG(b);
+				toPos=Tools.parseIntKMG(b);
 			}else if(a.equals("pos") || a.equals("range")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split("-");
-				fromPos=(int)Tools.parseKMG(split2[0]);
-				toPos=(int)Tools.parseKMG(split2[1]);
+				fromPos=Tools.parseIntKMG(split2[0]);
+				toPos=Tools.parseIntKMG(split2[1]);
 			}else if(a.equals("truncate")){
-				truncateWhitespace=truncateHeaderSymbol=Tools.parseBoolean(b);
+				trimWhitespace=truncateHeaderSymbol=Tools.parseBoolean(b);
 			}else if(a.equals("truncatewhitespace") || a.equals("tws")){
-				truncateWhitespace=Tools.parseBoolean(b);
+				trimWhitespace=Tools.parseBoolean(b);
 			}else if(a.equals("truncateheadersymbol") || a.equals("ths")){
 				truncateHeaderSymbol=Tools.parseBoolean(b);
+			}else if(a.equals("ignoreafterwhitespace") || a.equals("iaw")){
+//				ignoreAfterWhitespace=Tools.parseBoolean(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 			}else if(parser.parse(arg, a, b)){
@@ -144,13 +143,16 @@ public class FilterReadsByName {
 				names.add(s.toLowerCase());
 			}
 		}
-		if(truncateHeaderSymbol || truncateWhitespace){
+		if(truncateHeaderSymbol || trimWhitespace /*|| ignoreAfterWhitespace*/){
 			String[] x=names.toArray(new String[names.size()]);
 			names.clear();
 			for(String s : x){
 				String s2=s;
 				if(truncateHeaderSymbol && s.length()>1 && (s.charAt(0)=='@' || s.charAt(0)=='>')){s2=s.substring(1);}
-				if(truncateWhitespace){s2=s.trim();}
+				if(trimWhitespace){s2=s.trim();}
+//				if(ignoreAfterWhitespace){
+//					s2=substringUntilWhitespace(s2);
+//				}
 				if(s2.length()>0){
 					names.add(s2);
 				}
@@ -196,23 +198,12 @@ public class FilterReadsByName {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-//			if(!parser.setOut){
-//				out1="stdout";
-//			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		if(!setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -247,6 +238,14 @@ public class FilterReadsByName {
 		}
 	}
 	
+	private static String substringUntilWhitespace(String s){
+		for(int i=0; i<s.length(); i++){
+			char c=s.charAt(i);
+			if(c==' ' || c=='\t'){return s.substring(0, i);}
+		}
+		return s;
+	}
+	
 	void process(Timer t){
 		
 		
@@ -267,7 +266,7 @@ public class FilterReadsByName {
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -296,7 +295,7 @@ public class FilterReadsByName {
 			
 			
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				ArrayList<Read> retain=new ArrayList<Read>(reads.size());
 				for(int idx=0; idx<reads.size(); idx++){
@@ -305,13 +304,14 @@ public class FilterReadsByName {
 					
 					final int initialLength1=r1.length();
 					final int initialLength2=(r1.mateLength());
-					readsProcessed+=1+r1.mateCount();
+					readsProcessed+=r1.pairCount();
 					basesProcessed+=initialLength1+initialLength2;
 					
 					final String header;
 					{
 						String temp=(ignoreCase ? r1.id.toLowerCase() : r1.id);
-						temp=truncateWhitespace ? temp.trim() : temp;
+						temp=trimWhitespace ? temp.trim() : temp;
+						//if(ignoreAfterWhitespace){temp=substringUntilWhitespace(temp);}
 						header=temp;
 					}
 					String prefix=null;
@@ -352,8 +352,8 @@ public class FilterReadsByName {
 							TrimRead.trimToPosition(r1, fromPos, toPos, 1);
 						}
 						retain.add(r1);
-						readsOut+=1+r1.mateCount();
-						basesOut+=r1.length()+r1.mateLength();
+						readsOut+=r1.pairCount();
+						basesOut+=r1.pairLength();
 					}
 				}
 				
@@ -361,7 +361,7 @@ public class FilterReadsByName {
 				
 				if(ros!=null){ros.add(listOut, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -375,19 +375,7 @@ public class FilterReadsByName {
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
-		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-//		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-//		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-//
-//		while(rpstring.length()<8){rpstring=" "+rpstring;}
-//		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:               "+t);
-		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+basesProcessed+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		outstream.println("Reads Out:          "+readsOut);
 		outstream.println("Bases Out:          "+basesOut);
 		
@@ -395,24 +383,6 @@ public class FilterReadsByName {
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
-	
-	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
-	
 	
 	/*--------------------------------------------------------------*/
 	
@@ -440,7 +410,8 @@ public class FilterReadsByName {
 	private boolean headerSubstringOfName=false;
 	private boolean ignoreCase=true;
 	private boolean truncateHeaderSymbol=false;
-	private boolean truncateWhitespace=false;
+	private boolean trimWhitespace=false;
+//	private boolean ignoreAfterWhitespace=false;
 
 	private int minLength=0;
 

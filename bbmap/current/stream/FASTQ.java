@@ -13,30 +13,20 @@ import dna.Gene;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 
 
 public class FASTQ {
-	
-	public static void writeFASTQ(Read[] reads, String fname){
-		StringBuilder sb=new StringBuilder();
-		for(Read r : reads){
-			String[] quad=toFASTQ(r);
-			for(int i=0; i<quad.length; i++){
-				sb.append(quad[i]);
-				sb.append('\n');
-			}
-		}
-		ReadWrite.writeString(sb, fname);
-	}
 	
 //	public static boolean isInterleaved(String fname){
 //		if(!TEST_INTERLEAVED && !FORCE_INTERLEAVED){return false;}
 //		assert(tf.is!=System.in && !tf.name.equals("stdin") && !tf.name.startsWith("stdin."));
 //		if(tf.is!=System.in && !tf.name.equals("stdin") && !tf.name.startsWith("stdin.")){return FORCE_INTERLEAVED;}
 //		String s=null;
-//		
+//
 //		String[] oct=new String[8];
 //	}
 	
@@ -51,10 +41,10 @@ public class FASTQ {
 ////		TextFile tf=new TextFile(fname);
 ////		assert(tf.is!=System.in);
 ////		if(tf.is==System.in){return FORCE_INTERLEAVED;}
-//		
+//
 //		String[] oct=new String[8];
 //		int cntr=0;
-//		
+//
 //		{
 //			InputStream is=ReadWrite.getInputStream(fname, false, false);
 //			BufferedReader br=new BufferedReader(new InputStreamReader(is));
@@ -68,23 +58,23 @@ public class FASTQ {
 //				e.printStackTrace();
 //			}
 //		}
-//		
+//
 //		if(oct[0]==null){return false;}
-//		
+//
 //		testQuality(oct);
-//		
+//
 //		if(cntr<8){return false;}
 ////		assert(false);
 //		assert(oct[0]==null || oct[0].startsWith("@")) : "Does not appear to be a valid FASTQ file:\n"+new String(oct[0]);
 //		assert(oct[2]==null || oct[2].startsWith("+")) : "Does not appear to be a valid FASTQ file:\n"+new String(oct[2]);
 //		assert(oct[4]==null || oct[4].startsWith("@")) : "Does not appear to be a valid FASTQ file:\n"+new String(oct[4]);
 //		assert(oct[6]==null || oct[6].startsWith("+")) : "Does not appear to be a valid FASTQ file:\n"+new String(oct[6]);
-//		
+//
 //		if(FORCE_INTERLEAVED){return true;}
 //		if(PARSE_CUSTOM && fname.contains("_interleaved.f")){
 //			return true;
 //		}
-//		
+//
 //		return testPairNames(oct[0], oct[4]);
 //	}
 	
@@ -169,11 +159,12 @@ public class FASTQ {
 	}
 	
 	public static byte testQuality(ArrayList<String> oct){
-		if(oct==null || oct.size()<4 || oct.get(0)==null){return ASCII_OFFSET;}
+		if(SET_QIN || oct==null || oct.size()<4 || oct.get(0)==null){return ASCII_OFFSET;}
 		if(verbose){System.err.println("testQuality()");}
 		int qflips=0;
+		int onlyValidA33=0;
 		for(int k=0; k<2; k++){
-			int a=1+4*k, b=3+4*k;
+			final int a=1+4*k, b=3+4*k;
 			if(oct.size()<b || oct.get(a)==null || oct.get(b)==null){break;}
 			byte[] bases=oct.get(a).getBytes();
 			byte[] quals=oct.get(b).getBytes();
@@ -191,20 +182,30 @@ public class FASTQ {
 			}
 			
 			for(int i=0; i<quals.length; i++){
-				quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
-				if(verbose){System.err.println(quals[i]);}
+				final byte q0=quals[i];
+				if(q0<33){onlyValidA33++;}
+				
+				int q=q0-ASCII_OFFSET; //Convert from ASCII33 to native.
+				if(verbose){System.err.println(q);}
 				if(DETECT_QUALITY){
-					if(ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH || (bases[i]=='N' && (quals[i]==31 || quals[i]==33)))){
-						if(warnQualityChange && qflips<4){System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "
-								+(quals[i]+ASCII_OFFSET)+" for base "+(char)(bases[i])+" while prescanning.");}
+					if(ASCII_OFFSET==33 && (q>QUAL_THRESH || (bases[i]=='N' && (q==31 || q==33)))){
+						if(warnQualityChange && qflips<4){
+							System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(char)q0+" (Q"
+									+(q)+") for base "+(char)(bases[i])+" at lines "+a+" and "+b+", position "+i+" while prescanning."
+									//+Character.toString((char)(q+ASCII_OFFSET))
+									);
+						}
 						qflips++;
 						ASCII_OFFSET=64;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=64;}
 						for(int j=0; j<=i; j++){
 							quals[j]=(byte)(quals[j]-31);
 						}
-					}else if(ASCII_OFFSET==64 && (quals[i]<-5)){
-						if(warnQualityChange && qflips<4){System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
+					}else if(ASCII_OFFSET==64 && (q<-5)){
+						if(warnQualityChange && qflips<4){
+							System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(char)q0+" (Q"
+									+(q)+") for base "+(char)(bases[i])+" at lines "+a+" and "+b+", position "+i+" while prescanning.");
+						}
 						ASCII_OFFSET=33;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=33;}
 						qflips++;
@@ -213,12 +214,21 @@ public class FASTQ {
 						}
 					}
 				}
-				assert(quals[i]>=-5 || IGNORE_BAD_QUALITY) : "ASCII encoding for quality (currently ASCII-"+ASCII_OFFSET+") appears to be wrong.\n"
+				assert(q>=-5 || IGNORE_BAD_QUALITY) : "ASCII encoding for quality (currently ASCII-"+ASCII_OFFSET+") appears to be wrong for input quality "
+								+(q+ASCII_OFFSET)+" for base "+(char)(bases[i])+" at lines "+a+" and "+b+", position "+i+".  Please manually set qin=33 or qin=64.\n"
 					+oct.get(k)+"\n"+oct.get(k+3)+"\n"+Arrays.toString(oct.get(k+3).getBytes());
 				assert(qflips<2 || IGNORE_BAD_QUALITY) : "Failed to auto-detect quality coding; quitting.  Please manually set qin=33 or qin=64.";
+				if(DETECT_QUALITY && qflips==2){
+					if(warnQualityChange){System.err.println("WARNING: Quality scores are outside of the normal range (0-41). Assuming ASCII-33.\n");}
+					DETECT_QUALITY=false;
+					ASCII_OFFSET=33;
+					if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=33;}
+//					warnQualityChange=false;
+				}
 			}
 		}
 		
+		if(onlyValidA33>0){ASCII_OFFSET=33;}
 		return ASCII_OFFSET;
 	}
 	
@@ -324,72 +334,6 @@ public class FASTQ {
 		return false;
 	}
 	
-	public static String[] toFASTQ(Read r){
-		String id=customID(r);
-		return toFASTQ(r.bases, r.quality, id==null ? ""+r.numericID : id);
-	}
-	
-	public static String customID(Read r){
-		if(!TAG_CUSTOM){return r.id;}
-		
-		if(DELETE_OLD_NAME){
-			assert(false) : "Seems odd so I added this assertion.  I don't see anywhere it was being used. Use -da flag to override.";
-			r.id=null;
-		}
-
-		ByteBuilder sb=new ByteBuilder();
-		if(r.id==null /*|| DELETE_OLD_NAME*/){
-			sb.append(r.numericID);
-		}else{
-			sb.append(r.id);
-		}
-		if(r.chrom>-1 && r.stop>-1){
-			if(TAG_CUSTOM_SIMPLE){
-				sb.append('_');
-				sb.append(r.strand()==0 ? '+' : '-');
-			}else{
-				sb.append("_chr");
-				sb.append(r.chrom);
-				sb.append('_');
-				sb.append((int)r.strand());
-				sb.append('_');
-				sb.append(r.start);
-				sb.append('_');
-				sb.append(r.stop);
-			}
-
-			if(Data.GENOME_BUILD>=0){
-				final int chrom1=r.chrom;
-				final int start1=r.start;
-				final int stop1=r.stop;
-				final int idx1=Data.scaffoldIndex(chrom1, (start1+stop1)/2);
-				final byte[] name1=Data.scaffoldNames[chrom1][idx1];
-				final int a1=Data.scaffoldRelativeLoc(chrom1, start1, idx1);
-				final int b1=a1-start1+stop1;
-				sb.append('_');
-				sb.append(a1);
-				if(TAG_CUSTOM_SIMPLE){
-					sb.append('_');
-					sb.append(b1);
-				}
-				sb.append('_');
-				sb.append(new String(name1));
-			}
-		}
-		
-		if(ADD_PAIRNUM_TO_CUSTOM_ID){
-			sb.append(' ');
-			sb.append(r.pairnum()+1);
-			sb.append(':');
-		}else if(ADD_SLASH_PAIRNUM_TO_CUSTOM_ID){
-			sb.append(' ');
-			sb.append('/');
-			sb.append(r.pairnum()+1);
-		}
-		
-		return sb.toString();
-	}
-	
 	private static int fastqLength(Read r){
 		int len=6; //newlines, @, +
 		len+=(r.id==null ? Tools.stringLength(r.numericID) : r.id.length());
@@ -403,7 +347,7 @@ public class FASTQ {
 		final String id;
 		final byte[] bases=r.bases, quals=r.quality;
 		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
-			id=customID(r);
+			id=Header.toString(r);
 			if(id!=null){len+=id.length();}
 		}else{
 			id=r.id;
@@ -414,7 +358,7 @@ public class FASTQ {
 		bb.append('@');
 		if(id==null){bb.append(r.numericID);}
 		else{bb.append(id);}
-		bb.append('\n');
+		bb.nl();
 		
 //		if(bases!=null){for(byte b : bases){sb.append((char)b);}}
 //		sb.append('\n');
@@ -423,11 +367,11 @@ public class FASTQ {
 //		if(quals!=null){for(byte b : quals){sb.append((char)(b+ASCII_OFFSET_OUT));}}
 		
 		if(bases==null){
-			bb.append('\n').append('+').append('\n');
+			bb.nl().append('+').append('\n');
 			if(verbose){System.err.println("A:\n"+bb);}
 		}else{
 			bb.append(bases);
-			bb.append('\n').append('+').append('\n');
+			bb.nl().append('+').append('\n');
 			if(verbose){System.err.println("B:\n"+bb);}
 			if(quals==null){
 				final byte q=(byte)(Shared.FAKE_QUAL+ASCII_OFFSET_OUT);
@@ -454,76 +398,51 @@ public class FASTQ {
 		return bb;
 	}
 	
-	public static StringBuilder toFASTQ(Read r, StringBuilder sb){
-		int len=fastqLength(r);
-		final String id;
-		final byte[] bases=r.bases, quals=r.quality;
-		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
-			id=customID(r);
-			if(id!=null){len+=id.length();}
-		}else{
-			id=r.id;
-		}
-		if(sb==null){sb=new StringBuilder(len);}
-		else{sb.ensureCapacity(len);}
-		
-		sb.append('@');
-		if(id==null){sb.append(r.numericID);}
-		else{sb.append(id);}
-		sb.append('\n');
-		
-//		if(bases!=null){for(byte b : bases){sb.append((char)b);}}
+//	public static StringBuilder toFASTQ(Read r, StringBuilder sb){
+//		int len=fastqLength(r);
+//		final String id;
+//		final byte[] bases=r.bases, quals=r.quality;
+//		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
+//			id=customID(r);
+//			if(id!=null){len+=id.length();}
+//		}else{
+//			id=r.id;
+//		}
+//		if(sb==null){sb=new StringBuilder(len);}
+//		else{sb.ensureCapacity(len);}
+//		
+//		sb.append('@');
+//		if(id==null){sb.append(r.numericID);}
+//		else{sb.append(id);}
 //		sb.append('\n');
-//		sb.append('+');
-//		sb.append('\n');
-//		if(quals!=null){for(byte b : quals){sb.append((char)(b+ASCII_OFFSET_OUT));}}
-		
-		if(bases==null){
-			sb.append('\n').append('+').append('\n');
-		}else{
-			char[] buffer=Shared.getTLCB(bases.length);
-			for(int i=0; i<bases.length; i++){buffer[i]=(char)bases[i];}
-			sb.append(buffer, 0, bases.length);
-			sb.append('\n').append('+').append('\n');
-			if(quals==null){
-				final char q=(char)(30+ASCII_OFFSET_OUT);
-				final int blen=bases.length;
-				for(int i=0; i<blen; i++){buffer[i]=q;}
-				sb.append(buffer, 0, blen);
-			}else{
-				for(int i=0; i<quals.length; i++){buffer[i]=(char)(quals[i]+ASCII_OFFSET_OUT);}
-				sb.append(buffer, 0, quals.length);
-			}
-		}
-		
-//		sb.append('\n');
-		return sb;
-	}
-	
-	public static String[] toFASTQ(byte[] bases, byte[] quality, String identifier){
-		String[] out=new String[4];
-		
-		identifier=(identifier==null ? ""+incr() : identifier);
-		if(quality==null){
-			byte[] x=new byte[bases.length];
-			for(int i=0; i<bases.length; i++){
-				x[i]=30;
-			}
-			quality=x;
-		}
-		
-		byte[] q2=new byte[quality.length];
-		for(int i=0; i<q2.length; i++){q2[i]=(byte)(quality[i]+ASCII_OFFSET_OUT);}
-		
-		assert(quality.length==bases.length);
-		
-		out[0]="@"+identifier;
-		out[1]=new String(bases);
-		out[2]="+"/*+identifier*/;
-		out[3]=new String(q2);
-		
-		return out;
-	}
+//		
+////		if(bases!=null){for(byte b : bases){sb.append((char)b);}}
+////		sb.append('\n');
+////		sb.append('+');
+////		sb.append('\n');
+////		if(quals!=null){for(byte b : quals){sb.append((char)(b+ASCII_OFFSET_OUT));}}
+//		
+//		if(bases==null){
+//			sb.append('\n').append('+').append('\n');
+//		}else{
+//			char[] buffer=Shared.getTLCB(bases.length);
+//			for(int i=0; i<bases.length; i++){buffer[i]=(char)bases[i];}
+//			sb.append(buffer, 0, bases.length);
+//			sb.append('\n').append('+').append('\n');
+//			if(quals==null){
+//				final char q=(char)(30+ASCII_OFFSET_OUT);
+//				final int blen=bases.length;
+//				for(int i=0; i<blen; i++){buffer[i]=q;}
+//				sb.append(buffer, 0, blen);
+//			}else{
+//				for(int i=0; i<quals.length; i++){buffer[i]=(char)(quals[i]+ASCII_OFFSET_OUT);}
+//				sb.append(buffer, 0, quals.length);
+//			}
+//		}
+//		
+////		sb.append('\n');
+//		return sb;
+//	}
 	
 	
 	public static Read[] toReads(TextFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
@@ -626,6 +545,7 @@ public class FASTQ {
 						if(warnQualityChange){
 							if(numericID<1){
 								System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+//								assert(false) : FASTQ.DETECT_QUALITY+", "+FASTQ.IGNORE_BAD_QUALITY+", "+FASTQ.ASCII_OFFSET;
 							}else{
 								warnQualityChange=false;
 								System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
@@ -650,13 +570,13 @@ public class FASTQ {
 							byte trueStrand=Byte.parseByte(answer[2]);
 							int trueLoc=Integer.parseInt(answer[3]);
 							int trueStop=Integer.parseInt(answer[4]);
-							r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, numericID);
+							r=new Read(bases, quals, id, numericID, trueStrand, trueChrom, trueLoc, trueStop);
 							r.setSynthetic(true);
 						} catch (NumberFormatException e) {}
 					}
 				}
 				if(r==null){
-					r=new Read(bases, 0, (byte)0, 0, 0, id, quals, numericID);
+					r=new Read(bases, quals, id, numericID);
 				}
 				
 				cntr=0;
@@ -689,30 +609,21 @@ public class FASTQ {
 		return list;
 	}
 	
-	public static ArrayList<Read> toReadList(ByteFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
-		byte[] s=null;
+	public static ArrayList<Read> toReadList(final ByteFile bf, final int maxReadsToReturn, long numericID, final boolean interleaved, final int flag){
 		ArrayList<Read> list=new ArrayList<Read>(Data.min(8192, maxReadsToReturn));
-//		long numericID=numericID0;
-		byte[][] quad=new byte[4][];
+		final byte[][] quad=new byte[4][];
 		
-		int cntr=0;
-		int added=0;
+		int cntr=0, added=0;
 		
-//		int longest=0;
-		
-		Read prev=null;
-		
-		for(s=tf.nextLine(); s!=null && added<maxReadsToReturn; s=tf.nextLine()){
-			quad[cntr]=s;
-			cntr++;
-			if(cntr==4){
-				
-				Read r=quadToRead(quad, true, false, tf, numericID);
-				cntr=0;
-				
-//				longest=Tools.max(longest, r.length());
-				
-				if(interleaved){
+		if(interleaved){
+			Read prev=null;
+			for(byte[] s=bf.nextLine(); s!=null; s=bf.nextLine()){
+				quad[cntr]=s;
+				cntr++;
+				if(cntr==4){
+					cntr=0;
+					final Read r=quadToRead_slow(quad, false, bf, numericID, flag);
+					
 					if(prev==null){prev=r;}
 					else{
 						prev.mate=r;
@@ -722,18 +633,23 @@ public class FASTQ {
 						added++;
 						numericID++;
 						prev=null;
+						if(added>=maxReadsToReturn){break;}
 					}
-				}else{
+				}
+			}
+		}else{
+			for(byte[] s=bf.nextLine(); s!=null; s=bf.nextLine()){
+				quad[cntr]=s;
+				cntr++;
+				if(cntr==4){
+					cntr=0;
+					final Read r=quadToRead_slow(quad, false, bf, numericID, flag);
+					
 					list.add(r);
 					added++;
 					numericID++;
+					if(added>=maxReadsToReturn){break;}
 				}
-				
-				
-				if(added>=maxReadsToReturn){break;}
-				
-//				System.out.println(r.chrom+", "+r.strand+", "+r.loc);
-//				assert(false);
 			}
 		}
 		assert(list.size()<=maxReadsToReturn);
@@ -764,8 +680,8 @@ public class FASTQ {
 		return quad;
 	}
 	
-	public static Read quadToRead(final byte[][] quad, boolean fastq, boolean scarf, ByteFile tf, long numericID){
-
+	public static Read quadToRead_slow(final byte[][] quad, boolean scarf, ByteFile bf, long numericID, final int flag){
+		
 		if(verbose){
 			System.err.println("\nASCII offset is "+ASCII_OFFSET);
 			System.err.println("quad:");
@@ -775,17 +691,16 @@ public class FASTQ {
 			System.err.println(new String(quad[3]));
 		}
 
-		assert(scarf || (quad[0].length>0 && quad[0][0]==(byte)'@')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
+		assert(scarf || (quad[0].length>0 && quad[0][0]==(byte)'@')) : "\nError in "+bf.name()+", line "+bf.lineNum()+", with these 4 lines:\n"+
 			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
-		assert(scarf || (quad[0].length>0 && quad[2].length>0 && quad[2][0]==(byte)'+')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
+		assert(scarf || (quad[0].length>0 && quad[2].length>0 && quad[2][0]==(byte)'+')) : "\nError in "+bf.name()+", line "+bf.lineNum()+", with these 4 lines:\n"+
 			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
 
 		//			if(quad[0].startsWith("@HW") || quad[0].startsWith("@FC")){ascii_offset=66;} //TODO: clumsy
 
-		final String id=makeId(quad[0]);
-
 		Read r=null;
 
+		final String id=makeId(quad[0]);
 		final byte[] bases=quad[1];
 		final byte[] quals=quad[3];
 		
@@ -799,6 +714,7 @@ public class FASTQ {
 				if(warnQualityChange){
 					if(numericID<1){
 						System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+//						assert(false) : FASTQ.DETECT_QUALITY+", "+FASTQ.IGNORE_BAD_QUALITY+", "+FASTQ.ASCII_OFFSET;
 					}else{
 						warnQualityChange=false;
 						System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
@@ -812,72 +728,125 @@ public class FASTQ {
 					quals[j]=(byte)(quals[j]-31);
 				}
 			}
-			if(quals[i]<-5){
+			if(quals[i]<0){
 				
-				if(IGNORE_BAD_QUALITY){
-					quals[i]=0;
+				if(IGNORE_BAD_QUALITY || quals[i]>=-5){
+					//Do nothing
+				}else if(SET_QIN){
+					if(!negativeFive){
+						System.err.println("\n***WARNING***: The ASCII quality encoding offset ("+ASCII_OFFSET+") may not be set correctly."
+								+ "\nProblematic read number "+numericID+": "+new String(quad[0])+"\n");
+						errorState=true;
+						negativeFive=true;
+					}
 				}else{
 					if(!negativeFive){
-						for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)ASCII_OFFSET);}
-						System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly, or the reads are corrupt; quality value below -5.\n" +
-								"Please re-run with the flag 'qin=33' or 'ignorebadquality'.\nProblematic read number "+numericID+":\n" +
+						{
+							for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], ASCII_OFFSET);}
+							System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly, or the reads are corrupt; quality value below -5.\n" +
+									"Please re-run with the flag 'qin=33', 'ignorebadquality', or '-da'.\nProblematic read number "+numericID+":\n" +
 
 						"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n");
-						System.err.println("Offset="+ASCII_OFFSET);
+							System.err.println("Offset="+ASCII_OFFSET);
+						}
 					}
-					assert(false);
+					
+					if(EA && !SET_QIN){KillSwitch.kill();}
+//					assert(false);
 					errorState=true;
 					negativeFive=true;
-					return null;
 				}
-				
+				quals[i]=0;
 			}
 //			assert(false);
-			assert(quals[i]>=-5);
 			//				assert(quals[i]>=-5) : "The ASCII quality encoding level is not set correctly.  Quality value below -5:" +
 			//						"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3]);
 		}
 		//			assert(false) : Arrays.toString(quals);
 		//			assert(false) : PARSE_CUSTOM+"\n"+new String(quad[0]);
 		if(PARSE_CUSTOM){
-			if(quad[0]!=null && Tools.indexOf(quad[0], (byte)'_')>0){
-				String temp=new String(quad[0]);
-				if(temp.endsWith(" /1") || temp.endsWith(" /2")){temp=temp.substring(0, temp.length()-3);}
-				String[] answer=temp.split("_");
+			
+			if(PARSE_NEW){
+				Header h=new Header(id);
+				r=new Read(bases, quals, id, numericID, h.strand, h.bbchrom, h.bbstart, h.bbstop());
+				r.setSynthetic(true);
+			}else{
+				if(quad[0]!=null && Tools.indexOf(quad[0], (byte)'_')>0){
+					String temp=new String(quad[0]);
+					if(temp.endsWith(" /1") || temp.endsWith(" /2")){temp=temp.substring(0, temp.length()-3);}
+					String[] answer=temp.split("_");
 
-				if(answer.length>=5){
-					try {
-						int trueChrom=Gene.toChromosome(answer[1]);
-						byte trueStrand=Byte.parseByte(answer[2]);
-						int trueLoc=Integer.parseInt(answer[3]);
-						int trueStop=Integer.parseInt(answer[4]);
-						r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, numericID);
-						r.setSynthetic(true);
-					} catch (NumberFormatException e) {
+					if(answer.length>=5){
+						try {
+							int trueChrom=Gene.toChromosome(answer[1]);
+							byte trueStrand=Byte.parseByte(answer[2]);
+							int trueLoc=Integer.parseInt(answer[3]);
+							int trueStop=Integer.parseInt(answer[4]);
+							r=new Read(bases, quals, id, numericID, trueStrand, trueChrom, trueLoc, trueStop);
+							r.setSynthetic(true);
+						} catch (NumberFormatException e) {
+							PARSE_CUSTOM=false;
+							if(PARSE_CUSTOM_WARNING){
+								System.err.println("Turned off PARSE_CUSTOM because could not parse "+new String(quad[0]));
+							}
+						}
+					}else{
 						PARSE_CUSTOM=false;
 						if(PARSE_CUSTOM_WARNING){
-							System.err.println("Turned off PARSE_CUSTOM because could not parse "+new String(quad[0]));
+							System.err.println("Turned off PARSE_CUSTOM because answer="+Arrays.toString(answer));
 						}
 					}
 				}else{
 					PARSE_CUSTOM=false;
 					if(PARSE_CUSTOM_WARNING){
-						System.err.println("Turned off PARSE_CUSTOM because answer="+Arrays.toString(answer));
+						System.err.println("Turned off PARSE_CUSTOM because quad[0]="+new String(quad[0])+", index="+Tools.indexOf(quad[0], (byte)'_'));
 					}
-				}
-			}else{
-				PARSE_CUSTOM=false;
-				if(PARSE_CUSTOM_WARNING){
-					System.err.println("Turned off PARSE_CUSTOM because quad[0]="+new String(quad[0])+", index="+Tools.indexOf(quad[0], (byte)'_'));
 				}
 			}
 		}
 		if(r==null){
 			try {
-				r=new Read(bases, 0, (byte)0, 0, 0, id, quals, numericID);
+				r=new Read(bases, quals, id, numericID, flag);
 			} catch (OutOfMemoryError e) {
 				KillSwitch.memKill(e);
 			}
+		}
+		return r;
+	}
+	
+	/** Should be faster, but is slower */
+	public static Read quadToRead_fast(final byte[][] quad, final ByteFile bf, final long numericID, final int flag){
+		
+		final byte offset=ASCII_OFFSET;
+		final byte[] header=quad[0];
+		final byte[] bases=quad[1];
+		final byte[] quals=quad[3];
+		final String id=makeId(header);
+		
+		if(header==null || header.length<1 || header[0]!=(byte)'@'){return quadToRead_slow(quad, false, bf, numericID, flag);}
+		
+//		boolean over=false;
+//		int negative=0;
+		boolean bad=false;
+		for(int i=0; i<quals.length; i++){
+			final byte q=(byte)(quals[i]-offset);
+			quals[i]=q;
+//			if(q<0 || (DETECT_QUALITY && ASCII_OFFSET==33 && q>QUAL_THRESH)){return null;}
+			bad|=(q<0 || (DETECT_QUALITY && ASCII_OFFSET==33 && q>QUAL_THRESH));
+//			negative=quals[i]|negative;
+//			over|=quals[i]>QUAL_THRESH;
+		}
+		if(bad/*over || negative<0*/){
+			FAST_FAILED=true;
+			for(int i=0; i<quals.length; i++){quals[i]+=offset;}
+			return quadToRead_slow(quad, false, bf, numericID, flag);
+		}
+
+		Read r=null;
+		try {
+			r=new Read(bases, quals, id, numericID, flag);
+		} catch (OutOfMemoryError e) {
+			KillSwitch.memKill(e);
 		}
 		return r;
 	}
@@ -894,7 +863,7 @@ public class FASTQ {
 		
 		for(s=tf.nextLine(); s!=null && added<maxReadsToReturn; s=tf.nextLine()){
 			scarfToQuad(s, quad);
-			Read r=quadToRead(quad, false, true, tf, numericID);
+			Read r=quadToRead_slow(quad, true, tf, numericID, 0);
 
 			if(interleaved){
 				if(prev==null){prev=r;}
@@ -930,7 +899,8 @@ public class FASTQ {
 	
 	/** Return true if this has detected an error */
 	public static boolean errorState(){return errorState;}
-	/** TODO */
+	public static boolean setErrorState(boolean b){return errorState=b;}
+	
 	private static boolean errorState=false;
 	private static boolean negativeFive=false;
 	
@@ -938,6 +908,7 @@ public class FASTQ {
 	private static long incr=10000000000L;
 
 	public static boolean PARSE_CUSTOM=false;
+	public static boolean PARSE_NEW=true;
 	public static boolean PARSE_CUSTOM_WARNING=true;
 	public static boolean TAG_CUSTOM=false;
 	public static boolean TAG_CUSTOM_SIMPLE=false;
@@ -949,16 +920,18 @@ public class FASTQ {
 	public static boolean DETECT_QUALITY=true;
 	public static boolean DETECT_QUALITY_OUT=true;
 	public static boolean ADD_PAIRNUM_TO_CUSTOM_ID=true;
-	public static boolean ADD_SLASH_PAIRNUM_TO_CUSTOM_ID=true;
+	public static boolean ADD_SLASH_PAIRNUM_TO_CUSTOM_ID=false;
+	public static boolean SPACE_SLASH=false;
+	public static boolean FAST_FAILED=false;
 
 	public static final int MIN_LENGTH_TO_FORCE_ASCII_33=200;
 	public static final int QUAL_THRESH=54;
 	public static boolean IGNORE_BAD_QUALITY=false;
+	public static boolean SET_QIN=false;
 	public static boolean verbose=false;
 	
 	public static boolean warnQualityChange=true;
 	
-//	public static int minLength=0;
-//	public static int maxLength=0;
+	private static boolean EA=Shared.EA();
 	
 }

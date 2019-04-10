@@ -1,7 +1,5 @@
 package sort;
 
-import java.util.Comparator;
-
 import stream.Read;
 
 /**
@@ -49,6 +47,7 @@ public final class ReadQualityComparator extends ReadComparator {
 	
 	private int ascending=1;
 	
+	@Override
 	public void setAscending(boolean asc){
 		ascending=(asc ? 1 : -1);
 	}

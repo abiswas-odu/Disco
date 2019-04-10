@@ -1,19 +1,20 @@
 package jgi;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadInputStreamD;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 
 /**
  * @author Brian Bushnell
@@ -23,23 +24,30 @@ import shared.Tools;
 public class A_SampleD {
 
 	public static void main(String[] args){
+		//Start a timer immediately upon code entrance.
 		Timer t=new Timer();
-		A_SampleD as=new A_SampleD(args);
+		
+		//Create an instance of this class
+		A_SampleD x=new A_SampleD(args);
 		assert(false) : "To support MPI, uncomment this.";
 //		MPIWrapper.mpiInit(args);
-		as.process(t);
+		
+		//Run the object
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
+		
 //		MPIWrapper.mpiFinalize();
 	}
 	
 	public A_SampleD(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("A_SampleD: Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -47,16 +55,15 @@ public class A_SampleD {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
+			if(b!=null && b.equalsIgnoreCase("null")){b=null;}
 
-			if(parser.parse(arg, a, b)){
-				//do nothing
-			}else if(a.equals("verbose")){
+			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ConcurrentReadInputStreamD.verbose=verbose;
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
+			}else if(parser.parse(arg, a, b)){
+				//do nothing
 			}else{
 				outstream.println("A_SampleD: Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -89,7 +96,7 @@ public class A_SampleD {
 			
 			if(paired && (in1==null || !in1.contains(".sam"))){
 				outstream.println("A_SampleD: Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
@@ -102,14 +109,14 @@ public class A_SampleD {
 			
 			ListNum<Read> ln=crisD.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
-			if(verbose){outstream.println("A_SampleD: Initial A_SampleD list: "+reads.size());}
+			if(verbose){outstream.println("A_SampleD: Initial A_SampleD list: "+(reads==null ? -1 : reads.size()));}
 			
 			if(reads!=null && !reads.isEmpty()){
 				Read r=reads.get(0);
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==crisD.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("A_SampleD: Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -136,14 +143,11 @@ public class A_SampleD {
 		
 		t.stop();
 		outstream.println("A_SampleD: Time:                         \t"+t);
-		outstream.println("A_SampleD: Rank "+ Shared.MPI_RANK + ": Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
+		outstream.println("A_SampleD: Rank "+ Shared.MPI_RANK + ": Reads Processed:    "+readsProcessed+" \t"+
+				String.format(Locale.ROOT, "%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	

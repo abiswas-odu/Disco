@@ -2,21 +2,24 @@ package var2;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
+import java.util.concurrent.ArrayBlockingQueue;
 
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.ByteStreamWriter;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import stream.ByteBuilder;
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastaReadInputStream;
+import structures.ByteBuilder;
+import structures.ListNum;
 import structures.StringPair;
 import var2.CallVariants2.Sample;
 
@@ -29,21 +32,25 @@ public class MergeSamples {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		MergeSamples ms=new MergeSamples(args);
-		//ms.process(t);
+		MergeSamples x=new MergeSamples(args);
+		//x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
-	public MergeSamples(){}
+	public MergeSamples(){
+		threads=Shared.threads();
+		inq=new ArrayBlockingQueue<ListNum<VCFLine[]>>(threads+1);
+	}
 	
 	public MergeSamples(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -54,8 +61,6 @@ public class MergeSamples {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -90,10 +95,7 @@ public class MergeSamples {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		if(!ByteFile.FORCE_MODE_BF2){
 			ByteFile.FORCE_MODE_BF2=false;
@@ -106,34 +108,48 @@ public class MergeSamples {
 			outstream.println((out1==null)+", "+out1);
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+"\n");
 		}
+		threads=Shared.threads();
+		inq=new ArrayBlockingQueue<ListNum<VCFLine[]>>(threads+1);
 	}
 	
 	/*--------------------------------------------------------------*/
 	
-	public void mergeSamples(ArrayList<Sample> list, ScafMap scafMap, String outVcf){
+	public void mergeSamples(ArrayList<Sample> list, ScafMap scafMap, String outVcf, String scoreHistFile){
 		map=scafMap;
 		ArrayList<StringPair> vcfList=new ArrayList<StringPair>(list.size());
 		for(Sample s : list){vcfList.add(new StringPair(s.name, s.vcfName));}
-		mergeFiles(vcfList, scafMap, outVcf);
+		mergeFiles(vcfList, outVcf, scoreHistFile);
 	}
 	
-	public void mergeFiles(ArrayList<StringPair> list, ScafMap scafMap, String outVcf){
+	public void mergeFiles(ArrayList<StringPair> list, String outVcf, String scoreHistFile){
 		System.err.println("Merging "+list);
 		final int ways=list.size();
 		ByteFile[] bfa=new ByteFile[ways];
+		final boolean allowSubprocess=(ways<=4);
 		for(int i=0; i<ways; i++){
 			StringPair pair=list.get(i);
-			FileFormat ff=FileFormat.testInput(pair.b, FileFormat.TEXT, null, false, false);
-			bfa[i]=ByteFile.makeByteFile(ff, false);
+			FileFormat ff=FileFormat.testInput(pair.b, FileFormat.VCF, null, allowSubprocess, false);
+			bfa[i]=ByteFile.makeByteFile(ff);
 		}
 //		System.err.println("Made byte files.");
+//		assert(false) : outVcf;
+//		System.err.println("Started writer.");
 		
+		mergeMT(outVcf, bfa);
+
+		if(scoreHistFile!=null){
+			CallVariants.writeScoreHist(scoreHistFile, scoreArray);
+		}
+		
+//		System.err.println("Closed stream.");
+	}
+	
+	private void mergeST(String outVcf, ByteFile[] bfa){
 		ByteStreamWriter bswVcf=null;
 		if(outVcf!=null){
-			bswVcf=new ByteStreamWriter(outVcf, true, false, true, FileFormat.TEXT);
+			bswVcf=new ByteStreamWriter(outVcf, true, false, true, FileFormat.VCF);
 			bswVcf.start();
 		}
-//		System.err.println("Started writer.");
 		
 		ByteBuilder bb=new ByteBuilder(34000);
 		VCFLine[] row=processRow(bfa, bb);
@@ -142,9 +158,9 @@ public class MergeSamples {
 			if(row[0]!=null){
 				VCFLine merged=merge(row);
 				merged.toText(bb);
-				bb.append('\n');
+				bb.nl();
 				if(bb.length>32000){
-					bswVcf.print(bb);
+					if(bswVcf!=null){bswVcf.print(bb);}
 					bb=new ByteBuilder(34000);
 				}
 			}
@@ -156,8 +172,52 @@ public class MergeSamples {
 			if(bb.length>0){bswVcf.print(bb);}
 			bswVcf.poisonAndWait();
 		}
-
-//		System.err.println("Closed stream.");
+	}
+	
+	private void mergeMT(String outVcf, ByteFile[] bfa){
+		ByteStreamWriter bswVcf=null;
+		if(outVcf!=null){
+			FileFormat ff=FileFormat.testOutput(outVcf, FileFormat.VCF, null, true, true, append, true);
+			bswVcf=new ByteStreamWriter(ff);
+			bswVcf.start();
+		}
+		
+		ArrayList<MergeThread> alpt=spawnThreads(bswVcf);
+		
+		long nextID=0;
+		ByteBuilder header=new ByteBuilder(34000);
+		
+		VCFLine[] row=processRow(bfa, header);
+		while(row!=null && row[0]==null){//Header
+			row=processRow(bfa, header);
+		}
+		if(bswVcf!=null){
+			bswVcf.add(header, nextID);
+			nextID++;
+		}
+		
+		ListNum<VCFLine[]> list=new ListNum<VCFLine[]>(new ArrayList<VCFLine[]>(200), nextID);
+		while(row!=null){
+			if(row[0]!=null){
+				list.add(row);
+				if(list.size()>=200){
+					putList(list);
+					nextID++;
+					list=new ListNum<VCFLine[]>(new ArrayList<VCFLine[]>(200), nextID);
+				}
+			}
+			row=processRow(bfa, header);
+		}
+		if(list.size()>0){
+			putList(list);
+			nextID++;
+		}
+		
+		putList(POISON_LIST);
+		
+		waitForFinish(alpt);
+		
+		if(bswVcf!=null){bswVcf.poisonAndWait();}
 	}
 	
 	VCFLine[] processRow(ByteFile[] bfa, ByteBuilder bb){
@@ -204,33 +264,42 @@ public class MergeSamples {
 			for(String[] split : matrix){
 				properlyPairedReads+=Long.parseLong(split[1]);
 			}
-			properPairRate=(float)(properlyPairedReads*1.0/(Tools.max(1, reads)));
+			properPairRate=properlyPairedReads*1.0/(Tools.max(1, reads));
 			bb.append("##properlyPairedReads="+properlyPairedReads+"\n");
-			bb.append("##properPairRate="+String.format("%.5f\n", properPairRate));
+			bb.append("##properPairRate="+String.format(Locale.ROOT, "%.4f\n", properPairRate));
 		}else if(matrix[0][0].equals("##properPairRate")){
 			//do nothing
 		}else if(matrix[0][0].equals("##totalQualityAvg")){
+			totalQualityAvg=0;
 			for(String[] split : matrix){
 				totalQualityAvg+=Float.parseFloat(split[1]);
 			}
 			totalQualityAvg/=lines.length;
-			bb.append("##totalQualityAvg="+String.format("%.3f\n", totalQualityAvg));
+			bb.append("##totalQualityAvg="+String.format(Locale.ROOT, "%.4f\n", totalQualityAvg));
 		}else if(matrix[0][0].equals("##mapqAvg")){
+			mapqAvg=0;
 			for(String[] split : matrix){
 				mapqAvg+=Float.parseFloat(split[1]);
 			}
 			mapqAvg/=lines.length;
-			bb.append("##mapqAvg="+String.format("%.3f\n", mapqAvg));
+			bb.append("##mapqAvg="+String.format(Locale.ROOT, "%.2f\n", mapqAvg));
+		}else if(matrix[0][0].equals("##readLengthAvg")){
+			readLengthAvg=0;
+			for(String[] split : matrix){
+				readLengthAvg+=Float.parseFloat(split[1]);
+			}
+			readLengthAvg/=lines.length;
+			bb.append("##readLengthAvg="+String.format(Locale.ROOT, "%.2f\n", readLengthAvg));
 		}else if(matrix[0][0].startsWith("#CHROM\tPOS\t")){
 			bb.append(lines[0]);
 			for(int i=1; i<lines.length; i++){
 				String[] split=new String(lines[i]).split("\t");
-				bb.append('\t').append(split[split.length-1]);
+				bb.tab().append(split[split.length-1]);
 			}
-			bb.append('\n');
+			bb.nl();
 		}else{
 			bb.append(lines[0]);
-			bb.append('\n');
+			bb.nl();
 		}
 	}
 	
@@ -246,14 +315,17 @@ public class MergeSamples {
 			Var v=line.toVar();
 			assert(v!=null);
 			if(sum==null){sum=v;}
-			else{sum.add(v);}
+			else{
+				sum.add(v);
+				sum.addCoverage(v);
+			}
 		}
-		
+		assert(best!=null);
 		assert(sum!=null) : row.length+", "+row[0];
 		
-		//ByteBuilder bb, float properPairRate, float totalQualityAvg, float mapqAvg, int ploidy, ScafMap map, VarFilter filter, boolean trimWhitespace
-		ByteBuilder vcfBuilder=sum.toVCF(new ByteBuilder(), properPairRate, totalQualityAvg, mapqAvg, ploidy, map, filter, trimWhitespace);
-		VCFLine merged=new VCFLine(vcfBuilder.toBytes());
+		//ByteBuilder bb, double properPairRate, double totalQualityAvg, double mapqAvg, int ploidy, ScafMap map, VarFilter filter, boolean trimWhitespace
+		ByteBuilder bb=sum.toVCF(new ByteBuilder(), properPairRate, totalQualityAvg, mapqAvg, readLengthAvg, ploidy, map, filter, trimWhitespace);
+		VCFLine merged=new VCFLine(bb.toBytes());
 		merged.samples.clear();
 		for(VCFLine line : row){
 			merged.samples.addAll(line.samples);
@@ -262,15 +334,118 @@ public class MergeSamples {
 			merged.qual=best.qual;
 			merged.filter=best.filter;
 		}
+		scoreArray[(int)merged.qual]++;
 		return merged;
 	}
 	
 	/*--------------------------------------------------------------*/
+
+	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
+	final ListNum<VCFLine[]> takeList(){
+		ListNum<VCFLine[]> list=null;
+		while(list==null){
+			try {
+				list=inq.take();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		return list;
 	}
 	
+	final void putList(ListNum<VCFLine[]> list){
+		while(list!=null){
+			try {
+				inq.put(list);
+				list=null;
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	/** Spawn process threads */
+	private ArrayList<MergeThread> spawnThreads(ByteStreamWriter bsw){
+		
+		//Do anything necessary prior to processing
+		
+		//Fill a list with MergeThreads
+		ArrayList<MergeThread> alpt=new ArrayList<MergeThread>(threads);
+		for(int i=0; i<threads; i++){
+			alpt.add(new MergeThread(bsw));
+		}
+		if(verbose){outstream.println("Spawned threads.");}
+		
+		//Start the threads
+		for(MergeThread pt : alpt){
+			pt.start();
+		}
+		if(verbose){outstream.println("Started threads.");}
+		
+		//Do anything necessary after processing
+		return alpt;
+	}
+	
+	private void waitForFinish(ArrayList<MergeThread> alpt){
+		//Wait for completion of all threads
+		boolean allSuccess=true;
+		for(MergeThread pt : alpt){
+			while(pt.getState()!=Thread.State.TERMINATED){
+				try {
+					//Attempt a join operation
+					pt.join();
+				} catch (InterruptedException e) {
+					//Potentially handle this, if it is expected to occur
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private class MergeThread extends Thread {
+
+		MergeThread(ByteStreamWriter bsw_){
+			bsw=bsw_;
+		}
+
+		@Override
+		public void run(){
+			ListNum<VCFLine[]> list=takeList();
+			while(list!=null && list!=POISON_LIST){
+				processList(list);
+				list=takeList();
+			}
+			putList(POISON_LIST);
+		}
+
+		private void processList(ListNum<VCFLine[]> list){
+			ByteBuilder bb=new ByteBuilder(4096);
+			for(VCFLine[] row : list){
+				mergeRow(row, bb);
+			}
+			if(bsw!=null){bsw.add(bb, list.id);}
+		}
+		
+		private void mergeRow(VCFLine[] row, ByteBuilder bb){
+			if(row[0]!=null){
+				VCFLine merged=merge(row);
+				merged.toText(bb);
+				bb.nl();
+			}
+		}
+		
+		private final ByteStreamWriter bsw;
+		
+	}
+	
+	/*--------------------------------------------------------------*/
+	
+	final ListNum<VCFLine[]> POISON_LIST=new ListNum<VCFLine[]>(null, -1);
+	private final ArrayBlockingQueue<ListNum<VCFLine[]>> inq;
+	private final int threads;
 	
 	/*--------------------------------------------------------------*/
 
@@ -278,9 +453,10 @@ public class MergeSamples {
 	long pairsSum;
 	int ploidy=1;
 	
-	float properPairRate;
-	float totalQualityAvg;
-	float mapqAvg;
+	double properPairRate;
+	double totalQualityAvg;
+	double mapqAvg;
+	double readLengthAvg;
 	
 	long reads;
 	long pairedReads;
@@ -293,6 +469,8 @@ public class MergeSamples {
 	private String in1=null;
 	private String out1=null;
 	private String outInvalid=null;
+	
+	long[] scoreArray=new long[200];
 	
 	/*--------------------------------------------------------------*/
 	

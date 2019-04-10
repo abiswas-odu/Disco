@@ -1,10 +1,10 @@
 Preprocessing Guide
 Written by Brian Bushnell
-Last updated December 18, 2015
+Last updated March 4, 2019
 
 Prior to doing anything with raw reads - mapping, clustering, assembly, etc - it is usually prudent to do certain preprocessing steps.  And these steps are best done in a specific order, which I have detailed below, along with the suggest tool.  Note that many of them (like quality-trimming) are optional, so if you do them, do them in this order; but you don't have to do them.  Others, like adapter-trimming, are not optional and should always be done.
 
-These steps replicate the QA protocol implemented at JGI for Illumina reads.  There is a program "RQCFilter" which implements them as a pipeline, but that is not publically available because it has numerous hard-coded paths to reference datasets of contaminants.
+These steps replicate the QA protocol implemented at JGI for Illumina reads.  "rqcfilter.sh" implements them as a pipeline, but it is less flexible than running the steps individually.
 
 
 0) Format conversion, if necessary.  The simplest format for the subsequent steps is gzipped fastq, with the reads interleaved in a single file if they are paired, but that's not required.  However, H5 and SRA formats are not supported, and unaligned bam should be converted to fastq first.  Tool: Reformat, Samtools, SRA Toolkit, etc.
@@ -27,7 +27,8 @@ These steps replicate the QA protocol implemented at JGI for Illumina reads.  Th
 
 7) Normalization or subsampling.  Optional; mainly for assembly of data with high or uneven coverage.  Tool: BBNorm for normalization, Reformat for subsampling.
 
-8) Error correction.  Optional; requires adequate coverage.  Tool: Tadpole, or BBNorm if Tadpole runs out of memory.  If BBNorm will be used, and normalization is desired, error correction can be done at the same time as normalization.
+8) Error correction.  Optional; requires adequate coverage.  Tool: Tadpole, or BBCMS if Tadpole runs out of memory.
+NOTE: 7 and 8 can be done in either order.  If memory is not a limiting factor, error correction should be done first.  BBCMS does not run out of memory, but is more accurate with more memory.
 
 9) Paired-read merging.  Optional; mainly for assembly, clustering, or insert-size calculation.  Tool: BBMerge.
 9b) RQCFilter runs BBMerge on all paired libraries for insert-size calculation, and uses the "cardinality" flag to simultaneously calculate the approximate number of unique kmers in the dataset, which can help estimate memory needs for assembly.

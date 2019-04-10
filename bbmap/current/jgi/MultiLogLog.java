@@ -1,6 +1,6 @@
 package jgi;
 
-import dna.Parser;
+import shared.Parser;
 import stream.Read;
 import structures.IntList;
 import ukmer.Kmer;

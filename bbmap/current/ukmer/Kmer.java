@@ -2,9 +2,9 @@ package ukmer;
 
 import java.util.Arrays;
 
-import stream.ByteBuilder;
 import dna.AminoAcid;
 import shared.Tools;
+import structures.ByteBuilder;
 
 /**
  * @author Brian Bushnell
@@ -22,6 +22,7 @@ public class Kmer implements Cloneable {
 		this(getK(kbig_), getMult(kbig_));
 	}
 	
+	@Override
 	public Kmer clone(){
 		return new Kmer(this);
 	}
@@ -32,12 +33,18 @@ public class Kmer implements Cloneable {
 		maxindex=mult-1;
 		shift=2*k;
 		shift2=shift-2;
-		mask=~((-1L)<<shift);
+		mask=(shift>63 ? -1L : ~((-1L)<<shift));
+		coreMask=toCoreMask(k);
 		
 		kbig=k*mult;
 		array1=new long[mult];
 		array2=new long[mult];
 		key=null;
+	}
+	
+	public static final long toCoreMask(int k){
+//		System.err.println(k+", "+MASK_CORE);
+		return MASK_CORE ? ((~((-1L)<<(2*k)))>>2)&~(3L) : -1L;
 	}
 	
 	public static int getMult(int kbig){
@@ -54,7 +61,7 @@ public class Kmer implements Cloneable {
 	}
 	
 	private static int getMult0(int kbig){
-//		if(true){return 2;}//TODO: 123 //Enable to allow multi-word arrays for k<32 
+//		if(true){return 2;}//TODO: 123 //Enable to allow multi-word arrays for k<32
 		final int word=31;
 		
 		final int mult1=(kbig+word-1)/word;
@@ -125,7 +132,7 @@ public class Kmer implements Cloneable {
 	
 	public boolean verify(boolean update){
 //		boolean b=verify();
-//		if(b){ 
+//		if(b){
 //			if(update){update();}
 //			b=verify();
 //			assert(len<kbig || incarnation==lastIncarnation);
@@ -153,6 +160,11 @@ public class Kmer implements Cloneable {
 	}
 	
 	public byte addRight(final byte b){
+		long x=AminoAcid.baseToNumber[b];
+		return AminoAcid.numberToBase[(int)addRightNumeric(x)];
+	}
+	
+	public byte addRight(final char b){
 		long x=AminoAcid.baseToNumber[b];
 		return AminoAcid.numberToBase[(int)addRightNumeric(x)];
 	}
@@ -221,6 +233,7 @@ public class Kmer implements Cloneable {
 		incarnation++;
 	}
 	
+	@Override
 	public String toString(){
 //		update();
 		assert(verify(true));
@@ -242,6 +255,11 @@ public class Kmer implements Cloneable {
 		return AbstractKmerTableU.equals(key(), x.key());
 	}
 	
+	public boolean sameOrientation(Kmer x){
+		if(xor()!=x.xor()){return false;}
+		return Tools.equals(array1, array2);
+	}
+	
 	public int compareTo(Kmer x){
 		return compare(key(), x.key());
 	}
@@ -252,7 +270,7 @@ public class Kmer implements Cloneable {
 	}
 	
 	public static int compare(long[] key1, long[] key2){
-		assert(false);
+//		assert(false); //Why was this here?
 		return AbstractKmerTableU.compare(key1, key2);
 	}
 	
@@ -265,7 +283,7 @@ public class Kmer implements Cloneable {
 		
 	public long[] array2(){return array2;}
 	
-	/** WARNING! 
+	/** WARNING!
 	 * Do not confuse this with xor()! */
 	public long[] key(){
 		update();
@@ -273,26 +291,47 @@ public class Kmer implements Cloneable {
 		return key;
 	}
 	
+	public boolean corePalindrome(){//TODO: This can be set as a flag from setKey0
+		update();
+		return corePalindrome;
+	}
+	
 	private void setKey0(){
+		corePalindrome=false;
 		key=array1;
 		for(int i=0; i<mult; i++){
-			if(array1[i]>array2[i]){break;}
-			else if(array1[i]<array2[i]){
+			final long a=array1[i]&coreMask, b=array2[i]&coreMask;
+			if(a>b){return;}
+			else if(a<b){
+				key=array2;
+				return;
+			}
+		}
+		corePalindrome=true;
+		setKey0safe();
+	}
+	
+	private void setKey0safe(){
+		key=array1;
+		for(int i=0; i<mult; i++){
+			final long a=array1[i], b=array2[i];
+			if(a>b){break;}
+			else if(a<b){
 				key=array2;
 				break;
 			}
 		}
 	}
 	
-	public static long xor(long[] key){
-		long xor=key[0];
+	public static long xor(long[] key, long coreMask){
+		long xor=key[0]&coreMask;
 		for(int i=1; i<key.length; i++){
-			xor=(Long.rotateLeft(xor, 25))^key[i];
+			xor=(Long.rotateLeft(xor, 25))^(key[i]&coreMask);
 		}
 		return xor&mask63;
 	}
 	
-	/** WARNING! 
+	/** WARNING!
 	 * Do not confuse this with key()! */
 	public long xor(){
 		update();
@@ -300,11 +339,11 @@ public class Kmer implements Cloneable {
 	}
 
 	/**
-	 * @param value
-	 * @return
+	 * @param divisor
+	 * @return This kmer's xor modulo the divisor
 	 */
-	public int mod(int value) {
-		int x=(int)(xor()%value);
+	public int mod(int divisor) {
+		int x=(int)(xor()%divisor);
 //		System.err.println(xor()+"%"+value+"="+x);
 		return x;
 	}
@@ -326,7 +365,7 @@ public class Kmer implements Cloneable {
 	}
 	
 	private long xor0(){
-		return xor(key);
+		return xor(key, coreMask);
 	}
 	
 	public String arraysToString() {
@@ -348,6 +387,7 @@ public class Kmer implements Cloneable {
 	private long lastXor=-1;
 	private long incarnation=0;
 	private long lastIncarnation=-1;
+	private boolean corePalindrome=false;
 	private long[] key=null;
 	
 	private long[] array1;
@@ -359,11 +399,13 @@ public class Kmer implements Cloneable {
 	private final int shift;
 	private final int shift2;
 	private final long mask;
+	private final long coreMask;
 	
 	public int len=0; //TODO: Make private; use getter.
 	public final int len(){return len;}
 	
+	public static boolean MASK_CORE=false;
 	private static final long mask63=Long.MAX_VALUE;
-	private final static boolean TESTMODE=false; //123
-	private final static boolean verbose=false;
+	private static final boolean TESTMODE=false; //123
+	private static final boolean verbose=false;
 }

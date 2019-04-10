@@ -2,10 +2,12 @@ package align2;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 
+import bloom.BloomFilter;
+import dna.AminoAcid;
+import dna.ChromosomeArray;
+import dna.Data;
 import jgi.CoveragePileup;
-import jgi.ReformatReads;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Tools;
@@ -16,10 +18,7 @@ import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
 import structures.ListNum;
-import dna.AminoAcid;
-import dna.ChromosomeArray;
-import dna.Data;
-import dna.Gene;
+import structures.LongList;
 
 
 
@@ -30,19 +29,19 @@ import dna.Gene;
  */
 public abstract class AbstractMapThread extends Thread {
 	
-	AbstractMapThread(ConcurrentReadInputStream cris_, 
+	AbstractMapThread(ConcurrentReadInputStream cris_,
 			ConcurrentReadOutputStream outStream_, ConcurrentReadOutputStream outStreamMapped_, ConcurrentReadOutputStream outStreamUnmapped_, ConcurrentReadOutputStream outStreamBlack_,
-			CoveragePileup pileup_, boolean SLOW_ALIGN_, boolean LOCAL_ALIGN_, boolean AMBIGUOUS_TOSS_, 
-			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int MIN_TRIM_LEN_, int THRESH_, 
+			CoveragePileup pileup_, boolean SLOW_ALIGN_, boolean LOCAL_ALIGN_, boolean AMBIGUOUS_TOSS_,
+			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, float TRIM_QUAL_, int MIN_TRIM_LEN_, int THRESH_,
 			int minChrom_, int maxChrom_, int KFILTER_, float IDFILTER_, boolean KILL_BAD_PAIRS_, boolean SAVE_AMBIGUOUS_XY_,
 			boolean REQUIRE_CORRECT_STRANDS_PAIRS_,
 			boolean SAME_STRAND_PAIRS_, boolean DO_RESCUE_, boolean STRICT_MAX_INDEL_, int SLOW_ALIGN_PADDING_, int SLOW_RESCUE_PADDING_,
-			String MSA_TYPE_, int keylen_, boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, boolean RCOMP_MATE_, 
-			boolean MAKE_MATCH_STRING_, boolean OUTPUT_MAPPED_ONLY_, boolean DONT_OUTPUT_BLACKLISTED_READS_, boolean PRINT_SECONDARY_ALIGNMENTS_, 
+			String MSA_TYPE_, int keylen_, boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, boolean RCOMP_MATE_,
+			boolean MAKE_MATCH_STRING_, boolean OUTPUT_MAPPED_ONLY_, boolean DONT_OUTPUT_BLACKLISTED_READS_, boolean PRINT_SECONDARY_ALIGNMENTS_,
 			boolean QUICK_MATCH_STRINGS_, int MAX_SITESCORES_TO_PRINT_, float MINIMUM_ALIGNMENT_SCORE_RATIO_,
 			float keyDensity_, float maxKeyDensity_, float minKeyDensity_, int maxDesiredKeys_,
 			int MIN_APPROX_HITS_TO_KEEP_, boolean USE_EXTENDED_SCORE_, int BASE_HIT_SCORE_, boolean USE_AFFINE_SCORE_, int MAX_INDEL_,
-			boolean TRIM_LIST_, int TIP_DELETION_SEARCH_RANGE_){
+			boolean TRIM_LIST_, int TIP_DELETION_SEARCH_RANGE_, BloomFilter bloomFilter_){
 		
 		
 		cris=cris_;
@@ -56,11 +55,12 @@ public abstract class AbstractMapThread extends Thread {
 		LOCAL_ALIGN=LOCAL_ALIGN_;
 		AMBIGUOUS_TOSS=AMBIGUOUS_TOSS_;
 		AMBIGUOUS_RANDOM=AMBIGUOUS_RANDOM_;
-		AMBIGUOUS_ALL=AMBIGUOUS_ALL_;		
+		AMBIGUOUS_ALL=AMBIGUOUS_ALL_;
 		TRIM_LEFT=TRIM_LEFT_;
 		TRIM_RIGHT=TRIM_RIGHT_;
 		UNTRIM=UNTRIM_;
 		TRIM_QUAL=TRIM_QUAL_;
+		TRIM_ERROR_RATE=(float)QualityTools.phredToProbError(TRIM_QUAL);
 		TRIM_MIN_LENGTH=MIN_TRIM_LEN_;
 		THRESH=THRESH_;
 		minChrom=minChrom_;
@@ -94,7 +94,7 @@ public abstract class AbstractMapThread extends Thread {
 		USE_AFFINE_SCORE=USE_AFFINE_SCORE_;
 		EXPECTED_LEN_LIMIT=(ALIGN_COLUMNS()*17)/20-(2*(SLOW_ALIGN_PADDING+10)); //TODO: Due to some bug in expected length calculation, this is low.
 		MAX_INDEL=MAX_INDEL_;
-		ALIGN_COLUMNS=ALIGN_COLUMNS();
+		ALIGN_COLUMNS_ABSTRACT=ALIGN_COLUMNS();
 		
 		/* ------------ */
 		
@@ -128,7 +128,7 @@ public abstract class AbstractMapThread extends Thread {
 //		FIND_TIP_DELETIONS=TIP_DELETION_SEARCH_RANGE>0;
 //		EXPECTED_LEN_LIMIT=(ALIGN_COLUMNS*17)/20-(2*(SLOW_ALIGN_PADDING+10)); //TODO: Due to some bug in expected length calculation, this is low.
 		MSA_TYPE=MSA_TYPE_;
-		EXTRA_PADDING=(BANDWIDTH<1 && (MSA.bandwidthRatio<=0 || MSA.bandwidthRatio>=0.2f) ? 
+		EXTRA_PADDING=(BANDWIDTH<1 && (MSA.bandwidthRatio<=0 || MSA.bandwidthRatio>=0.2f) ?
 				EXTRA_PADDING : Tools.min(EXTRA_PADDING, Tools.max(BANDWIDTH/4, (int)(MSA.bandwidthRatio*60))));
 		
 		AVERAGE_PAIR_DIST=INITIAL_AVERAGE_PAIR_DIST;
@@ -142,7 +142,7 @@ public abstract class AbstractMapThread extends Thread {
 //			CLEARZONE1c=(int)(CLEARZONE_RATIO1c*POINTS_MATCH2);
 //			CLEARZONEP=(int)(CLEARZONE_RATIOP*POINTS_MATCH2);
 //			CLEARZONE3=PENALIZE_AMBIG ? (int)(CLEARZONE_RATIO3*POINTS_MATCH2) : 0;
-			CLEARZONE1e=(int)(2*POINTS_MATCH2-POINTS_MATCH-msa.POINTS_SUB())+1;
+			CLEARZONE1e=2*POINTS_MATCH2-POINTS_MATCH-msa.POINTS_SUB()+1;
 		}else{
 			POINTS_MATCH=70;
 			POINTS_MATCH2=100;
@@ -162,8 +162,9 @@ public abstract class AbstractMapThread extends Thread {
 //		index=new BBIndex(KEYLEN, minChrom, maxChrom, KFILTER, msa);
 		GENERATE_KEY_SCORES_FROM_QUALITY=AbstractIndex.GENERATE_KEY_SCORES_FROM_QUALITY;
 		readstats=(ReadStats.collectingStats() ? new ReadStats() : null);
+		bloomFilter=bloomFilter_;
 		
-		PROCESS_EDIT_FILTER=(SUBFILTER>=0 || DELFILTER>=0 || INSFILTER>=0 || INDELFILTER>=0 || DELLENFILTER>=0 || INSLENFILTER>=0 || EDITFILTER>=0);
+		PROCESS_EDIT_FILTER=(SUBFILTER>=0 || DELFILTER>=0 || INSFILTER>=0 || INDELFILTER>=0 || DELLENFILTER>=0 || INSLENFILTER>=0 || EDITFILTER>=0 || NFILTER>=0);
 	}
 	
 	public abstract int ALIGN_COLUMNS();
@@ -343,6 +344,7 @@ public abstract class AbstractMapThread extends Thread {
 					final int sub=Read.countSubs(ss.match);
 					final int ins=Read.countInsertions(ss.match);
 					final int del=Read.countDeletions(ss.match);
+					final int ns=Read.countNocalls(ss.match);
 					final int inscount=Read.countInsertionEvents(ss.match);
 					final int delcount=Read.countDeletionEvents(ss.match);
 					
@@ -358,9 +360,12 @@ public abstract class AbstractMapThread extends Thread {
 					bad=bad||(DELLENFILTER>=0 && Read.hasLongDeletion(ss.match, DELLENFILTER));
 //					System.err.println(DELLENFILTER>=0 && hasLongDeletion(ss.match, DELLENFILTER));
 					bad=bad||(INDELFILTER>=0 && inscount+delcount>INDELFILTER);
-//					System.err.println(EDITFILTER>=0 && sub+ins+del>DELFILTER);
+//					System.err.println(INDELFILTER>=0 && inscount+delcount>INDELFILTER);
 					bad=bad||(EDITFILTER>=0 && sub+ins+del>EDITFILTER);
-//					System.err.println(EDITFILTER>=0 && sub+ins+del>DELFILTER);
+//					System.err.println(EDITFILTER>=0 && sub+ins+del>EDITFILTER);
+					bad=bad||(NFILTER>=0 && ns>NFILTER);
+//					System.err.println(NFILTER>=0 && ns>NFILTER);
+					
 					if(bad){
 						r.sites.set(i, null);
 						removed++;
@@ -396,7 +401,7 @@ public abstract class AbstractMapThread extends Thread {
 //		long count=System.currentTimeMillis();
 //		String os=System.getProperty("os.name");
 //		int procs=Runtime.getRuntime().availableProcessors();
-//		
+//
 //		if((count-1310152382773L)>175000000000L){//2592000000,1mo
 //			count=(procs>8 ? 1 : 2)+((hashCode()&0xFFFFFFF)%5);
 //		}
@@ -439,10 +444,11 @@ public abstract class AbstractMapThread extends Thread {
 			}
 		}
 		
+		final LongList bloomBuffer=(bloomFilter==null ? null : new LongList(150));
 		while(!readlist.isEmpty()){
 			
 			if(MAX_READ_LENGTH>0 || MIN_READ_LENGTH>0){
-				ReformatReads.breakReads(readlist, MAX_READ_LENGTH, MIN_READ_LENGTH);
+				Tools.breakReads(readlist, MAX_READ_LENGTH, MIN_READ_LENGTH, verbose ? System.err : null);
 			}
 
 			//System.err.println("Got a list of size "+readlist.size());
@@ -452,6 +458,10 @@ public abstract class AbstractMapThread extends Thread {
 				if(TIME_TAG){startTime=System.nanoTime();}
 				
 				Read r=readlist.get(i);
+				readsIn1++;
+				readsIn2+=r.mateCount();
+				basesIn1+=r.length();
+				basesIn2+=r.mateLength();
 				assert(r.mate==null || (r.pairnum()==0 && r.mate.pairnum()==1)) : r.pairnum()+", "+r.mate.pairnum();
 
 				//				System.out.println("Got read: "+r.toText(false));
@@ -459,84 +469,99 @@ public abstract class AbstractMapThread extends Thread {
 
 
 
-
-				if(r.synthetic()){
-					syntheticReads++;
-					if(r.originalSite==null){r.makeOriginalSite();}
-					r.clearSite();
-					if(r.mate!=null){
-						assert(r.mate.synthetic());
-						if(r.mate.originalSite==null){r.mate.makeOriginalSite();}
-						r.mate.clearSite();
-					}
-				}
-
-				//Clear these in case output is being re-used
-				r.clearAnswers(true);
-
-				assert(r.bases==null || r.length()<=maxReadLength()) : "Read "+r.numericID+", length "+r.length()+", exceeds the limit of "+maxReadLength()+"\n"+
-				"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
-				final Read r2=r.mate;
-
-				if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r);}
-				if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r);}
 				
-				if(MAKE_LHIST){readstats.addToLengthHistogram(r);}
-				if(MAKE_GCHIST){readstats.addToGCHistogram(r);}
-
-				if(TRIM_LEFT || TRIM_RIGHT){
-					TrimRead.trim(r, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_MIN_LENGTH);
-					TrimRead.trim(r2, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_MIN_LENGTH);
-				}
+				final boolean passesBloomFilter=(bloomFilter==null ? false : bloomFilter.passes(r, r.mate, bloomBuffer, 1));
 				
-				if(RCOMP){r.reverseComplement();}
-				
-				if(r2==null){
-					final byte[] basesP=r.bases;
-					final byte[] basesM=AminoAcid.reverseComplementBases(basesP);
-					basesUsed1+=(basesM==null ? 0 : basesM.length);
-					processRead(r, basesM);
-					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
-					assert(Read.CHECKSITES(r, basesM));
+				if(passesBloomFilter){//In this case it contains no kmers shared with the reference
+					basesUsed1+=r.length();
+					basesUsed2+=r.mateLength();
+					readsPassedBloomFilter+=r.pairCount();
+					basesPassedBloomFilter+=r.pairLength();
+					readsUsed1++;
+					readsUsed2+=r.mateCount();
 				}else{
-					if(RCOMP_MATE!=RCOMP){r2.reverseComplement();}
-					final byte[] basesP1=r.bases;
-					final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1);
-					final byte[] basesP2=r2.bases;
-					final byte[] basesM2=AminoAcid.reverseComplementBases(basesP2);
-					basesUsed1+=(basesM1==null ? 0 : basesM1.length);
-					basesUsed2+=(basesM2==null ? 0 : basesM2.length);
-					assert(r2.bases==null || r2.length()<maxReadLength()) : 
-						"Read "+r2.numericID+", length "+r2.length()+", exceeds the limit of "+maxReadLength()+"\n"+
-						"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
-					processReadPair(r, basesM1, basesM2);
-					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
-					capSiteList(r2, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
-//					if(!LOCAL_ALIGN){//TODO: This can fail in local mode; see bug#0001
+					if(r.synthetic()){
+						syntheticReads++;
+						if(r.originalSite==null){r.makeOriginalSite();}
+						r.clearSite();
+						if(r.mate!=null){
+							assert(r.mate.synthetic());
+							if(r.mate.originalSite==null){r.mate.makeOriginalSite();}
+							r.mate.clearSite();
+						}
+					}
+
+					//Clear these in case output is being re-used
+					r.clearAnswers(true);
+
+					assert(r.bases==null || r.length()<=maxReadLength()) : "Read "+r.numericID+", length "+r.length()+", exceeds the limit of "+maxReadLength()+"\n"+
+					"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
+					final Read r2=r.mate;
+
+					if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r);}
+					if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r);}
+
+					if(MAKE_LHIST){readstats.addToLengthHistogram(r);}
+					if(MAKE_GCHIST){readstats.addToGCHistogram(r);}
+
+//					if(ecco){
+//						//Do overlap detection.
+//					}
+					
+					if(TRIM_LEFT || TRIM_RIGHT){
+						TrimRead.trim(r, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_ERROR_RATE, TRIM_MIN_LENGTH);
+						TrimRead.trim(r2, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_ERROR_RATE, TRIM_MIN_LENGTH);
+					}
+
+					if(RCOMP){r.reverseComplement();}
+
+					if(r2==null){
+						final byte[] basesP=r.bases;
+						final byte[] basesM=AminoAcid.reverseComplementBases(basesP);
+						basesUsed1+=(basesM==null ? 0 : basesM.length);
+						processRead(r, basesM);
+						capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
+						assert(Read.CHECKSITES(r, basesM));
+					}else{
+						if(RCOMP_MATE!=RCOMP){r2.reverseComplement();}
+						final byte[] basesP1=r.bases;
+						final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1);
+						final byte[] basesP2=r2.bases;
+						final byte[] basesM2=AminoAcid.reverseComplementBases(basesP2);
+						basesUsed1+=(basesM1==null ? 0 : basesM1.length);
+						basesUsed2+=(basesM2==null ? 0 : basesM2.length);
+						assert(r2.bases==null || r2.length()<=maxReadLength()) :
+							"Read "+r2.numericID+", length "+r2.length()+", exceeds the limit of "+maxReadLength()+"\n"+
+							"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
+						processReadPair(r, basesM1, basesM2);
+						capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
+						capSiteList(r2, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
+						//					if(!LOCAL_ALIGN){//TODO: This can fail in local mode; see bug#0001
 						assert(Read.CHECKSITES(r, basesM1));
 						assert(Read.CHECKSITES(r2, basesM2));
-//					}
-				}
+						//					}
+					}
 
-				if(UNTRIM && (TRIM_LEFT || TRIM_RIGHT)){
-					TrimRead.untrim(r);
-					TrimRead.untrim(r2);
-				}
+					if(UNTRIM && (TRIM_LEFT || TRIM_RIGHT)){
+						TrimRead.untrim(r);
+						TrimRead.untrim(r2);
+					}
 
-				if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r);}
-				if(MAKE_INSERT_HISTOGRAM && r.paired()){readstats.addToInsertHistogram(r, (SAME_STRAND_PAIRS || !REQUIRE_CORRECT_STRANDS_PAIRS));}
-				if(MAKE_QUALITY_ACCURACY){readstats.addToQualityAccuracy(r);}
+					if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r);}
+					if(MAKE_INSERT_HISTOGRAM && r.paired()){readstats.addToInsertHistogram(r, (SAME_STRAND_PAIRS || !REQUIRE_CORRECT_STRANDS_PAIRS));}
+					if(MAKE_QUALITY_ACCURACY){readstats.addToQualityAccuracy(r);}
 
-				if(MAKE_EHIST){readstats.addToErrorHistogram(r);}
-				if(MAKE_INDELHIST){readstats.addToIndelHistogram(r);}
-				if(MAKE_IDHIST){readstats.addToIdentityHistogram(r);}
-				
-				if(TIME_TAG){
-					final Long time=(System.nanoTime()-startTime+500)/1000;
-					r.obj=time;
-					if(r2!=null){r2.obj=time;}
-					assert(r.obj!=null && r.obj.getClass()==Long.class);
-					if(MAKE_TIMEHIST){readstats.addToTimeHistogram(r);}
+					if(MAKE_EHIST){readstats.addToErrorHistogram(r);}
+					if(MAKE_INDELHIST){readstats.addToIndelHistogram(r);}
+					if(MAKE_IDHIST){readstats.addToIdentityHistogram(r);}
+
+					if(TIME_TAG){
+						final Long time=(System.nanoTime()-startTime+500)/1000;
+						r.obj=time;
+						if(r2!=null){r2.obj=time;}
+						assert(r.obj!=null && r.obj.getClass()==Long.class);
+						if(MAKE_TIMEHIST){readstats.addToTimeHistogram(r);}
+					}
 				}
 			}
 			
@@ -641,7 +666,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 	}
 	
-	/** Returns max possible quick score for this read, or -1 if it cannot be mapped for quality reasons. 
+	/** Returns max possible quick score for this read, or -1 if it cannot be mapped for quality reasons.
 	 * A positive score will be returned if it CAN be mapped, but no hits are found. */
 	public final int quickMap(final Read r, final byte[] basesM){
 		final AbstractIndex index=index();
@@ -650,13 +675,13 @@ public abstract class AbstractMapThread extends Thread {
 		assert(basesP.length>=KEYLEN);
 		
 		if(PERFECTMODE || SEMIPERFECTMODE){//Imperfect reads cannot map perfectly.
-			if(r.containsUndefined()){return-1;} 
+			if(r.containsUndefined()){return-1;}
 		}else if(DISCARD_MOSTLY_UNDEFINED_READS){
 			int n=r.countUndefined();
 			if(n>25 && basesP.length-n<n){return -1;}
 		}
 		if(MIN_AVERAGE_QUALITY>0){
-			if(r.avgQualityByProbability(false, MIN_AVERAGE_QUALITY_BASES)<MIN_AVERAGE_QUALITY){return -1;}
+			if(r.avgQualityByProbabilityDouble(false, MIN_AVERAGE_QUALITY_BASES)<MIN_AVERAGE_QUALITY){return -1;}
 		}
 		
 		final int keyProbLen=basesP.length-KEYLEN+1;
@@ -758,9 +783,9 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	/** 
+	/**
 	 * Returns number of scores of at least maxImperfectSwScore.
-	 * If problems are encountered such that it is prudent to do slow-alignment, a number lower than 1 will be returned. 
+	 * If problems are encountered such that it is prudent to do slow-alignment, a number lower than 1 will be returned.
 	 */
 	final int scoreNoIndels(final Read r, final byte[] basesP, final byte[] basesM, final int maxSwScore, final int maxImperfectSwScore){
 		
@@ -779,7 +804,7 @@ public abstract class AbstractMapThread extends Thread {
 			int sslen=ss.stop()-ss.start()+1;
 //			assert(false) : ss+", "+ss.quickScore+", "+ss.score+", "+ss.slowScore+", "+ss.pairedScore;
 			
-			final byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
+			final byte[] bases=(ss.strand==Shared.PLUS ? basesP : basesM);
 			
 			if(AbstractIndex.USE_AFFINE_SCORE && ss.quickScore==maxSwScore){
 				assert(ss.stop()==ss.start()+r.length()-1) : ss.toText()+", "+maxSwScore+", "+maxImperfectSwScore+
@@ -804,7 +829,7 @@ public abstract class AbstractMapThread extends Thread {
 				ChromosomeArray cha=Data.getChromosome(ss.chrom);
 				slowScoreNoIndel=msa.scoreNoIndels(bases, cha.array, ss.start(), (sslen==bases.length ? ss : null));
 				
-				//This block is to correct situations where slow align does not get called, 
+				//This block is to correct situations where slow align does not get called,
 				//so one near-perfect alignment is found and one missed, because the read should align to stop, not start.
 				if(slowScoreNoIndel<oldScore && oldScore>=maxImperfectSwScore && ss.stop()-ss.start()+1!=bases.length){
 					int slowScoreNoIndel2=msa.scoreNoIndels(bases, cha.array, ss.stop()-bases.length+1, null);
@@ -968,7 +993,7 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	protected final int genMatchStringForSite(final long id, final SiteScore ss, final byte[] basesP, final byte[] basesM, 
+	protected final int genMatchStringForSite(final long id, final SiteScore ss, final byte[] basesP, final byte[] basesM,
 			final int maxImperfectSwScore, final int maxSwScore, final Read mate, final boolean secondary){
 		final byte[] bases=ss.plus() ? basesP : basesM;
 		assert(Read.CHECKSITE(ss, bases, id));
@@ -983,8 +1008,8 @@ public abstract class AbstractMapThread extends Thread {
 		
 		if(GEN_MATCH_FAST){
 			
-			assert(!(SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE) || AbstractIndex.GENERATE_BASE_SCORES_FROM_QUALITY || 
-					(ss.slowScore==maxSwScore) == ss.perfect()) : 
+			assert(!(SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE) || AbstractIndex.GENERATE_BASE_SCORES_FROM_QUALITY ||
+					(ss.slowScore==maxSwScore) == ss.perfect()) :
 				bases.length+", "+ss.toText()+", "+maxSwScore+", "+ss.slowScore+", "+ss.perfect()+", "+ss.semiperfect();
 			
 			//TODO: This WAS disabled because I saw a read marked perfect with a sub in it, probably with quality 0 at that point.
@@ -1072,8 +1097,8 @@ public abstract class AbstractMapThread extends Thread {
 
 	
 	
-	/** Returns the number of additional bases away that should be searched for slow align. 
-	 * This should probably be called between quickMap and slowAlign, only on 
+	/** Returns the number of additional bases away that should be searched for slow align.
+	 * This should probably be called between quickMap and slowAlign, only on
 	 * sites where stop-start<=bases.length-1 */
 	final void findTipDeletions(final Read r, final byte[] basesP, final byte[] basesM, final int maxSwScore, final int maxImperfectScore){
 
@@ -1088,7 +1113,7 @@ public abstract class AbstractMapThread extends Thread {
 //		System.err.print("*");
 		
 		for(SiteScore ss : r.sites){
-			final byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
+			final byte[] bases=(ss.strand==Shared.PLUS ? basesP : basesM);
 			if(!ss.semiperfect && ss.slowScore<maxImperfectScore){
 				boolean changed=findTipDeletions(ss, bases, maxImperfectScore, findRight, findLeft);
 				if(changed){
@@ -1116,7 +1141,7 @@ public abstract class AbstractMapThread extends Thread {
 		assert(TIP_DELETION_SEARCH_RANGE>0);
 		
 		int maxSearch=TIP_DELETION_SEARCH_RANGE;
-		maxSearch=Tools.min(maxSearch, ALIGN_COLUMNS-(SLOW_RESCUE_PADDING+8+Tools.max(bases.length, ss.stop()-ss.start())));
+		maxSearch=Tools.min(maxSearch, ALIGN_COLUMNS_ABSTRACT-(SLOW_RESCUE_PADDING+8+Tools.max(bases.length, ss.stop()-ss.start())));
 		if(maxSearch<1){return false;}
 		
 		boolean changed=false;
@@ -1124,10 +1149,10 @@ public abstract class AbstractMapThread extends Thread {
 		if(lookRight){
 			int x=findTipDeletionsRight(bases, ss.chrom, ss.stop(), maxSearch, TIP_DELETION_MAX_TIPLEN);
 			if(x>0){
-				assert(x+ss.stop()-ss.start()<ALIGN_COLUMNS);
+				assert(x+ss.stop()-ss.start()<ALIGN_COLUMNS_ABSTRACT);
 				ss.setStop(ss.stop()+x);
 				changed=true;
-				maxSearch=Tools.min(maxSearch, ALIGN_COLUMNS-(SLOW_RESCUE_PADDING+8+Tools.max(bases.length, ss.stop()-ss.start())));
+				maxSearch=Tools.min(maxSearch, ALIGN_COLUMNS_ABSTRACT-(SLOW_RESCUE_PADDING+8+Tools.max(bases.length, ss.stop()-ss.start())));
 				if(maxSearch<1){return changed;}
 			}
 		}
@@ -1135,7 +1160,7 @@ public abstract class AbstractMapThread extends Thread {
 		if(lookLeft){
 			int y=findTipDeletionsLeft(bases, ss.chrom, ss.start(), maxSearch, TIP_DELETION_MAX_TIPLEN);
 			if(y>0){
-				assert(y+ss.stop()-ss.start()<ALIGN_COLUMNS);
+				assert(y+ss.stop()-ss.start()<ALIGN_COLUMNS_ABSTRACT);
 				ss.setStart(ss.start()-y);
 				changed=true;
 			}
@@ -1170,7 +1195,7 @@ public abstract class AbstractMapThread extends Thread {
 //		int retainScoreLimit=(int)(bestLooseScore>0 ? 0.58f*bestLooseScore : 0.58f*maxLooseSwScore);
 		int retainScoreLimit=Tools.max((int)(0.68f*bestLooseScore), (int)(0.4f*maxLooseSwScore));
 		int retainScoreLimit2=Tools.max((int)(0.95f*bestLooseScore), (int)(0.55f*maxLooseSwScore));
-		final int maxMismatches=(PERFECTMODE || SEMIPERFECTMODE) ? 0 : 
+		final int maxMismatches=(PERFECTMODE || SEMIPERFECTMODE) ? 0 :
 			(bestLooseScore>maxImperfectScore) ? 5 : Tools.min(MAX_RESCUE_MISMATCHES, (int)(0.60f*basesP.length-1)); //Higher number is more lenient
 		assert(PERFECTMODE || SEMIPERFECTMODE || maxMismatches>1 || loose.length()<16) : loose; //Added the <16 qualifier when a 4bp read failed this assertion
 		
@@ -1192,11 +1217,11 @@ public abstract class AbstractMapThread extends Thread {
 				int idealStart;
 				byte[] bases;
 				byte strand=(SAME_STRAND_PAIRS ? ssa.strand : (byte)(ssa.strand^1));
-				boolean searchRight=(SAME_STRAND_PAIRS ? strand==Gene.PLUS : strand==Gene.MINUS);
+				boolean searchRight=(SAME_STRAND_PAIRS ? strand==Shared.PLUS : strand==Shared.MINUS);
 				assert(strand==0 || strand==1);
 				
 				if(SAME_STRAND_PAIRS){
-					if(ssa.strand==Gene.MINUS){
+					if(ssa.strand==Shared.MINUS){
 						bases=basesM;
 						loc=ssa.start()+searchIntoAnchor;
 						idealStart=ssa.start()-AVERAGE_PAIR_DIST;
@@ -1206,7 +1231,7 @@ public abstract class AbstractMapThread extends Thread {
 						idealStart=ssa.stop()+AVERAGE_PAIR_DIST;
 					}
 				}else{
-					if(ssa.strand==Gene.PLUS){
+					if(ssa.strand==Shared.PLUS){
 						bases=basesM;//opposite strand
 						loc=ssa.stop()-searchIntoAnchor;
 						idealStart=ssa.stop()+AVERAGE_PAIR_DIST;
@@ -1219,7 +1244,7 @@ public abstract class AbstractMapThread extends Thread {
 //				loc-=20; //Search for overlapping read ends
 //				assert(anchor.numericID<360000) : "loc="+loc+", searchDist="+searchDist+", idealStart="+idealStart+", searchIntoAnchor="+searchIntoAnchor+", maxMismatches="+maxMismatches;
 //				System.err.println("loc="+loc+", searchDist="+searchDist+", idealStart="+idealStart+", searchIntoAnchor="+searchIntoAnchor+", maxMismatches="+maxMismatches);
-				SiteScore ss=quickRescue(bases, ssa.chrom, strand, loc, searchDist+searchIntoAnchor, searchRight, 
+				SiteScore ss=quickRescue(bases, ssa.chrom, strand, loc, searchDist+searchIntoAnchor, searchRight,
 						idealStart, maxMismatches, POINTS_MATCH, POINTS_MATCH2);
 				
 				if(ss!=null && ss.isInBounds()){
@@ -1246,7 +1271,7 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	final void slowRescue(final byte[] bases, SiteScore ss, final int maxScore, final int maxImperfectScore, 
+	final void slowRescue(final byte[] bases, SiteScore ss, final int maxScore, final int maxImperfectScore,
 			boolean findTipDeletionsRight, boolean findTipDeletionsLeft){
 		
 		int swscoreNoIndel=msa.scoreNoIndels(bases, ss.chrom, ss.start());
@@ -1262,7 +1287,7 @@ public abstract class AbstractMapThread extends Thread {
 				}
 			}
 			
-			final int minMsaLimit=-CLEARZONE1e+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxScore);				
+			final int minMsaLimit=-CLEARZONE1e+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxScore);
 			
 			final int minscore=Tools.max(swscoreNoIndel, minMsaLimit);
 			final int[] swscoreArray=msa.fillAndScoreLimited(bases, ss.chrom, ss.start(), ss.stop(), SLOW_RESCUE_PADDING, minscore, ss.gaps);
@@ -1277,7 +1302,7 @@ public abstract class AbstractMapThread extends Thread {
 				if(QUICK_MATCH_STRINGS && swscoreArray!=null && swscoreArray.length==6 && swscoreArray[0]>=minscore && (PRINT_SECONDARY_ALIGNMENTS || USE_SS_MATCH_FOR_PRIMARY)){
 					assert(swscoreArray.length==6) : swscoreArray.length;
 					assert(swscoreArray[0]>=minscore) : "\n"+Arrays.toString(swscoreArray)+"\n"+minscore;
-					ss.match=msa.traceback(bases, Data.getChromosome(ss.chrom).array, ss.start()-SLOW_RESCUE_PADDING, ss.stop()+SLOW_RESCUE_PADDING, 
+					ss.match=msa.traceback(bases, Data.getChromosome(ss.chrom).array, ss.start()-SLOW_RESCUE_PADDING, ss.stop()+SLOW_RESCUE_PADDING,
 							swscoreArray[3], swscoreArray[4], swscoreArray[5], ss.gaps!=null); //TODO: This failed once on a semiperfect low-complexity homo-5-mer sequence.
 					if(ss.match!=null){
 						ss.setLimits(swscoreArray[1], swscoreArray[2]);
@@ -1328,7 +1353,7 @@ public abstract class AbstractMapThread extends Thread {
 //		assert(r.list.size()<2) : "\n"+max+", "+min+", "+r.list+"\n";
 	}
 	
-	protected final int removeDuplicateBestSites(Read r){
+	protected final static int removeDuplicateBestSites(Read r){
 		int x=0;
 		if(r.numSites()<2){return 0;}
 
@@ -1351,7 +1376,7 @@ public abstract class AbstractMapThread extends Thread {
 		return x;
 	}
 	
-	protected final void removeUnmapped(ArrayList<Read> list){
+	protected final static void removeUnmapped(ArrayList<Read> list){
 		for(int i=0; i<list.size(); i++){
 			Read r=list.get(i);
 			if(r.numSites()==0){
@@ -1362,7 +1387,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 	}
 	
-	protected final void removeBlacklisted(ArrayList<Read> list){
+	protected final static void removeBlacklisted(ArrayList<Read> list){
 		for(int i=0; i<list.size(); i++){
 			Read r=list.get(i);
 			if(Blacklist.inBlacklist(r)){
@@ -1371,7 +1396,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 	}
 	
-	protected final void removeMapped(ArrayList<Read> list){
+	protected final static void removeMapped(ArrayList<Read> list){
 		for(int i=0; i<list.size(); i++){
 			Read r=list.get(i);
 			if(r.numSites()==0){
@@ -1385,7 +1410,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	public abstract int trimList(ArrayList<SiteScore> list, boolean retainPaired, int maxScore, boolean specialCasePerfect, int minSitesToRetain, int maxSitesToRetain);
 	
-	public final int trimListAdvanced(ArrayList<SiteScore> list, boolean retainPaired, boolean retainSemiperfect, int maxScore, boolean specialCasePerfect, 
+	public final static int trimListAdvanced(ArrayList<SiteScore> list, boolean retainPaired, boolean retainSemiperfect, int maxScore, boolean specialCasePerfect,
 			int minSitesToRetain, int maxSitesToRetain, boolean indexUsesExtendedScore, float thresh){
 		if(list==null || list.size()==0){return -99999;}
 		if(list.size()==1){return list.get(0).score;}
@@ -1420,11 +1445,11 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	public abstract void scoreSlow(final ArrayList<SiteScore> list, final byte[] basesP, final byte[] basesM, 
+	public abstract void scoreSlow(final ArrayList<SiteScore> list, final byte[] basesP, final byte[] basesM,
 			final int maxSwScore, final int maxImperfectSwScore);
 	
 	/** This is only for saving ambiguous xy which is now irrelevant. */
-	public final boolean processAmbiguous(ArrayList<SiteScore> list, boolean primary, boolean removeAmbiguous, int clearzone, boolean save_xy){
+	public final static boolean processAmbiguous(ArrayList<SiteScore> list, boolean primary, boolean removeAmbiguous, int clearzone, boolean save_xy){
 		if(!save_xy){return true;}
 		assert(false) : "TODO: Needs to be redone with contig names.";
 
@@ -1432,7 +1457,7 @@ public abstract class AbstractMapThread extends Thread {
 		boolean ambiguous=true;
 //		if(save_xy && minChrom<=24 && maxChrom>=24){
 //			int best=list.get(0).score;
-//			
+//
 //			//Remove everything outside of the clearzone
 //			for(int i=list.size()-1; i>0; i--){
 //				assert(best>=list.get(i).score);
@@ -1444,8 +1469,8 @@ public abstract class AbstractMapThread extends Thread {
 //					break;
 //				}
 //			}
-//			
-//			
+//
+//
 //			assert(list.size()>1);
 //			int Xcount=0;
 //			int Ycount=0;
@@ -1477,6 +1502,12 @@ public abstract class AbstractMapThread extends Thread {
 		return ambiguous;
 	}
 	
+	int calcTrimmed(Read r){
+		assert(UNTRIM && (TRIM_LEFT || TRIM_RIGHT));
+		if(r==null || r.obj==null || r.obj.getClass()!=TrimRead.class){return 0;}
+		TrimRead tr=(TrimRead) r.obj;
+		return tr.trimmed();
+	}
 	
 	public void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
 		final Read r2=r.mate;
@@ -1489,13 +1520,16 @@ public abstract class AbstractMapThread extends Thread {
 			ambiguousBestAlignmentBases1+=len1;
 		}
 		
+		int trimmed=0;
+		if((TRIM_LEFT || TRIM_RIGHT) && UNTRIM){
+			trimmed=calcTrimmed(r)+calcTrimmed(r.mate);
+		}
 		if((!r.mapped() || (r.ambiguous() && AMBIGUOUS_TOSS)) && (r2==null || !r2.mapped() || (r2.ambiguous() && AMBIGUOUS_TOSS))){
-			bothUnmapped++;
-			bothUnmappedBases+=r.length();
-			if(r2!=null){
-				bothUnmapped++;
-				bothUnmappedBases+=r2.length();
-			}
+			bothUnmapped+=r.pairCount();
+			bothUnmappedBases+=r.pairLength()+trimmed;
+		}else{
+			eitherMapped+=r.pairCount();
+			eitherMappedBases+=r.pairLength()+trimmed;
 		}
 
 		int[] correctness=calcCorrectness(r, THRESH);
@@ -1510,6 +1544,8 @@ public abstract class AbstractMapThread extends Thread {
 		boolean firstElementCorrect=(correctness[8]==1);
 		boolean firstElementCorrectLoose=(correctness[9]==1);
 		boolean firstGroupCorrectLoose=(correctness[10]==1);
+
+//		assert(firstElementCorrect) : "\n"+r.topSite()+"\n"+r.originalSite+"\n"+r.pairnum();
 		
 		assert(elements>0 == r.mapped());
 		
@@ -1536,7 +1572,7 @@ public abstract class AbstractMapThread extends Thread {
 			mappedRetained1++;
 			mappedRetainedBases1+=len1;
 			if(r.rescued()){
-				if(r.strand()==Gene.PLUS){
+				if(r.strand()==Shared.PLUS){
 					rescuedP1++;
 				}else{
 					rescuedM1++;
@@ -1587,7 +1623,7 @@ public abstract class AbstractMapThread extends Thread {
 			if(foundSemi>0){semiperfectMatchBases1+=len1;}
 			
 			if(firstElementCorrect){
-				if(r.strand()==Gene.PLUS){firstSiteCorrectP1++;}
+				if(r.strand()==Shared.PLUS){firstSiteCorrectP1++;}
 				else{firstSiteCorrectM1++;}
 				if(r.paired()){firstSiteCorrectPaired1++;}
 				else{firstSiteCorrectSolo1++;}
@@ -1613,7 +1649,7 @@ public abstract class AbstractMapThread extends Thread {
 
 			if(correctGroup>0){
 				
-				if(r.strand()==Gene.PLUS){truePositiveP1++;}
+				if(r.strand()==Shared.PLUS){truePositiveP1++;}
 				else{truePositiveM1++;}
 				totalCorrectSites1+=numCorrect;
 
@@ -1665,6 +1701,8 @@ public abstract class AbstractMapThread extends Thread {
 		boolean firstElementCorrectLoose=(correctness[9]==1);
 		boolean firstGroupCorrectLoose=(correctness[10]==1);
 
+//		assert(firstElementCorrect) : "\n"+r.topSite()+"\n"+r.originalSite+"\n"+r.pairnum();
+		
 		if(elements>0){
 			
 			if(r.match!=null){
@@ -1686,7 +1724,7 @@ public abstract class AbstractMapThread extends Thread {
 			mappedRetained2++;
 			mappedRetainedBases2+=len;
 			if(r.rescued()){
-				if(r.strand()==Gene.PLUS){
+				if(r.strand()==Shared.PLUS){
 					rescuedP2++;
 				}else{
 					rescuedM2++;
@@ -1715,7 +1753,7 @@ public abstract class AbstractMapThread extends Thread {
 			if(foundSemi>0){semiperfectMatchBases2+=len;}
 
 			if(firstElementCorrect){
-				if(r.strand()==Gene.PLUS){firstSiteCorrectP2++;}
+				if(r.strand()==Shared.PLUS){firstSiteCorrectP2++;}
 				else{firstSiteCorrectM2++;}
 				if(r.paired()){firstSiteCorrectPaired2++;}
 				else{firstSiteCorrectSolo2++;}
@@ -1741,7 +1779,7 @@ public abstract class AbstractMapThread extends Thread {
 
 			if(correctGroup>0){
 
-				if(r.strand()==Gene.PLUS){truePositiveP2++;}
+				if(r.strand()==Shared.PLUS){truePositiveP2++;}
 				else{truePositiveM2++;}
 				totalCorrectSites2+=numCorrect;
 
@@ -1773,7 +1811,7 @@ public abstract class AbstractMapThread extends Thread {
 	public abstract void processRead(Read r, final byte[] basesM);
 	
 	@Deprecated
-	protected final boolean applyClearzone3_old(Read r, int CLEARZONE3, float INV_CLEARZONE3){
+	protected final static boolean applyClearzone3_old(Read r, int CLEARZONE3, float INV_CLEARZONE3){
 		
 		assert(!r.paired()); //This is currently for unpaired reads
 		if(!r.mapped() || r.ambiguous() || r.discarded() || r.numSites()<2){return false;}
@@ -1874,7 +1912,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	
 //	protected float calcCZ3(int score1, int score2, int CLEARZONE3, float INV_CLEARZONE3){
-//		
+//
 //		int dif=score1-score2;
 //		if(dif>=CLEARZONE3){return 0;}
 //		//Now dif is between 0 and CZ3
@@ -1882,13 +1920,13 @@ public abstract class AbstractMapThread extends Thread {
 ////		final int dif2=40+(CLEARZONE3-dif)/3;
 ////		final int dif2=(CLEARZONE3-dif)/2;
 //		int dif2=(CLEARZONE3-dif); //dif2 is higher if the scores are closer.
-//		
-//		float f=dif2*INV_CLEARZONE3; //f ranges linearly from 1 (if the scores are identical) to 0 (when score2 is maximally below score1) 
-//		
+//
+//		float f=dif2*INV_CLEARZONE3; //f ranges linearly from 1 (if the scores are identical) to 0 (when score2 is maximally below score1)
+//
 //		float f2=f*f;
 //		float f7=(float)Math.pow(f, .7);
-//		
-////		return (dif2+2f*f*dif2+2f*Tools.min(f2,0.5f)*dif2);		
+//
+////		return (dif2+2f*f*dif2+2f*Tools.min(f2,0.5f)*dif2);
 //		return (CLEARZONE3*f7+2f*f*dif2+2f*Tools.min(f2,0.5f)*dif2);
 //	}
 	
@@ -1903,12 +1941,12 @@ public abstract class AbstractMapThread extends Thread {
 //		final int dif2=(CLEARZONE3-dif)/2;
 		int dif2=(CLEARZONE3-dif); //dif2 is higher if the scores are closer.
 		
-		float f=dif2*INV_CLEARZONE3; //f ranges linearly from 1 (if the scores are identical) to 0 (when score2 is maximally below score1) 
+		float f=dif2*INV_CLEARZONE3; //f ranges linearly from 1 (if the scores are identical) to 0 (when score2 is maximally below score1)
 		
 		float f2=f*f;
 //		float f7=(float)Math.pow(f, .7);
 		
-//		return (dif2+2f*f*dif2+2f*Tools.min(f2,0.5f)*dif2);		
+//		return (dif2+2f*f*dif2+2f*Tools.min(f2,0.5f)*dif2);
 		return f+2f*f2+2f*f2*f;
 	}
 	
@@ -1919,7 +1957,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	
 
-	protected static void pairSiteScoresFinal(Read r, Read r2, boolean trim, boolean setScore, int MAX_PAIR_DIST, int AVERAGE_PAIR_DIST, 
+	protected static void pairSiteScoresFinal(Read r, Read r2, boolean trim, boolean setScore, int MAX_PAIR_DIST, int AVERAGE_PAIR_DIST,
 			boolean SAME_STRAND_PAIRS, boolean REQUIRE_CORRECT_STRANDS_PAIRS, int maxTrimSitesToRetain){
 		
 		if(r.sites!=null){
@@ -1993,7 +2031,7 @@ public abstract class AbstractMapThread extends Thread {
 				
 				if(REQUIRE_CORRECT_STRANDS_PAIRS){
 					if(ss1.strand!=ss2.strand){
-						if(ss1.strand==Gene.PLUS){
+						if(ss1.strand==Shared.PLUS){
 							innerdist=ss2.start()-ss1.stop();
 							outerdist=ss2.stop()-ss1.start();
 						}else{
@@ -2097,7 +2135,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 	}
 	
-	protected final boolean canPair(SiteScore ss1, SiteScore ss2, int len1, int len2, 
+	protected final static boolean canPair(SiteScore ss1, SiteScore ss2, int len1, int len2,
 			boolean REQUIRE_CORRECT_STRANDS_PAIRS, boolean SAME_STRAND_PAIRS, int MAX_PAIR_DIST){
 		if(ss1.chrom!=ss2.chrom){return false;}
 		if(REQUIRE_CORRECT_STRANDS_PAIRS){
@@ -2137,7 +2175,7 @@ public abstract class AbstractMapThread extends Thread {
 		
 		if(REQUIRE_CORRECT_STRANDS_PAIRS){
 			if(ss1.strand!=ss2.strand){
-				if(ss1.strand==Gene.PLUS){
+				if(ss1.strand==Shared.PLUS){
 					innerdist=ss2.start()-ss1.stop();
 					outerdist=ss2.stop()-ss1.start();
 				}else{
@@ -2167,18 +2205,18 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-//	/** Returns the number of additional bases away that should be searched for slow align. 
-//	 * This should probably be called between quickMap and slowAlign, only on 
+//	/** Returns the number of additional bases away that should be searched for slow align.
+//	 * This should probably be called between quickMap and slowAlign, only on
 //	 * sites where stop-start<=bases.length-1 */
 //	public abstract void findTipDeletions(final Read r, final byte[] basesP, final byte[] basesM, final int maxSwScore, final int maxImperfectScore);
 //
 //	public abstract boolean findTipDeletions(SiteScore ss, final byte[] bases, final int maxImperfectScore, boolean lookRight, boolean lookLeft);
 	
 	
-	/** Returns the number of additional bases away that should be searched for slow align. 
-	 * This should probably be called between quickMap and slowAlign, only on 
+	/** Returns the number of additional bases away that should be searched for slow align.
+	 * This should probably be called between quickMap and slowAlign, only on
 	 * sites where stop-start<=bases.length-1 */
-	protected final int findTipDeletionsRight(final byte[] bases, final int chrom,
+	protected final static int findTipDeletionsRight(final byte[] bases, final int chrom,
 			int originalStop, int searchDist, int tiplen){
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		byte[] ref=cha.array;
@@ -2235,10 +2273,10 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	/** Returns the number of additional bases away that should be searched for slow align. 
-	 * This should probably be called between quickMap and slowAlign, only on 
+	/** Returns the number of additional bases away that should be searched for slow align.
+	 * This should probably be called between quickMap and slowAlign, only on
 	 * sites where stop-start<=bases.length-1 */
-	protected final int findTipDeletionsLeft(final byte[] bases, final int chrom,
+	protected final static int findTipDeletionsLeft(final byte[] bases, final int chrom,
 			final int originalStart, int searchDist, int tiplen){
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		byte[] ref=cha.array;
@@ -2298,7 +2336,7 @@ public abstract class AbstractMapThread extends Thread {
 //	public abstract void rescue(Read anchor, Read loose, byte[] basesP, byte[] basesM, int searchDist);
 	
 	
-//	public abstract void slowRescue(final byte[] bases, SiteScore ss, final int maxScore, final int maxImperfectScore, 
+//	public abstract void slowRescue(final byte[] bases, SiteScore ss, final int maxScore, final int maxImperfectScore,
 //			boolean findTipDeletionsRight, boolean findTipDeletionsLeft);
 	
 	
@@ -2408,7 +2446,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	
 	/** Assumes bases are already on the correct strand */
-	protected final int[] quickerRescue(final byte[] bases, final int chrom, int loc, final int searchDist){
+	protected final static int[] quickerRescue(final byte[] bases, final int chrom, int loc, final int searchDist){
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		byte[] ref=cha.array;
 		if(loc<cha.minIndex){loc=cha.minIndex;}
@@ -2444,7 +2482,7 @@ public abstract class AbstractMapThread extends Thread {
 	 * @param EXPECTED_LEN_LIMIT
 	 * @return Number of sites removed
 	 */
-	protected final int removeOutOfBounds(Read r, boolean DONT_OUTPUT_UNMAPPED_READS, boolean SAM_OUT, int EXPECTED_LEN_LIMIT){
+	protected final static int removeOutOfBounds(Read r, boolean DONT_OUTPUT_UNMAPPED_READS, boolean SAM_OUT, int EXPECTED_LEN_LIMIT){
 //		assert(false) : DONT_OUTPUT_UNMAPPED_READS+", "+SAM_OUT+", "+EXPECTED_LEN_LIMIT;
 		ArrayList<SiteScore> ssl=r.sites;
 		if(ssl==null){return 0;}
@@ -2517,7 +2555,7 @@ public abstract class AbstractMapThread extends Thread {
 				points+=(tiplen+2-cpos);
 				cpos++;
 			}else{
-				if(Character.isDigit(b)){
+				if(Tools.isDigit(b)){
 					r.toLongMatchString(false);
 					return calcTipScorePenalty(r, maxScore, tiplen);
 				}
@@ -2612,8 +2650,8 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	/** {group of correct hit (or -1), size of correct group, number of groups, 
-	 * number of elements, correctScore, maxScore, size of top group, num correct, firstElementCorrect, 
+	/** {group of correct hit (or -1), size of correct group, number of groups,
+	 * number of elements, correctScore, maxScore, size of top group, num correct, firstElementCorrect,
 	 * firstElementCorrectLoose, firstGroupCorrectLoose} */
 	protected int[] calcCorrectness(Read r, int thresh){
 		//assume sorted.
@@ -2665,6 +2703,7 @@ public abstract class AbstractMapThread extends Thread {
 //			boolean b=isCorrectHit(ss, original.chrom, original.strand, original.start, 1, thresh);
 			boolean b=isCorrectHit(ss, original.chrom, original.strand, original.start(), original.stop(), thresh);
 			boolean b2=isCorrectHitLoose(ss, original.chrom, original.strand, original.start(), original.stop(), thresh+20);
+//			assert(false) : b+", "+b2+"\n"+ss+"\n"+original+"\n"+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop;
 			if(b){
 				if(i==0){firstElementCorrect=1;}
 				numCorrect++;
@@ -2686,8 +2725,8 @@ public abstract class AbstractMapThread extends Thread {
 		assert(group<=ssl.size());
 		assert(sizeOfTopGroup>0 && sizeOfTopGroup<=ssl.size());
 		assert((correctGroup>0) == (correctGroupSize>0));
-		return new int[] {correctGroup, correctGroupSize, group, ssl.size(), 
-				correct==null ? 0 : correct.score, ssl.get(0).score, sizeOfTopGroup, numCorrect, firstElementCorrect, 
+		return new int[] {correctGroup, correctGroupSize, group, ssl.size(),
+				correct==null ? 0 : correct.score, ssl.get(0).score, sizeOfTopGroup, numCorrect, firstElementCorrect,
 						firstElementCorrectLoose, firstGroupCorrectLoose};
 	}
 	
@@ -2750,7 +2789,7 @@ public abstract class AbstractMapThread extends Thread {
 		SiteScore ss=r.topSite();
 		if(ss==null){return false;}
 		boolean b=(ss.start()==r.start) && (ss.stop()==r.stop) && (ss.strand==r.strand()) && (ss.chrom==r.chrom) && (ss.match==r.match);
-		assert(b) : "\nread="+r+"\nmate="+r.mate+"\nss="+ss+"\n"+(ss==null ? "ss is null" : 
+		assert(b) : "\nread="+r+"\nmate="+r.mate+"\nss="+ss+"\n"+(ss==null ? "ss is null" :
 			((ss.start()==r.start)+", "+(ss.stop()==r.stop)+", "+(ss.strand==r.strand())+", "+(ss.chrom==r.chrom)+", "+(ss.match==r.match))+"\nlist="+r.sites);
 		return b;
 	}
@@ -2817,7 +2856,7 @@ public abstract class AbstractMapThread extends Thread {
 	protected final ConcurrentReadInputStream cris;
 
 	
-	/** All reads go here. <br>  
+	/** All reads go here. <br>
 	 * If outputunmapped=false, omit unmapped single reads and double-unmapped paired reads. */
 	protected final ConcurrentReadOutputStream outStream;
 	/** All mapped reads (and half-mapped pairs) go here except reads that only map to the blacklist. */
@@ -2883,7 +2922,7 @@ public abstract class AbstractMapThread extends Thread {
 	final boolean TRIM_LIST;
 	final int TIP_DELETION_SEARCH_RANGE;
 	final boolean FIND_TIP_DELETIONS;
-	final int ALIGN_COLUMNS;
+	final int ALIGN_COLUMNS_ABSTRACT;
 	
 	/*--------------------------------------------------------------*/
 	
@@ -2897,7 +2936,7 @@ public abstract class AbstractMapThread extends Thread {
 	/** Choose a random site for reads with ambiguous alignments. */
 	protected final boolean AMBIGUOUS_RANDOM;
 	/** Output all sites for reads with ambiguous alignments. */
-	protected final boolean AMBIGUOUS_ALL;		
+	protected final boolean AMBIGUOUS_ALL;
 	/** Quality-trim left side of reads before mapping. */
 	protected final boolean TRIM_LEFT;
 	/** Quality-trim right side of reads before mapping. */
@@ -2905,7 +2944,8 @@ public abstract class AbstractMapThread extends Thread {
 	/** Undo quality trimming after mapping. */
 	protected final boolean UNTRIM;
 	/** Trim until 2 consecutive bases are encountered with at least this quality. */
-	protected final byte TRIM_QUAL;
+	protected final float TRIM_QUAL;
+	protected final float TRIM_ERROR_RATE;
 	/** Don't trim reads to be shorter than this */
 	protected final int TRIM_MIN_LENGTH;
 	/** Distance cutoff for classifying a read as loosely correct */
@@ -2946,6 +2986,8 @@ public abstract class AbstractMapThread extends Thread {
 	protected final boolean REQUIRE_CORRECT_STRANDS_PAIRS;
 	protected final boolean SAME_STRAND_PAIRS;
 	
+	protected final BloomFilter bloomFilter;
+	
 	/*--------------------------------------------------------------*/
 
 	static int INITIAL_AVERAGE_PAIR_DIST=100;
@@ -2967,6 +3009,7 @@ public abstract class AbstractMapThread extends Thread {
 	protected static int DELLENFILTER=-1;
 	protected static int INSLENFILTER=-1;
 	protected static int EDITFILTER=-1;
+	protected static int NFILTER=-1;
 	
 	protected static boolean OUTPUT_SAM=false;
 	
@@ -2979,10 +3022,10 @@ public abstract class AbstractMapThread extends Thread {
 	protected static int MAX_RESCUE_DIST=1200;
 	protected static int MAX_RESCUE_MISMATCHES=32;
 	/** IMPORTANT!!!!  This option causes non-deterministic output. */
-	protected static final boolean DYNAMIC_INSERT_LENGTH=true;
+	protected static boolean DYNAMIC_INSERT_LENGTH=true;
 	/** Counts undefined bases. */
 	protected static final boolean DISCARD_MOSTLY_UNDEFINED_READS=true;
-	protected static byte MIN_AVERAGE_QUALITY=0;
+	protected static float MIN_AVERAGE_QUALITY=0;
 	protected static int MIN_AVERAGE_QUALITY_BASES=0;
 	protected static boolean TIME_TAG=false;
 	protected static boolean CLEAR_ATTACHMENT=true;
@@ -3028,11 +3071,17 @@ public abstract class AbstractMapThread extends Thread {
 
 	public boolean verbose=false;
 	public static final boolean verboseS=false;
-	
+
 	public long readsUsed1=0;
 	public long readsUsed2=0;
 	public long basesUsed1=0;
 	public long basesUsed2=0;
+	public long readsIn1=0;
+	public long readsIn2=0;
+	public long basesIn1=0;
+	public long basesIn2=0;
+	public long readsPassedBloomFilter=0;
+	public long basesPassedBloomFilter=0;
 	public long numMated=0;
 	public long numMatedBases=0;
 	public long badPairs=0;
@@ -3044,6 +3093,8 @@ public abstract class AbstractMapThread extends Thread {
 	public long syntheticReads=0;
 	public long bothUnmapped=0;
 	public long bothUnmappedBases=0;
+	public long eitherMapped=0;
+	public long eitherMappedBases=0;
 
 	public long mapped1=0;
 	public long mappedRetained1=0;
@@ -3079,9 +3130,9 @@ public abstract class AbstractMapThread extends Thread {
 	
 	public long perfectHit1=0; //Highest quick score is max quick score
 	public long uniqueHit1=0; //Only one hit has highest score
-	public long correctUniqueHit1=0; //unique highest hit on answer site 
-	public long correctMultiHit1=0;  //non-unique highest hit on answer site 
-	public long correctLowHit1=0;  //hit on answer site, but not highest scorer 
+	public long correctUniqueHit1=0; //unique highest hit on answer site
+	public long correctMultiHit1=0;  //non-unique highest hit on answer site
+	public long correctLowHit1=0;  //hit on answer site, but not highest scorer
 	public long noHit1=0;
 	
 	/** Number of perfect hit sites found */
@@ -3140,9 +3191,9 @@ public abstract class AbstractMapThread extends Thread {
 	
 	public long perfectHit2=0; //Highest quick score is max quick score
 	public long uniqueHit2=0; //Only one hit has highest score
-	public long correctUniqueHit2=0; //unique highest hit on answer site 
-	public long correctMultiHit2=0;  //non-unique highest hit on answer site 
-	public long correctLowHit2=0;  //hit on answer site, but not highest scorer 
+	public long correctUniqueHit2=0; //unique highest hit on answer site
+	public long correctMultiHit2=0;  //non-unique highest hit on answer site
+	public long correctLowHit2=0;  //hit on answer site, but not highest scorer
 	public long noHit2=0;
 	
 	/** Number of perfect hit sites found */

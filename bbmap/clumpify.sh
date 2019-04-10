@@ -1,27 +1,30 @@
 #!/bin/bash
-#clumpify in=<infile> out=<outfile> groups=<number>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified January 5, 2017
+Last modified March 28, 2018
 
 Description:  Sorts sequences to put similar reads near each other.
 Can be used for increased compression or error correction.
-Note - Paired reads should be interleaved for both input and output,
-not split into two files.
+Please read bbmap/docs/guides/ClumpifyGuide.txt for more information.
 
-Usage:   clumpify.sh in=<file> out=<file> groups=<number>
+Usage:   clumpify.sh in=<file> out=<file> reorder
 
-Input may be fasta or fastq, compressed or uncompressed.
+Input may be fasta or fastq, compressed or uncompressed.  Cannot accept sam.
 
-Optional parameters (and their defaults)
-
+Parameters and their defaults:
 in=<file>           Input file.
+in2=<file>          Optional input for read 2 of twin paired files.
 out=<file>          Output file.  May not be standard out.
+out2=<file>         Optional output for read 2 of twin paired files.
 groups=auto         Use this many intermediate files (to save memory).
                     1 group is fastest.  Auto will estimate the number
-                    of groups needed based on the file size.
+                    of groups needed based on the file size, so it should
+                    not ever run out of memory.
+lowcomplexity=f     For compressed low-complexity libraries such as RNA-seq,
+                    this will more conservatively estimate how much memory
+                    is needed to automatically decide the number of groups.
 rcomp=f             Give read clumps the same orientation to increase 
                     compression.  Should be disabled for paired reads.
 overwrite=f         (ow) Set to false to force the program to abort rather 
@@ -33,14 +36,16 @@ qin=auto            Auto-detect input quality encoding.  May be set to:
 qout=auto           Use input quality encoding as output quality encoding.
 changequality=f     (cq) If true, fix broken quality scores such as Ns with
                     Q>0.  Default is false to ensure lossless compression.
+fastawrap=70        Set to a higher number like 4000 for longer lines in 
+                    fasta format, which increases compression.
 
 Compression parameters:
 ziplevel=6          (zl) Gzip compression level (1-11).  Higher is slower.
                     Level 11 is only available if pigz is installed and is
                     extremely slow to compress, but faster to decompress.
                     Naming the output file to *.bz2 will use bzip2 instead of
-                    gzip for ~95 additional compression, which requires
-                    bzip2 or pbzip2 in the path.
+                    gzip for ~9% additional compression, which requires
+                    bzip2, pbzip2, or lbzip2 in the path.
 blocksize=128       Size of blocks for pigz, in kb.  Higher gives slightly
                     better compression.
 shortname=f         Make the names as short as possible.  'shortname=shrink'
@@ -61,7 +66,8 @@ quantize=f          Bin the quality scores, like NextSeq.  This greatly
 Temp file parameters:
 compresstemp=auto   (ct) Gzip temporary files.  By default temp files will be
                     compressed if the output file is compressed.
-delete=t            Delete temporary files.
+deletetemp=t        Delete temporary files.
+deleteinput=f       Delete input upon successful completion.
 usetmpdir=f         Use tmpdir for temp files.
 tmpdir=             By default, this is the environment variable TMPDIR.
 
@@ -81,25 +87,47 @@ border=1            Do not use kmers within this many bases of read ends.
 
 Deduplication parameters:
 dedupe=f            Remove duplicate reads.  For pairs, both must match.
+                    By default, deduplication does not occur.
+                    If dedupe and markduplicates are both false, none of
+                    the other duplicate-related flags will have any effect.
 markduplicates=f    Don't remove; just append ' duplicate' to the name.
 allduplicates=f     Mark or remove all copies of duplicates, instead of
                     keeping the highest-quality copy.
-dupesubs=2          (subs) Maximum substitutions allowed between duplicates.
+addcount=f          Append the number of copies to the read name.
+                    Mutually exclusive with markduplicates or allduplicates.
+subs=2              (s) Maximum substitutions allowed between duplicates.
+subrate=0.0         (dsr) If set, the number of substitutions allowed will be
+                    max(subs, subrate*min(length1, length2)) for 2 sequences.
+allowns=t           No-called bases will not be considered substitutions.
+scanlimit=5         (scan) Continue for this many reads after encountering a
+                    nonduplicate.  Improves detection of inexact duplicates.
+containment=f       Allow containments (where one sequence is shorter).
+affix=f             For containments, require one sequence to be an affix
+                    (prefix or suffix) of the other.
 optical=f           If true, mark or remove optical duplicates only.
                     This means they are Illumina reads within a certain
                     distance on the flowcell.  Normal Illumina names needed.
+                    Also for tile-edge and well duplicates.
 dupedist=40         (dist) Max distance to consider for optical duplicates.
                     Higher removes more duplicates but is more likely to
                     remove PCR rather than optical duplicates.
                     This is platform-specific; recommendations:
-                       NextSeq      28
+                       NextSeq      40  (and spany=t)
                        HiSeq 1T     40
                        HiSeq 2500   40
-spantiles=t         Allow reads to be considered optical duplicates if they
-                    are on different tiles, but are within dupedist in
-                    either the x or y axis.
-scanlimit=5         (scan) Continue for this many reads after encountering a
-                    nonduplicate.  Improves detection of inexact duplicates.
+                       HiSeq 3k/4k  2500
+                       Novaseq      12000
+spany=f             Allow reads to be considered optical duplicates if they
+                    are on different tiles, but are within dupedist in the
+                    y-axis.  Should only be enabled when looking for 
+                    tile-edge duplicates (as in NextSeq).
+spanx=f             Like spany, but for the x-axis.  Not necessary 
+                    for NextSeq.
+spantiles=f         Set both spanx and spany.
+adjacent=f          Limit tile-spanning to adjacent tiles (those with 
+                    consecutive numbers).
+*** Thus, for NextSeq, the recommended deduplication flags are: ***
+dedupe optical spany adjacent
 
 Pairing/ordering parameters (for use with error-correction):
 unpair=f            For paired reads, clump all of them rather than just
@@ -149,15 +177,18 @@ maxcorrelations=12  Maximum number of eligible SNPs per clump to consider for
                     positive corrections at the possible expense of speed.
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding
-                    the program's automatic memory detection.  -Xmx20g will 
-                    specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
                     The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -174,6 +205,7 @@ CP="$DIR""current/"
 z="-Xmx2g"
 z2="-Xms2g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -195,14 +227,26 @@ calcXmx () {
 calcXmx "$@"
 
 clumpify() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
-		#module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	java -version
-	local CMD="java $EA $z $z2 -cp $CP clump.Clumpify $@"
+	#java -version
+	local CMD="java $EA $EOOM $z $z2 -cp $CP clump.Clumpify $@"
 	echo $CMD >&2
 	eval $CMD
 }

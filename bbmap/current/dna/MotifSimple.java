@@ -44,6 +44,7 @@ public class MotifSimple extends Motif {
 	}
 	
 	
+	@Override
 	public boolean matchesExactly(byte[] source, int a){
 		assert(!extended);
 		
@@ -60,6 +61,7 @@ public class MotifSimple extends Motif {
 	}
 	
 	
+	@Override
 	public boolean matchesExtended(byte[] source, int a){
 		
 		a=a-center;

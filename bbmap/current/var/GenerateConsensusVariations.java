@@ -1,12 +1,11 @@
 package var;
 
-import java.util.Arrays;
-
 import dna.ChromosomeArray;
 import dna.Data;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.Timer;
 import shared.Tools;
 import structures.CoverageArray;
@@ -19,7 +18,12 @@ import structures.CoverageArray;
 public class GenerateConsensusVariations {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 
 		String inVarsPattern=args[0];
@@ -38,7 +42,7 @@ public class GenerateConsensusVariations {
 			final String arg=args[i].toLowerCase();
 			String[] split=arg.split("=");
 			String a=split[0];
-			String b=(split.length>1 ? split[1] : null);
+			String b=split.length>1 ? split[1] : null;
 			
 			if(a.startsWith("mincov")){
 				minCoverage=Integer.parseInt(b);
@@ -89,7 +93,7 @@ public class GenerateConsensusVariations {
 	
 	/** Now removes overlapping vars by retaining better quality one. */
 	public static void process(final String invars, final String incov, final String outfile, final int chrom, final int mincov){
-		TextFile tf=new TextFile(invars, true, false);
+		TextFile tf=new TextFile(invars, true);
 		CoverageArray ca=ReadWrite.read(CoverageArray.class, incov, true);
 		TextStreamWriter tsw=new TextStreamWriter(outfile, true, false, true);
 		tsw.start();
@@ -142,7 +146,7 @@ public class GenerateConsensusVariations {
 //					VARLEN_OUT+=dif;
 //					if(v.varType==Variation.NOREF){NOREFS_OUT++;}
 //				}else{
-//					
+//
 //				}
 			}
 		}
@@ -206,7 +210,7 @@ public class GenerateConsensusVariations {
 		}
 		int minReads=(int)Math.ceil(ratio*minCov);
 		if(v.numReads<minReads){
-			if(verbose){System.err.println("Low reads, mincov="+minCov+", "+v.numReads+"<"+minReads+"\n"+v);} 
+			if(verbose){System.err.println("Low reads, mincov="+minCov+", "+v.numReads+"<"+minReads+"\n"+v);}
 			return false;
 		}
 		if(v.minStrandReads()<1 && v.numSemiUniqueReads<2*minCoverageToPass){
@@ -216,7 +220,7 @@ public class GenerateConsensusVariations {
 		
 		//Check noref
 		if(v.varType==Variation.NOREF){
-			if(NOREF_CAP>=0){ 
+			if(NOREF_CAP>=0){
 				int a=Tools.max(v.beginLoc-NOREF_CAP, cha.minIndex);
 				int b=Tools.min(v.endLoc+NOREF_CAP, cha.maxIndex);
 				if(cha.isFullyUndefined(a, b)){

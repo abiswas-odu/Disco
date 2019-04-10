@@ -1,6 +1,7 @@
 package align2;
 
 import java.io.File;
+import java.util.Locale;
 
 import fileIO.ReadWrite;
 import shared.Tools;
@@ -24,9 +25,9 @@ public class PrintTime {
 				long old=Long.parseLong(s);
 				long elapsed=millis-old;
 				if(args.length<2 || Tools.parseBoolean(args[1])){
-					System.out.println("Elapsed:\t"+String.format("%.2f", elapsed/1000d));
+					System.out.println("Elapsed:\t"+String.format(Locale.ROOT, "%.2f", elapsed/1000d));
 					if(true){
-						System.err.println("Elapsed:\t"+String.format("%.2f", elapsed/1000d));
+						System.err.println("Elapsed:\t"+String.format(Locale.ROOT, "%.2f", elapsed/1000d));
 					}
 				}
 			}

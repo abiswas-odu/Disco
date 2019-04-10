@@ -7,27 +7,29 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 
-import stream.ArrayListSet;
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.MultiCros;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ArrayListSet;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.MultiCros;
+import stream.Read;
+import structures.ListNum;
 
 
 /**
@@ -39,42 +41,37 @@ public class DemuxByName {
 
 	public static void main(String[] args){
 		
-		Shared.capBuffers(4);
-		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
-		final int oldCap=Shared.READ_BUFFER_NUM_BUFFERS(), oldZipThreads=ReadWrite.MAX_ZIP_THREADS;
+		final int oldCap=Shared.numBuffers(), oldZipThreads=ReadWrite.MAX_ZIP_THREADS, oldZl=ReadWrite.ZIPLEVEL;
 		final boolean oldPigz=ReadWrite.USE_PIGZ, oldUnpigz=ReadWrite.USE_UNPIGZ;
 		
 		Timer t=new Timer();
-		DemuxByName mb=new DemuxByName(args);
-		mb.process(t);
+		DemuxByName x=new DemuxByName(args);
+		x.process(t);
 		
 		Shared.setBuffers(oldCap);
+		ReadWrite.ZIPLEVEL=oldZl;
 		ReadWrite.USE_PIGZ=oldPigz;
 		ReadWrite.USE_UNPIGZ=oldUnpigz;
 		ReadWrite.MAX_ZIP_THREADS=oldZipThreads;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public DemuxByName(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
+		ReadWrite.ZIPLEVEL=1;
 		
 		
 		Parser parser=new Parser();
@@ -83,8 +80,6 @@ public class DemuxByName {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -110,21 +105,78 @@ public class DemuxByName {
 				prefixMode=Tools.parseBoolean(b);
 			}else if(a.equals("suffixmode") || a.equals("suffix") || a.equals("sm")){
 				prefixMode=!Tools.parseBoolean(b);
+			}else if(a.equals("column")){
+				column=Integer.parseInt(b);
+				assert(column>0 || column==-1) : "Column is 1-based; must be 1+ or else -1 to disable.";
+				column--;
 			}else if(a.equals("substringmode") || a.equals("substring")){
 				substringMode=Tools.parseBoolean(b);
 			}else if(a.equals("outu") || a.equals("outu1")){
 				outu1=b;
 			}else if(a.equals("outu2")){
 				outu2=b;
+			}else if(a.equals("perheader") || a.equals("persequence") || a.equals("pername")){
+				perheader=Tools.parseBoolean(b);
 			}else if(a.equals("delimiter")){
 				if(b==null){delimiter=null;}
+				
+				//Convenience characters
 				else if(b.equalsIgnoreCase("space")){
 					delimiter=" ";
 				}else if(b.equalsIgnoreCase("tab")){
 					delimiter="\t";
 				}else if(b.equalsIgnoreCase("whitespace")){
 					delimiter="\\s+";
-				}else{
+				}else if(b.equalsIgnoreCase("pound")){
+					delimiter="#";
+				}else if(b.equalsIgnoreCase("greaterthan")){
+					delimiter=">";
+				}else if(b.equalsIgnoreCase("lessthan")){
+					delimiter="<";
+				}else if(b.equalsIgnoreCase("equals")){
+					delimiter="=";
+				}else if(b.equalsIgnoreCase("colon")){
+					delimiter=":";
+				}else if(b.equalsIgnoreCase("semicolon")){
+					delimiter=";";
+				}else if(b.equalsIgnoreCase("bang")){
+					delimiter="!";
+				}else if(b.equalsIgnoreCase("and") || b.equalsIgnoreCase("ampersand")){
+					delimiter="&";
+				}else if(b.equalsIgnoreCase("quote") || b.equalsIgnoreCase("doublequote")){
+					delimiter="\"";
+				}else if(b.equalsIgnoreCase("singlequote") || b.equalsIgnoreCase("apostrophe")){
+					delimiter="'";
+				}
+				
+				//Java meta characters
+				else if(b.equalsIgnoreCase("backslash")){
+					delimiter="\\\\";
+				}else if(b.equalsIgnoreCase("hat") || b.equalsIgnoreCase("caret")){
+					delimiter="\\^";
+				}else if(b.equalsIgnoreCase("dollar")){
+					delimiter="\\$";
+				}else if(b.equalsIgnoreCase("dot")){
+					delimiter="\\.";
+				}else if(b.equalsIgnoreCase("pipe") || b.equalsIgnoreCase("or")){
+					delimiter="\\|";
+				}else if(b.equalsIgnoreCase("questionmark")){
+					delimiter="\\?";
+				}else if(b.equalsIgnoreCase("star") || b.equalsIgnoreCase("asterisk")){
+					delimiter="\\*";
+				}else if(b.equalsIgnoreCase("plus")){
+					delimiter="\\+";
+				}else if(b.equalsIgnoreCase("openparen")){
+					delimiter="\\(";
+				}else if(b.equalsIgnoreCase("closeparen")){
+					delimiter="\\)";
+				}else if(b.equalsIgnoreCase("opensquare")){
+					delimiter="\\[";
+				}else if(b.equalsIgnoreCase("opencurly")){
+					delimiter="\\{";
+				}
+				
+				else{
 					delimiter=b;
 				}
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
@@ -136,7 +188,9 @@ public class DemuxByName {
 			}
 		}
 		
-		{
+		if(perheader){
+			ReadWrite.USE_PIGZ=false;
+		}else{
 			String[] x=names.toArray(new String[names.size()]);
 			names.clear();
 			for(String s : x){
@@ -175,7 +229,8 @@ public class DemuxByName {
 				Tools.reverseInPlace(affixLengths);
 			}
 			
-			assert((affixLengths.length>0 && affixLengths[0]>0) || delimiter!=null) : "Must include at least one non-zero-length affix (name), or a delimiter.";
+			assert((affixLengths.length>0 && affixLengths[0]>0) || delimiter!=null || perheader) : 
+				"Must include at least one non-zero-length affix (name), or a delimiter.";
 			ReadWrite.MAX_ZIP_THREADS=Tools.max(1, Tools.min(ReadWrite.MAX_ZIP_THREADS, (Shared.threads()*2-1)/Tools.max(1, names.size())));
 			if(names.size()>8){ReadWrite.USE_PIGZ=false;}
 		}
@@ -228,23 +283,12 @@ public class DemuxByName {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-//			if(!parser.setOut){
-//				out1="stdout";
-//			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		if(!setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -275,6 +319,13 @@ public class DemuxByName {
 			String ext=ReadWrite.rawExtension(out1);
 			useSharedHeader=FileFormat.isSamOrBam(ext);
 		}
+		
+		if(perheader){
+			fixedAffixLength=-1;
+			substringMode=false;
+			affixLengths=null;
+			delimiter=null;
+		}
 	}
 	
 	void process(Timer t){
@@ -293,11 +344,12 @@ public class DemuxByName {
 		if(out1!=null){
 			final int buff=4;
 			
-			mcros=(fixedAffixLength>0 || delimiter!=null ? new MultiCros(out1, out2, false, overwrite, append, true, useSharedHeader, FileFormat.FASTQ, buff) : null);
+			mcros=(fixedAffixLength>0 || delimiter!=null || perheader ? 
+					new MultiCros(out1, out2, false, overwrite, append, true, useSharedHeader, FileFormat.FASTQ, buff) : null);
 			
 			if(paired && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -351,10 +403,9 @@ public class DemuxByName {
 			for(String s : names){
 				nameToArray.put(s, new ArrayList<Read>());
 			}
-			final ArrayListSet als=(fixedAffixLength<1 && delimiter==null ? null : new ArrayListSet(false));
+			final ArrayListSet als=(fixedAffixLength<1 && delimiter==null && !perheader ? null : new ArrayListSet(false));
 			
-			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				ArrayList<Read> unmatched=new ArrayList<Read>();
 				for(int idx=0; idx<reads.size(); idx++){
@@ -407,11 +458,25 @@ public class DemuxByName {
 							String sub=r1.id;
 							if(fixedAffixLength>0){
 								sub=(sub.length()<=fixedAffixLength ? sub : prefixMode ? id.substring(0, fixedAffixLength) : id.substring(idlen-fixedAffixLength));
-							}else{
-								assert(delimiter!=null);
+							}else if(delimiter!=null) {
 								String[] split=sub.split(delimiter);
 								assert(split.length>1) : "Delimiter '"+delimiter+"' was not found in name '"+sub+"'";
-								sub=split[prefixMode ? 0 : split.length-1];
+								if(column>-1){
+									int col=Tools.min(column, split.length-1);
+									sub=split[col];
+									if(col!=column && !warned){
+										System.err.println("*** WARNING! ***\n"
+												+ "Only "+(col+1)+" columns for record "+r1.id+"\n"
+												+ "Further warnings will be suppressed.\n");
+										warned=true;
+										assert(errorState=true); //Change error state to true if assertions are enabled.
+									}
+								}else{
+									sub=split[prefixMode ? 0 : split.length-1];
+								}
+							}else{
+								assert(perheader);
+								//Use the full ID
 							}
 							als.add(r1, sub);
 						}
@@ -434,13 +499,13 @@ public class DemuxByName {
 					ConcurrentReadOutputStream ros=nameToStream.get(s);
 					if(ros!=null){ros.add(listOut, ln.id);}
 				}
-				if(mcros!=null){
+				if(mcros!=null && als!=null){
 					if(als.size()+names.size()>8){ReadWrite.USE_PIGZ=false;}
 					mcros.add(als, ln.id);
 				}
 				if(rosu!=null){rosu.add(unmatched, ln.id);}
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -468,8 +533,8 @@ public class DemuxByName {
 		double bpnano=basesProcessed/(double)(t.elapsed);
 		
 		outstream.println("Time:               "+t);
-		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+basesProcessed+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
+		outstream.println("Bases Processed:    "+basesProcessed+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 		outstream.println("Reads Out:    "+readsOut);
 		outstream.println("Bases Out:    "+basesOut);
 		
@@ -479,22 +544,6 @@ public class DemuxByName {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
-	
 	
 	/*--------------------------------------------------------------*/
 	
@@ -524,6 +573,9 @@ public class DemuxByName {
 	private String delimiter=null;
 	private boolean prefixMode=true;
 	private boolean substringMode=false;
+	private boolean perheader=false;
+	private int column=-1;
+	private boolean warned=false;
 //	private int affixLen=-1;
 	
 	private int fixedAffixLength=-1;

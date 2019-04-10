@@ -4,9 +4,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map.Entry;
 
-import fileIO.ReadWrite;
 import fileIO.TextFile;
+import fileIO.TextStreamWriter;
 import shared.Timer;
 import shared.Tools;
 
@@ -19,20 +20,37 @@ public class ImgRecord implements Serializable {
 		String out=args.length>1 ? args[1] : null;
 
 		if(!Tools.testInputFiles(false, true, in)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		if(!Tools.testOutputFiles(true, false, false, out)){
 			throw new RuntimeException("\nCan't write to some output files.\n");
 		}
 		Timer t=new Timer();
-		HashMap<Long, ImgRecord> map=toMap(in);
+		HashMap<Long, ImgRecord> map=toMap(in, TaxTree.IMG_HQ);
 		t.stop();
 		System.err.println(map.size()+"; "+t);
-		if(out!=null){ReadWrite.writeObjectInThread(map, out, false);}
+//		if(out!=null){ReadWrite.writeObjectInThread(map, out, false);}
+		if(out!=null){writeAsText(map, out);}
 	}
 	
-	public static HashMap<Long, ImgRecord> toMap(String fname){
-		ImgRecord[] array=toArray(fname);
+	private static void writeAsText(HashMap<Long, ImgRecord> map, String out){
+		TextStreamWriter tsw=new TextStreamWriter(out, true, false, false);
+		for(Entry<Long, ImgRecord> e : map.entrySet()){
+			tsw.println(e.toString());
+		}
+	}
+	
+	@Override
+	public String toString(){
+		StringBuilder sb=new StringBuilder();
+		sb.append(imgID);
+		sb.append('\t').append(taxID);
+		sb.append('\t').append(name);
+		return sb.toString();
+	}
+	
+	public static HashMap<Long, ImgRecord> toMap(String fname, boolean highQuality){
+		ImgRecord[] array=toArray(fname, highQuality);
 		HashMap<Long, ImgRecord> map=new HashMap<Long, ImgRecord>((3+array.length*4)/3);
 		for(ImgRecord ir : array){
 			map.put(ir.imgID, ir);
@@ -40,15 +58,15 @@ public class ImgRecord implements Serializable {
 		return map;
 	}
 	
-	public static ImgRecord[] toArray(String fname){
-		TextFile tf=new TextFile(fname, false, false);
+	public static ImgRecord[] toArray(String fname, boolean highQuality){
+		TextFile tf=new TextFile(fname, false);
 		ArrayList<ImgRecord> list=new ArrayList<ImgRecord>();
 		for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
-			if(line.length()<1 || !Character.isDigit(line.charAt(0))){
+			if(line.length()<1 || !Tools.isDigit(line.charAt(0))){
 				//do nothing
 			}else{
 				ImgRecord record=new ImgRecord(line);
-				list.add(record);
+				if(!highQuality || record.highQuality){list.add(record);}
 			}
 		}
 		tf.close();
@@ -59,8 +77,15 @@ public class ImgRecord implements Serializable {
 		String[] split=line.split("\t");
 		
 		imgID=Long.parseLong(split[0]);
-		name=split[1];
-		taxID=(split[2]==null || split[2].length()<1 ? -1 : Integer.parseInt(split[2]));
+		name=(storeName ? split[1] : null);
+		try {
+			taxID=(split[2]==null || split[2].length()<1 ? -1 : Integer.parseInt(split[2]));
+		} catch (NumberFormatException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+			System.err.println(line);
+			throw new RuntimeException();
+		}
 		isPublic=Tools.parseYesNo(split[3]);
 		obsolete=Tools.parseYesNo(split[4]);
 		genomeType=find(split[5], typeArray);
@@ -83,6 +108,7 @@ public class ImgRecord implements Serializable {
 	public final boolean obsolete;
 	public final boolean highQuality;
 	public final String name;
+	public final String path(){return "/global/dna/projectdirs/microbial/img_web_data/taxon.fna/"+imgID+".fna";}
 	
 	final int ISOLATE=0, SINGLE_CELL=1, METAGENOME=2;
 	final String[] typeArray={"isolate", "single_cell", "metagenome"};
@@ -93,7 +119,9 @@ public class ImgRecord implements Serializable {
 		return -1;
 	}
 	
+	public static boolean storeName=true;
 	public static HashMap<Long, ImgRecord> imgMap;
-	public static final String DefaultDumpFile="/global/projectb/sandbox/gaag/bbtools/tax/imgTaxDump.txt.gz";
+//	public static final String DefaultDumpFile="/global/projectb/sandbox/gaag/bbtools/tax/imgTaxDump.txt.gz";
+	public static final String DefaultDumpFile="/global/u1/i/img/adhocDumps/taxonDumpForBrian.txt";
 	
 }

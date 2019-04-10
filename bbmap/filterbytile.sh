@@ -1,20 +1,17 @@
 #!/bin/bash
-#filterbytile in=<infile> out=<outfile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified September 13, 2016
+Last modified August 22, 2017
 
 Description:  Filters reads based on positional quality over a flowcell.
 Quality is estimated based on quality scores and kmer uniqueness.
 All reads within a small unit of area called a micro-tile are averaged,
 then the micro-tile is either retained or discarded as a unit.
+Please read bbmap/docs/guides/FilterByTileGuide.txt for more information.
 
 Usage:	filterbytile.sh in=<input> out=<output>
-
-
-Optional parameters (and their defaults)
 
 Input parameters:
 in=<file>           Primary input file.
@@ -68,15 +65,18 @@ qtrim=r             If trimq is positive, to quality trimming on this end
                     left, and both ends.
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, 
-                    overriding the program's automatic memory detection.
+-Xmx                This will set Java's memory usage, overriding autodetection.
                     -Xmx20g will specify 20 GB of RAM; -Xmx200m will specify 
                     200 MB.  The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -93,6 +93,7 @@ CP="$DIR""current/"
 z="-Xmx8g"
 z2="-Xms8g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -113,12 +114,25 @@ calcXmx () {
 calcXmx "$@"
 
 filterbytile() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP hiseq.AnalyzeFlowCell $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP hiseq.AnalyzeFlowCell $@"
 	echo $CMD >&2
 	eval $CMD
 }

@@ -3,28 +3,29 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 import java.util.Random;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import align2.QualityTools;
 import dna.AminoAcid;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -33,36 +34,30 @@ import shared.Tools;
  */
 public class AddAdapters {
 	
-
-
 	public static void main(String[] args){
 		Timer t=new Timer();
-		AddAdapters rr=new AddAdapters(args);
-		if(rr.writeMode){
-			rr.write(t);
+		AddAdapters x=new AddAdapters(args);
+		if(x.writeMode){
+			x.write(t);
 		}else{
-			rr.read(t);
+			x.read(t);
 		}
-	}
-	
-	private void printOptions(){
-		System.err.println("Please consult the shellscript for usage information.");
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public AddAdapters(String[] args){
 		
-		if(args==null || args.length==0){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
 		Parser parser=new Parser();
 		
 		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -73,11 +68,8 @@ public class AddAdapters {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -125,6 +117,7 @@ public class AddAdapters {
 			}else if(a.equals("5'") || a.equalsIgnoreCase("5prime") || a.equalsIgnoreCase("5-prime") || a.equalsIgnoreCase("left") || a.equalsIgnoreCase("l")){
 				right=!Tools.parseBoolean(b);
 			}else if(a.equals("end")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				if(b.equals("3'") || b.equalsIgnoreCase("3prime") || b.equalsIgnoreCase("3-prime") || b.equalsIgnoreCase("right") || a.equalsIgnoreCase("r")){
 					right=true;
 				}else if(b.equals("5'") || b.equalsIgnoreCase("5prime") || b.equalsIgnoreCase("5-prime") || b.equalsIgnoreCase("left") || a.equalsIgnoreCase("l")){
@@ -183,22 +176,15 @@ public class AddAdapters {
 		assert(FastaReadInputStream.settingsOK());
 //		if(maxReads!=-1){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
 		if(writeMode && out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
+			if(out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
-//			out1="stdout";
 		}
 		
 		if(!parser.setInterleaved){
@@ -222,7 +208,7 @@ public class AddAdapters {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
@@ -298,7 +284,7 @@ public class AddAdapters {
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -319,7 +305,7 @@ public class AddAdapters {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -349,7 +335,7 @@ public class AddAdapters {
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -371,25 +357,14 @@ public class AddAdapters {
 		
 		t.stop();
 
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
+		outstream.println("Adapters Added:         \t"+adaptersAdded+" reads ("+String.format(Locale.ROOT, "%.2f",adaptersAdded*100.0/readsProcessed)+"%) \t"+
+				adapterBasesAdded+" bases ("+String.format(Locale.ROOT, "%.2f",adapterBasesAdded*100.0/basesProcessed)+"%)");
 
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-		outstream.println("Adapters Added:         \t"+adaptersAdded+" reads ("+String.format("%.2f",adaptersAdded*100.0/readsProcessed)+"%) \t"+
-				adapterBasesAdded+" bases ("+String.format("%.2f",adapterBasesAdded*100.0/basesProcessed)+"%)");
-
-		outstream.println("Valid Output:           \t"+validReads+" reads ("+String.format("%.2f",validReads*100.0/readsProcessed)+"%) \t"+
-				validBases+" bases ("+String.format("%.2f",validBases*100.0/basesProcessed)+"%)");
-
+		outstream.println("Valid Output:           \t"+validReads+" reads ("+String.format(Locale.ROOT, "%.2f",validReads*100.0/readsProcessed)+"%) \t"+
+				validBases+" bases ("+String.format(Locale.ROOT, "%.2f",validBases*100.0/basesProcessed)+"%)");
 		
-		outstream.println("\nTime:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(errorState){
 			throw new RuntimeException("ReformatReads terminated in an error state; the output may be corrupt.");
@@ -405,6 +380,8 @@ public class AddAdapters {
 		
 		readsProcessed++;
 		basesProcessed+=initial;
+		
+		if(bases==null){assert(false); return;}
 		if(initial>0 && loc>=0 && loc<initial){
 			adapter=adapters.get(randy.nextInt(adapters.size()));
 			adaptersAdded++;
@@ -513,7 +490,7 @@ public class AddAdapters {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -522,7 +499,7 @@ public class AddAdapters {
 					grade(r1, r2);
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -538,41 +515,27 @@ public class AddAdapters {
 		long validBasesRemoved=validBasesExpected-validBasesCounted;
 		long incorrect=readsProcessed-correct;
 		long incorrectBases=basesProcessed-correctBases;
-
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
 		
 		outstream.println("Total output:                        \t"+readsProcessed+" reads                  \t"+basesProcessed+" bases          ");
-		outstream.println("Perfectly Correct (% of output):     \t"+correct+" reads ("+String.format("%.3f",correct*100.0/readsProcessed)+
-				"%)        \t"+correctBases+" bases ("+String.format("%.3f",correctBases*100.0/basesProcessed)+"%)");
-		outstream.println("Incorrect (% of output):             \t"+incorrect+" reads ("+String.format("%.3f",incorrect*100.0/readsProcessed)+
-				"%)        \t"+incorrectBases+" bases ("+String.format("%.3f",incorrectBases*100.0/basesProcessed)+"%)");
+		outstream.println("Perfectly Correct (% of output):     \t"+correct+" reads ("+String.format(Locale.ROOT, "%.3f",correct*100.0/readsProcessed)+
+				"%)        \t"+correctBases+" bases ("+String.format(Locale.ROOT, "%.3f",correctBases*100.0/basesProcessed)+"%)");
+		outstream.println("Incorrect (% of output):             \t"+incorrect+" reads ("+String.format(Locale.ROOT, "%.3f",incorrect*100.0/readsProcessed)+
+				"%)        \t"+incorrectBases+" bases ("+String.format(Locale.ROOT, "%.3f",incorrectBases*100.0/basesProcessed)+"%)");
 		outstream.println();
-//		outstream.println("Too Short:              \t"+tooShort+" reads ("+String.format("%.3f",tooShort*100.0/readsProcessed)+"%) \t"+
-//				tooShortBases+" bases ("+String.format("%.3f",tooShortBases*100.0/basesProcessed)+"%)");
-//		outstream.println("Too Long:               \t"+tooLong+" reads ("+String.format("%.3f",tooLong*100.0/readsProcessed)+"%) \t"+
-//				tooLongBases+" bases ("+String.format("%.3f",tooLongBases*100.0/basesProcessed)+"%)");
+//		outstream.println("Too Short:              \t"+tooShort+" reads ("+String.format(Locale.ROOT, "%.3f",tooShort*100.0/readsProcessed)+"%) \t"+
+//				tooShortBases+" bases ("+String.format(Locale.ROOT, "%.3f",tooShortBases*100.0/basesProcessed)+"%)");
+//		outstream.println("Too Long:               \t"+tooLong+" reads ("+String.format(Locale.ROOT, "%.3f",tooLong*100.0/readsProcessed)+"%) \t"+
+//				tooLongBases+" bases ("+String.format(Locale.ROOT, "%.3f",tooLongBases*100.0/basesProcessed)+"%)");
 		
-		outstream.println("Adapters Remaining (% of adapters):  \t"+(adapterReadsRemaining)+" reads ("+String.format("%.3f",adapterReadsRemaining*100.0/adapterReadsTotal)+
-				"%)        \t"+adapterBasesRemaining+" bases ("+String.format("%.3f",adapterBasesRemaining*100.0/basesProcessed)+"%)");
-		outstream.println("Non-Adapter Removed (% of valid):    \t"+tooShort+" reads ("+String.format("%.4f",tooShort*100.0/readsProcessed)+
-				"%)        \t"+validBasesRemoved+" bases ("+String.format("%.4f",validBasesRemoved*100.0/validBasesExpected)+"%)");
+		outstream.println("Adapters Remaining (% of adapters):  \t"+(adapterReadsRemaining)+" reads ("+String.format(Locale.ROOT, "%.3f",adapterReadsRemaining*100.0/adapterReadsTotal)+
+				"%)        \t"+adapterBasesRemaining+" bases ("+String.format(Locale.ROOT, "%.3f",adapterBasesRemaining*100.0/basesProcessed)+"%)");
+		outstream.println("Non-Adapter Removed (% of valid):    \t"+tooShort+" reads ("+String.format(Locale.ROOT, "%.4f",tooShort*100.0/readsProcessed)+
+				"%)        \t"+validBasesRemoved+" bases ("+String.format(Locale.ROOT, "%.4f",validBasesRemoved*100.0/validBasesExpected)+"%)");
 		
 		if(broken>0 || mispaired>0){
-			outstream.println("Broken:                              \t"+broken+" reads ("+String.format("%.2f",broken*100.0/readsProcessed)+"%)");
-			outstream.println("Mispaired:                           \t"+mispaired+" reads ("+String.format("%.2f",mispaired*100.0/readsProcessed)+"%)");
+			outstream.println("Broken:                              \t"+broken+" reads ("+String.format(Locale.ROOT, "%.2f",broken*100.0/readsProcessed)+"%)");
+			outstream.println("Mispaired:                           \t"+mispaired+" reads ("+String.format(Locale.ROOT, "%.2f",mispaired*100.0/readsProcessed)+"%)");
 		}
-		
-		
-//		outstream.println("\nTime:                         \t"+t);
-//		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-//		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		
 		if(errorState){
 			throw new RuntimeException("ReformatReads terminated in an error state; the output may be corrupt.");

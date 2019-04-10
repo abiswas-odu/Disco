@@ -3,7 +3,6 @@ package hiseq;
 import java.util.ArrayList;
 
 import fileIO.ByteFile;
-import fileIO.TextFile;
 import shared.Tools;
 import structures.IntList;
 
@@ -13,13 +12,13 @@ public class FlowCell {
 //		TextFile tf=new TextFile(fname);
 //		for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 //			if(line.charAt(0)=='#'){
-//				
+//
 //			}else{
 //				String[] split=line.split("\t");
 //				int lane=Integer.parseInt(line)
 //			}
 //		}
-		ByteFile bf=ByteFile.makeByteFile(fname, false, false);
+		ByteFile bf=ByteFile.makeByteFile(fname, false);
 		for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
 			if(line[0]=='#'){
 				String[] split=new String(line).split("\t");
@@ -36,12 +35,22 @@ public class FlowCell {
 					avgUnique=Double.parseDouble(split[1]);
 				}else if(Tools.startsWith(line, "#avgErrorFree")){
 					avgErrorFree=Double.parseDouble(split[1]);
+				}else if(Tools.startsWith(line, "#avgG")){
+					avgG=Double.parseDouble(split[1]);
 				}else if(Tools.startsWith(line, "#stdQuality")){
 					stdQuality=Double.parseDouble(split[1]);
 				}else if(Tools.startsWith(line, "#stdUnique")){
 					stdUnique=Double.parseDouble(split[1]);
 				}else if(Tools.startsWith(line, "#stdErrorFree")){
 					stdErrorFree=Double.parseDouble(split[1]);
+				}else if(Tools.startsWith(line, "#stdG")){
+					stdG=Double.parseDouble(split[1]);
+				}
+				
+				else if(Tools.startsWith(line, "#reads")){
+					readsProcessed=Long.parseLong(split[1]);
+				}else if(Tools.startsWith(line, "#avgReads")){
+					avgReads=Double.parseDouble(split[1]);
 				}
 				
 			}else{
@@ -114,7 +123,7 @@ public class FlowCell {
 				MicroTile mt=getMicroTile(lane, tile, x1, y1);
 				assert(mt.x1==x1 && mt.x2==x2 && mt.y1==y1 && mt.y2==y2) : "Micro-tile size seems to be different:\n"
 						+ "xsize="+Tile.xSize+", ysize="+Tile.ySize;
-				mt.qualityCount=reads;
+				mt.readCount=reads;
 				mt.discard=discard;
 
 				mt.misses=(int)(unique*reads*0.01);
@@ -130,6 +139,15 @@ public class FlowCell {
 	}
 	
 	public FlowCell(){}
+	
+	public MicroTile getMicroTile(String id) {//This method is NOT threadsafe
+		ihp.parse(id);
+		return getMicroTile(ihp);
+	}
+	
+	public MicroTile getMicroTile(IlluminaHeaderParser ihp){
+		return getLane(ihp.lane).getMicroTile(ihp.tile, ihp.x, ihp.y);
+	}
 	
 	public MicroTile getMicroTile(int lane, int tile, int x, int y){
 		return getLane(lane).getMicroTile(tile, x, y);
@@ -161,115 +179,49 @@ public class FlowCell {
 		}
 		return mtList;
 	}
-
-	//2402:6:1101:6337:2237/1
-	//MISEQ08:172:000000000-ABYD0:1:1101:18147:1925 1:N:0:TGGATATGCGCCAATT
-	//HISEQ07:419:HBFNEADXX:1:1101:1238:2072
-	
-	public MicroTile getMicroTile(String id) {
-		final int lim=id.length();
-		
-		int i=0;
-		int lane, tile, x, y;
-		int current=0;
-		while(i<lim && id.charAt(i)!=' ' && id.charAt(i)!='/'){i++;}
-		for(int semis=0; i>=0; i--){
-			if(id.charAt(i)==':'){
-				semis++;
-				if(semis==4){break;}
-			}
-		}
-		i++;
-		
-		assert(Character.isDigit(id.charAt(i))) : id;
-		while(i<lim && Character.isDigit(id.charAt(i))){
-			current=current*10+(id.charAt(i)-'0');
-			i++;
-		}
-		lane=current;
-		current=0;
-		i++;
-		
-		if(!Character.isDigit(id.charAt(i))){//Hiseq 3000?
-			while(i<lim && id.charAt(i)!=':'){i++;}
-			i++;
-
-			assert(Character.isDigit(id.charAt(i))) : id;
-			while(i<lim && Character.isDigit(id.charAt(i))){
-				current=current*10+(id.charAt(i)-'0');
-				i++;
-			}
-			lane=current;
-			current=0;
-			i++;
-		}
-
-		assert(Character.isDigit(id.charAt(i))) : id;
-		while(i<lim && Character.isDigit(id.charAt(i))){
-			current=current*10+(id.charAt(i)-'0');
-			i++;
-		}
-		tile=current;
-		current=0;
-		i++;
-
-		assert(Character.isDigit(id.charAt(i))) : id;
-		while(i<lim && Character.isDigit(id.charAt(i))){
-			current=current*10+(id.charAt(i)-'0');
-			i++;
-		}
-		x=current;
-		current=0;
-		i++;
-
-		assert(Character.isDigit(id.charAt(i))) : id;
-		while(i<lim && Character.isDigit(id.charAt(i))){
-			current=current*10+(id.charAt(i)-'0');
-			i++;
-		}
-		y=current;
-		current=0;
-		i++;
-		
-		return getMicroTile(lane, tile, x, y);
-	}
 	
 	public ArrayList<MicroTile> calcStats(){
 		ArrayList<MicroTile> mtList=toList();
 		readsProcessed=0;
 		for(MicroTile mt : mtList){
-			readsProcessed+=mt.qualityCount;
+			mt.process();
+			readsProcessed+=mt.readCount;
 		}
 		avgReads=readsProcessed*1.0/Tools.max(1, mtList.size());
 		minCountToUse=(long)Tools.min(500, avgReads*0.25f);
 		int toKeep=0;
 		for(MicroTile mt : mtList){
-			if(mt.qualityCount>=minCountToUse){toKeep++;}
+			if(mt.readCount>=minCountToUse){toKeep++;}
 		}
 		
 		IntList avgQualityList=new IntList(toKeep);
 		IntList avgUniqueList=new IntList(toKeep);
 		IntList avgErrorFreeList=new IntList(toKeep);
+		IntList avgGList=new IntList(toKeep);
 		
 		for(MicroTile mt : mtList){
-			if(mt!=null && mt.qualityCount>=minCountToUse){
+			if(mt!=null && mt.readCount>=minCountToUse){
 				avgQualityList.add((int)(1000*mt.averageQuality()));
 				avgUniqueList.add((int)(1000*mt.uniquePercent()));
 				avgErrorFreeList.add((int)(1000*mt.percentErrorFree()));
+				avgGList.add((int)(100000*mt.avgG()));
 			}
 		}
 		
 		int[] avgQualityArray=avgQualityList.toArray();
 		int[] avgUniqueArray=avgUniqueList.toArray();
 		int[] avgErrorFreeArray=avgErrorFreeList.toArray();
+		int[] avgGArray=avgGList.toArray();
 		
 		avgQuality=Tools.averageDouble(avgQualityArray)*0.001;
 		avgUnique=Tools.averageDouble(avgUniqueArray)*0.001;
 		avgErrorFree=Tools.averageDouble(avgErrorFreeArray)*0.001;
+		avgG=Tools.averageDouble(avgGArray)*0.00001;
 		
 		stdQuality=Tools.standardDeviation(avgQualityArray)*0.001;
 		stdUnique=Tools.standardDeviation(avgUniqueArray)*0.001;
 		stdErrorFree=Tools.standardDeviation(avgErrorFreeArray)*0.001;
+		stdG=Tools.standardDeviation(avgGArray)*0.00001;
 		
 		return mtList;
 	}
@@ -323,9 +275,13 @@ public class FlowCell {
 	public double avgQuality;
 	public double avgUnique;
 	public double avgErrorFree;
+	public double avgG;
 	
 	public double stdQuality;
 	public double stdUnique;
 	public double stdErrorFree;
+	public double stdG;
+	
+	private IlluminaHeaderParser ihp=new IlluminaHeaderParser();
 	
 }

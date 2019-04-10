@@ -3,10 +3,10 @@ package clump;
 import java.util.ArrayList;
 
 import dna.AminoAcid;
-import hiseq.FlowcellCoordinate;
+import shared.KillSwitch;
 import shared.Tools;
-import stream.KillSwitch;
 import stream.Read;
+import structures.ByteBuilder;
 
 /**
  * A list of reads sharing a kmer.
@@ -34,6 +34,7 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 		kmer=kmer_;
 	}
 
+	@Override
 	public boolean add(Read r){
 		ReadKey key=(ReadKey) r.obj;
 		assert(key.kmer==kmer);
@@ -87,7 +88,7 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 //		assert(Splitter.findBestPivot(this)<0) : Splitter.findBestPivot(this); //TODO: Slow
 		if(size()==1){
 			Read r=get(0);
-			if(rename){r.id=r.numericID+" size=1";}
+			if(renameConsensus){r.id=r.numericID+" size=1";}
 			return r;
 		}
 		final int[][] bcounts=baseCounts();
@@ -125,7 +126,7 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 				final long qsecond=qcounts[y][i];
 				
 				float bratio=bminor/(float)(bmajor+bminor);
-				double phred=(bminor==0 ? Read.MAX_CALLED_QUALITY : -10*Math.log10(bratio));
+				double phred=(bminor==0 ? Read.MAX_CALLED_QUALITY() : -10*Math.log10(bratio));
 				phred=Tools.min(phred, qmajor-qminor);
 //				if(phred<0 || phred>127){
 //					assert(false) :  i+","+x+","+bsum+","+qsum+","+bmajor+","+bminor+","+bratio+","+phred+"\n"+
@@ -136,7 +137,7 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 //				assert(phred>=0 && phred<=127) : phred+","+x+","+i+","+bratio+","+bcounts[x][i]+","+bcounts[0][i]+
 //					","+bcounts[1][i]+","+bcounts[2][i]+","+bcounts[3][i];
 //				assert(phred>=0 && phred<=127) : bmajor+", "+bminor+", "+phred+", "+Read.MAX_CALLED_QUALITY;
-				byte q=(byte)Tools.mid(Read.MIN_CALLED_QUALITY, (long)Math.round(phred), Read.MAX_CALLED_QUALITY);
+				byte q=Read.capQuality((long)Math.round(phred));
 				bases[i]=AminoAcid.numberToBase[x];
 				quals[i]=q;
 				assert(q>0);
@@ -145,7 +146,7 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 			}
 		}
 		Read leftmost=this.get(0);//TODO:  Actually rightmost!
-		Read r=new Read(bases, quals, 0, leftmost.numericID+" size="+size());
+		Read r=new Read(bases, quals, leftmost.numericID+" size="+size(), 0);
 		//TODO: Attach the long pair, and make sure the kmer location is correct.
 //		assert(false) : "\n"+r.toFastq()+"\nCheck kmer location.";
 //		assert(size()==1) : "\n"+r.toFastq()+"\n"+get(0).toFastq()+"\n"+get(size()-1).toFastq()+"\n";
@@ -154,71 +155,141 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 	
 	/*--------------------------------------------------------------*/
 	
-	public int removeDuplicates(int maxSubs, int scanLimit, boolean optical, boolean mark, boolean markAll, float dist){
+	public int removeDuplicates(){
 		assert(KmerComparator.compareSequence);
 		if(size()<2){return 0;}
 		
 		int removedTotal=0, removed=0;
 		
+		final boolean sortXY=(forceSortXY || sortYEarly() || (opticalOnly && (sortX || sortY) && size()>=sortXYSize));
+		
 		final int maxDiscarded;
-		if(maxSubs<1 || scanLimit<0){
-			scanLimit=0;
+		final int scan;
+		
+		if(opticalOnly && sortXY){
+			scan=Tools.max(scanLimit, 200);
+			maxDiscarded=scan+10;
+		}else if(!sortXY && ((maxSubstitutions<1 && dupeSubRate<=0) || scanLimit<0)){
+			scan=0;
 			maxDiscarded=0;
 		}else{
-			maxDiscarded=scanLimit+5;
+			scan=scanLimit;
+			maxDiscarded=scan+10;
 		}
-		removed=removeDuplicates_inner(maxSubs, scanLimit, maxDiscarded, optical, mark, markAll, dist);
-		removedTotal+=removed;
-		while(maxSubs>0 && scanLimit>0 && removed>maxDiscarded){
-			removed=removeDuplicates_inner(maxSubs, scanLimit+10, maxDiscarded*2+10, optical, mark, markAll, dist);
+		
+		if(sortXY){
+			assert(sortX || sortY);
+
+			if(sortY){
+				if(!sortYEarly()){
+					this.sort(KmerComparatorY.comparator);
+				}else{
+//					for(int i=1; i<this.size(); i++){
+//						Read a=get(i-1);
+//						Read b=get(i);
+//						assert(KmerComparatorY.comparator.compare(a, b)<=0) : a.obj+" vs "+b.obj;
+//					}
+//					//Otherwise, it was already Y-sorted.
+				}
+//				assert(false) : sortY();
+				removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan, maxDiscarded, opticalOnly, true, markOnly, markAll, renameByCount, maxOpticalDistance);
+				removedTotal+=removed;
+//				System.err.println("RemovedY: "+removed);
+				while((maxSubstitutions>0 || dupeSubRate>0) && scanLimit>0 && removed>maxDiscarded){
+					removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan+10, maxDiscarded*2+20, opticalOnly, true, markOnly, markAll, renameByCount, maxOpticalDistance);
+					removedTotal+=removed;
+//					System.err.println("RemovedY: "+removed);
+				}
+			}
+			if(sortX && (ReadKey.spanTilesX || !sortY)){
+				this.sort(KmerComparatorX.comparator);
+				removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan, maxDiscarded, opticalOnly, true, markOnly, markAll, renameByCount, maxOpticalDistance);
+				removedTotal+=removed;
+//				System.err.println("RemovedX: "+removed);
+				while((maxSubstitutions>0 || dupeSubRate>0) && scanLimit>0 && removed>maxDiscarded){
+					removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan+10, maxDiscarded*2+20, opticalOnly, true, markOnly, markAll, renameByCount, maxOpticalDistance);
+					removedTotal+=removed;
+//					System.err.println("RemovedX: "+removed);
+				}
+			}
+		}else{
+			removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan, maxDiscarded, opticalOnly, false, markOnly, markAll, renameByCount, maxOpticalDistance);
 			removedTotal+=removed;
+			while((maxSubstitutions>0 || dupeSubRate>0) && scanLimit>0 && removed>maxDiscarded){
+				removed=removeDuplicates_inner(maxSubstitutions, dupeSubRate, scan+10, maxDiscarded*2+20, opticalOnly, false, markOnly, markAll, renameByCount, maxOpticalDistance);
+				removedTotal+=removed;
+			}
 		}
+		
 		return removedTotal;
 	}
 	
-	public int removeDuplicates_inner(final int maxSubs, final int scanLimit, final int maxDiscarded, 
-			final boolean optical, final boolean mark, final boolean markAll, final float dist){
+	private int removeDuplicates_inner(final int maxSubs, final float subRate, final int scanLimit, final int maxDiscarded,
+			final boolean optical, final boolean xySorted, final boolean mark, final boolean markAll, final boolean rename, final float dist){
 		final int size=size();
 		if(size<2){return 0;}
 		int dupePairs=0;
 		int dupeReads=0;
 		
-		final FlowcellCoordinate fca, fcb;
-		if(optical){
-			fca=new FlowcellCoordinate();
-			fcb=new FlowcellCoordinate();
-		}else{fca=fcb=null;}
+//		final boolean breakOnTile=(optical && !FlowcellCoordinate.spanTiles);
 		
-		for(int i=0; i<size; i++){
-			Read a=get(i);
+//		final long start=System.nanoTime();
+		
+		for(int i=0, lim=size-1; i<lim; i++){
+			final Read a=get(i);
 			if(!a.discarded()){
-				ReadKey keyA=(ReadKey) a.obj;
+				final ReadKey keyA=(ReadKey) a.obj;
+				final int aLen=a.length();
 				int unequals=0;
 				int discarded=0;
-				for(int j=i+1; j<size && unequals<=scanLimit && discarded<=maxDiscarded && !a.discarded(); j++){
-					Read b=get(j);
+				for(int j=i+1; j<size && unequals<=scanLimit && discarded<=maxDiscarded && (!a.discarded() || markAll); j++){
+					final Read b=get(j);
 					if(b.discarded()){
 						discarded++;
 					}else{
-						ReadKey keyB=(ReadKey) b.obj;
-						if(!keyA.equals(keyB)){break;}
-						if(equals(a, b, maxSubs)){
-							if(!optical || nearby(a, b, fca, fcb, dist)){
+						final int bLen=b.length();
+						final ReadKey keyB=(ReadKey) b.obj;
+						if(!containment && !keyA.equals(keyB)){break;}
+//						if(containment && affix && !keyA.physicalAffix(keyB, aLen, bLen)){break;}
+//						if(optical && keyA.lane!=keyB.lane){break;} //Already in equals method
+//						if(breakOnTile && keyA.tile!=keyB.tile){break;} //Already in equals method
+						if(optical && xySorted && !keyA.nearXY(keyB, dist)){break;}
+//						if(System.nanoTime()-start>200000000000L){
+//							TextStreamWriter tsw=new TextStreamWriter("foo.fq", true, false, false);
+//							tsw.start();
+//							for(Read x : this){
+//								tsw.println(x.toFastq());
+//							}
+//							tsw.poisonAndWait();
+//							assert(false) : "kmer="+kmer+", size="+size();
+//						}
+						if(equals(a, b, maxSubs, subRate)){
+							if(!optical || keyA.near(keyB, dist)){
+								if(printDuplicates){
+									System.out.println(a.toFasta());
+									System.out.println(b.toFasta());
+								}
 								float errA=a.expectedErrorsIncludingMate(true);
 								float errB=b.expectedErrorsIncludingMate(true);
 								if(markAll){
-									a.setDiscarded(true);
 									b.setDiscarded(true);
-									dupePairs+=2;
-									dupeReads+=2+a.mateCount()+b.mateCount();
+									dupePairs++;
+									dupeReads+=1+b.mateCount();
 									unequals=0;
-								}else if(errB>=errA){
+									if(!a.discarded()){
+										a.setDiscarded(true);
+										dupePairs++;
+										dupeReads+=1+a.mateCount();
+									}
+								}else if(containment || errB>=errA){
 									b.setDiscarded(true);
+									a.copies+=b.copies+parseExtraCopies(b);
 									dupePairs++;
 									dupeReads+=1+b.mateCount();
 									unequals=0;
 								}else{
 									a.setDiscarded(true);
+									b.copies+=a.copies+parseExtraCopies(a);
 									dupePairs++;
 									dupeReads+=1+a.mateCount();
 								}
@@ -242,7 +313,119 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 					}else{
 						set(i, null);
 					}
+				}else if(rename && a.copies>1){
+					renameFromCount(a);
 				}
+				a.copies=1;
+			}
+			if(!mark){
+				int x=Tools.condenseStrict(this);
+				assert(x==dupePairs) : size()+", "+size+", "+dupePairs+", "+x;
+				assert((size()>0 || markAll) && size()==size-dupePairs) : size()+", "+size+", "+dupePairs;
+			}
+		}
+		
+		if(containment){
+			dupeReads+=removeDuplicates_backwards(maxSubs, subRate, scanLimit, maxDiscarded, optical, xySorted, mark, markAll, rename, dist);
+		}
+		
+		return dupeReads;
+	}
+	
+	/** Only for containments */
+	private int removeDuplicates_backwards(final int maxSubs, final float subRate, final int scanLimit, final int maxDiscarded,
+			final boolean optical, final boolean xySorted, final boolean mark, final boolean markAll, final boolean rename, final float dist){
+		final int size=size();
+		if(size<2){return 0;}
+		int dupePairs=0;
+		int dupeReads=0;
+		
+//		final boolean breakOnTile=(optical && !FlowcellCoordinate.spanTiles);
+		
+//		final long start=System.nanoTime();
+		
+		for(int i=size-1; i>0; i--){
+			final Read a=get(i);
+			if(!a.discarded()){
+				final ReadKey keyA=(ReadKey) a.obj;
+				final int aLen=a.length();
+				int unequals=0;
+				int discarded=0;
+				for(int j=i-1; j>=0 && unequals<=scanLimit && discarded<=maxDiscarded && (!a.discarded() || markAll); j--){
+					final Read b=get(j);
+					if(b.discarded()){
+						discarded++;
+					}else{
+						final int bLen=b.length();
+						final ReadKey keyB=(ReadKey) b.obj;
+						if(!containment && !keyA.equals(keyB)){break;}
+//						if(containment && affix && !keyA.physicalAffix(keyB, aLen, bLen)){break;}
+//						if(optical && keyA.lane!=keyB.lane){break;} //Already in equals method
+//						if(breakOnTile && keyA.tile!=keyB.tile){break;} //Already in equals method
+						if(optical && xySorted && !keyA.nearXY(keyB, dist)){break;}
+//						if(System.nanoTime()-start>200000000000L){
+//							TextStreamWriter tsw=new TextStreamWriter("foo.fq", true, false, false);
+//							tsw.start();
+//							for(Read x : this){
+//								tsw.println(x.toFastq());
+//							}
+//							tsw.poisonAndWait();
+//							assert(false) : "kmer="+kmer+", size="+size();
+//						}
+						if(equals(a, b, maxSubs, subRate)){
+							if(!optical || keyA.near(keyB, dist)){
+								if(printDuplicates){
+									System.out.println(a.toFasta());
+									System.out.println(b.toFasta());
+								}
+								float errA=a.expectedErrorsIncludingMate(true);
+								float errB=b.expectedErrorsIncludingMate(true);
+								if(markAll){
+									b.setDiscarded(true);
+									dupePairs++;
+									dupeReads+=1+b.mateCount();
+									unequals=0;
+									if(!a.discarded()){
+										a.setDiscarded(true);
+										dupePairs++;
+										dupeReads+=1+a.mateCount();
+									}
+								}else if(containment || errB>=errA){
+									b.setDiscarded(true);
+									a.copies+=b.copies+parseExtraCopies(b);
+									dupePairs++;
+									dupeReads+=1+b.mateCount();
+									unequals=0;
+								}else{
+									a.setDiscarded(true);
+									b.copies+=a.copies+parseExtraCopies(a);
+									dupePairs++;
+									dupeReads+=1+a.mateCount();
+								}
+							}
+						}else{
+							unequals++;
+						}
+					}
+				}
+			}
+		}
+		if(dupeReads>0){
+			for(int i=0; i<size; i++){
+				Read a=get(i);
+				if(a.discarded()){
+					if(mark){
+						if(!a.id.endsWith(" duplicate")){
+							a.id+=" duplicate";
+							if(a.mate!=null){a.mate.id+=" duplicate";}
+						}
+					}else{
+						set(i, null);
+					}
+				}else if(rename && a.copies>1){
+					renameFromCount(a);
+				}
+				a.copies=1;
 			}
 			if(!mark){
 				int x=Tools.condenseStrict(this);
@@ -253,28 +436,156 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 		return dupeReads;
 	}
 	
-	public boolean nearby(Read a, Read b, FlowcellCoordinate fca, FlowcellCoordinate fcb, float maxDist){
-		fca.setFrom(a.id);
-		fcb.setFrom(b.id);
-		float dist=fca.distance(fcb);
-		return dist<=maxDist;
+	public int parseExtraCopies(final Read a){
+		final String id=a.id;
+		final int space=id.lastIndexOf(' ');
+		int extraCopies=0;
+		if(space<0){return 0;}
+		if(space>=0 && Tools.contains(id, "copies=", space+1)){
+			extraCopies=Integer.parseInt(id.substring(space+8))-1;
+		}
+		return extraCopies;
 	}
 	
-	public boolean equals(Read a, Read b, int maxSubs){
+	private void renameFromCount(final Read a){
+		final int newExtraCopies=a.copies-1;
+		assert(newExtraCopies>0) : newExtraCopies;
+		final int oldExtraCopies=parseExtraCopies(a);
+		final int total=1+newExtraCopies+oldExtraCopies;
+		renameToTotal(a, total);
+		if(a.pairnum()==0 && a.mate!=null){
+			assert(a.mate.pairnum()==1);
+			renameToTotal(a.mate, total);
+		}
+	}
+	
+	private static void renameToTotal(final Read a, final int total){
+		final String id=a.id;
+		final int space=id.lastIndexOf(' ');
+		if(space>=0 && Tools.contains(id, "copies=", space+1)){
+			a.id=a.id.substring(0, space);
+		}
+		a.id=a.id+" copies="+total;
+	}
+	
+//	public boolean nearby(Read a, Read b, FlowcellCoordinate fca, FlowcellCoordinate fcb, float maxDist){
+////		fca.setFrom(a.id);
+//		fcb.setFrom(b.id);
+//		float dist=fca.distance(fcb);
+//		return dist<=maxDist;
+//	}
+	
+//	public boolean nearby(ReadKey ka, ReadKey kb, float maxDist){
+//		float dist=ka.distance(kb);
+//		return dist<=maxDist;
+//	}
+	
+	public static boolean equals(Read a, Read b, int maxSubs, float dupeSubRate){
+		if(dupeSubRate>0){maxSubs=Tools.max(maxSubs, (int)(dupeSubRate*Tools.min(a.length(), b.length())));}
+		if(containment){return contains(a, b, maxSubs);}
 		if(!equals(a.bases, b.bases, maxSubs)){return false;}
 		if(a.mate!=null && !equals(a.mate.bases, b.mate.bases, maxSubs)){return false;}
 		return true;
 	}
 	
 	public static boolean equals(byte[] a, byte[] b, int maxSubs){
-		if(a==b){return true;}
+		if(a==b){return false;}//Nothing should subsume itself
 		if(a==null || b==null){return false;}
 		if(a.length!=b.length){return false;}
 		int subs=0;
-		for(int i=0; i<a.length; i++){
-			if(a[i]!=b[i] && a[i]!='N' && b[i]!='N'){
-				subs++;
-				if(subs>maxSubs){return false;}
+		if(allowNs){
+			for(int i=0; i<a.length; i++){
+				if(a[i]!=b[i] && (a[i]!='N' && b[i]!='N')){
+					subs++;
+					if(subs>maxSubs){return false;}
+				}
+			}
+		}else{
+			for(int i=0; i<a.length; i++){
+				if(a[i]!=b[i]){
+					subs++;
+					if(subs>maxSubs){return false;}
+				}
+			}
+		}
+		return true;
+	}
+	
+	public static boolean contains(Read a, Read b, int maxSubs){
+		if(a.numericID==b.numericID){return false;}
+		boolean ok=contains_inner(a, b, maxSubs);
+		if(!ok || a.mate==null){return ok;}
+		ok=contains_inner(a.mate, b.mate, maxSubs);
+		if(!ok){return false;}
+		ReadKey rka1=(ReadKey)a.obj;
+		ReadKey rkb1=(ReadKey)b.obj;
+		ReadKey rka2=(ReadKey)a.mate.obj; //TODO: In containment mode, mates need to always get keys.
+		ReadKey rkb2=(ReadKey)b.mate.obj;
+		return ((rka1.kmerMinusStrand==rkb1.kmerMinusStrand)!=(rka2.kmerMinusStrand==rkb2.kmerMinusStrand)); //Ensures that both reads have the same directionality.
+	}
+	
+	public static boolean contains_inner(Read a, Read b, int maxSubs){
+		ReadKey rka=(ReadKey)a.obj;
+		ReadKey rkb=(ReadKey)b.obj;
+		if(affix ? !rka.physicalAffix(rkb, a.length(), b.length()) : !rka.physicallyContains(rkb, a.length(), b.length())){return false;}
+		boolean flipped=false;
+//		if(a.mate!=null){//In paired mode, need synchronization if the reads are in difference clumps.  But...  just don't do that.
+//			Read max, min;
+//			if(a.numericID>b.numericID){max=a; min=b;}//Protects against deadlocks.
+//			else{max=b; min=a;}
+//			synchronized(min){
+//				synchronized(max){
+//					if(rka.kmerMinusStrand!=rkb.kmerMinusStrand){
+//						rkb.flip(b, k);
+//						flipped=true;
+//					}
+//					boolean ok=contains(a.bases, b.bases, rka.position, rkb.position, maxSubs);
+//					if(flipped){rkb.flip(b, k);}
+//					return ok;
+//				}
+//			}
+//		}
+		if(rka.kmerMinusStrand!=rkb.kmerMinusStrand){
+			rkb.flip(b, k);
+			flipped=true;
+		}
+		boolean ok=contains(a.bases, b.bases, rka.position, rkb.position, maxSubs);
+		if(flipped){rkb.flip(b, k);}
+		return ok;
+	}
+	
+	public static boolean contains(byte[] a, byte[] b, int posA, int posB, int maxSubs){
+		if(a==null || b==null){return false;}
+		assert(a.length>=b.length);
+		if(a==b){return false;} //Nothing should contain itself
+		int subs=0;
+		
+		int ai, bi;
+		final int dif=posA-posB;
+		if(dif>0){
+			ai=0;
+			bi=-dif;
+		}else{
+			ai=dif;
+			bi=0;
+		}
+		
+		if(allowNs){
+			for(; ai<a.length && bi<b.length; ai++, bi++){
+				if(ai>=0 && bi>=0){
+					final byte na=a[ai], nb=b[bi];
+					if(na!=nb && na!='N' && nb!='N'){
+						subs++;
+						if(subs>maxSubs){return false;}
+					}
+				}
+			}
+		}else{
+			for(; ai<a.length && bi<b.length; ai++, bi++){
+				if(ai>=0 && bi>=0 && a[ai]!=b[bi]){
+					subs++;
+					if(subs>maxSubs){return false;}
+				}
 			}
 		}
 		return true;
@@ -333,9 +644,13 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 		
 		final int cStart=0, rStart=maxLeft-pos, max=cbases.length;
 		for(int cloc=cStart, rloc=rStart; cloc<max; cloc++, rloc++){
+			//Called base, ref base
 			final byte cb=cbases[cloc], rb=rbases[rloc];
+			//Called quality, ref quality
 			final byte cq=(cquals==null ? 20 : cquals[cloc]), rq=rquals[rloc];
+			//Called number
 			final byte cx=AminoAcid.baseToNumber[cb];
+			//Ref number
 			final byte rx=AminoAcid.baseToNumber[rb];
 			
 //			assert((cb=='N') == (cquals[cloc]==0));
@@ -397,9 +712,12 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 				if(q2==0 && AminoAcid.isFullyDefined(b)){
 					assert(!AminoAcid.isFullyDefined(cb));
 					q2=(byte)Tools.mid(2, 25, (rq+25)/2);
+				}else if(!AminoAcid.isFullyDefined(b)){
+					q2=0;
 				}
 				cquals[cloc]=q2;
-				assert((b=='N') == (cquals[cloc]==0)) : (char)b+", new="+cquals[cloc]+", q="+q+", old="+cq+", rq="+rq+", loc="+rloc+"\n"+call.toFastq()+"\n"+ref.toFastq();
+				assert((b=='N') == (cquals[cloc]==0)) : "b="+(char)b+", cb="+(char)cb+", rb="+(char)rb+", cx="+cx+", "
+						+ "new="+cquals[cloc]+", q="+q+", old="+cq+", rq="+rq+", loc="+rloc+"\n"+call.toFastq()+"\n"+ref.toFastq();
 			}
 		}
 		return corrections;
@@ -496,14 +814,14 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 	/*--------------------------------------------------------------*/
 	
 	public String toStringStaggered(){
-		StringBuilder sb=new StringBuilder();
+		ByteBuilder sb=new ByteBuilder();
 		for(Read r : this){
 			ReadKey key=(ReadKey) r.obj;
 			final int pos=key.position;
 			byte[] bases=r.bases, quals=r.quality;
 			int rloc=0, cloc=rloc+pos-maxLeft;
 			while(cloc<0){sb.append(' '); cloc++;}
-			for(byte b : bases){sb.append((char)b);}
+			sb.append(bases);
 			sb.append('\n');
 		}
 		return sb.toString();
@@ -672,6 +990,50 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 			Splitter.MAX_CORRELATIONS=Integer.parseInt(b);
 		}
 		
+		else if(a.equals("sortx")){
+			sortX=Tools.parseBoolean(b);
+		}else if(a.equals("sorty")){
+			sortY=Tools.parseBoolean(b);
+		}else if(a.equals("sortxy")){
+			sortX=sortY=Tools.parseBoolean(b);
+		}else if(a.equals("forcesortxy") || a.equals("forcexy")){
+			forceSortXY=Tools.parseBoolean(b);
+		}else if(a.equals("sortxysize") || a.equals("xysize")){
+			sortXYSize=Integer.parseInt(b);
+		}
+		
+		else if(a.equals("removeallduplicates") || a.equals("allduplicates")){
+			markAll=Tools.parseBoolean(b);
+		}else if(a.equals("addcount") || a.equals("renamebycount")){
+			renameByCount=Tools.parseBoolean(b);
+		}else if(a.equals("optical") || a.equals("opticalonly")){
+			opticalOnly=Tools.parseBoolean(b);
+		}else if(a.equals("dupesubs") || a.equals("duplicatesubs") || a.equals("dsubs") || a.equals("subs") || a.equals("s")){
+			maxSubstitutions=Integer.parseInt(b);
+		}else if(a.equals("dupedist") || a.equals("duplicatedistance") || a.equals("ddist") || a.equals("dist") || a.equals("opticaldist") || a.equals("distance")){
+			maxOpticalDistance=Float.parseFloat(b);
+			opticalOnly=maxOpticalDistance>=0;
+		}else if(a.equals("scanlimit") || a.equals("scan")){
+			scanLimit=Integer.parseInt(b);
+		}else if(a.equals("allowns")){
+			allowNs=Tools.parseBoolean(b);
+		}else if(a.equals("containment") || a.equals("absorbcontainment") || a.equals("ac") || a.equals("contains")){
+			containment=Tools.parseBoolean(b);
+		}else if(a.equalsIgnoreCase("prefixOrSuffix") || a.equalsIgnoreCase("suffixOrPrefix") || a.equals("affix") || a.equals("pos")){
+			affix=Tools.parseBoolean(b);
+		}else if(a.equals("printduplicates")){
+			printDuplicates=Tools.parseBoolean(b);
+		}else if(a.equals("dupeidentity")){
+			float dupeIdentity=Float.parseFloat(b);
+			if(dupeIdentity>1){dupeIdentity=dupeIdentity/100;}
+			assert(dupeIdentity<=1);
+			dupeSubRate=1-dupeIdentity;
+		}else if(a.equals("dupesubrate") || a.equals("dsr") || a.equals("subrate")){
+			dupeSubRate=Float.parseFloat(b);
+			if(dupeSubRate>1){dupeSubRate=dupeSubRate/100;}
+			assert(dupeSubRate<=1);
+		}
+		
 		else if(a.equals("minsizesplit")){
 			Splitter.minSizeSplit=Integer.parseInt(b);
 		}else if(a.equals("minsizefractionsplit")){
@@ -717,12 +1079,31 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 	}
 	
 	/*--------------------------------------------------------------*/
+
+	public static void setXY() {
+		if(ReadKey.spanTilesX){sortX=true;}
+		if(ReadKey.spanTilesY){sortY=true;}
+	}
+
+	static boolean allowNs=true;
+	static boolean markAll=false;
+	static boolean markOnly=false;
+	static boolean opticalOnly=false;
+	static boolean containment=false;
+	static boolean affix=false;
+	static boolean printDuplicates=false; //For debugging
+	
+	private static boolean renameByCount=false;
+	private static int scanLimit=5;
+	private static int maxSubstitutions=2;
+	private static float dupeSubRate=0;
+	private static float maxOpticalDistance=40;
 	
 	static boolean forceProcess=false;
 	static boolean conservativeFlag=false;
 	static boolean aggressiveFlag=false;
 	static boolean conservativeMode=false;
-	static boolean rename=false;
+	static boolean renameConsensus=false;
 	static int minCountCorrect=4; //mcc=4 was slightly better than 3
 	static float minSizeFractionCorrect=0.20f; //0.11 is very slightly better than 0.14
 	static float minRatio=30.0f;
@@ -735,6 +1116,14 @@ public class Clump extends ArrayList<Read> implements Comparable<Clump> {
 	static byte maxQAdjust=0;
 	static int maxQIncorrect=Integer.MAX_VALUE;
 	static int maxCIncorrect=Integer.MAX_VALUE;
+	
+	static boolean sortX=false; //Not needed for NextSeq
+	static boolean sortY=true;
+	static boolean forceSortXY=false; //Mainly for testing
+	static int sortXYSize=6;
+	
+	/** May slightly increase speed for optical dedupe.  Can be safely disabled. */
+	static boolean sortYEarly(){return sortY && (forceSortXY || opticalOnly);}
 	
 //	private static final boolean countQuality=false;
 	public static int k=31;

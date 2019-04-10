@@ -24,7 +24,7 @@ public class TransposeTextFile {
 	}
 	
 	public static void process(String fname, int skipLines){
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		String[] lines=tf.toStringLines();
 		tf.close();
 		String[][] lines2=TextFile.doublesplitWhitespace(lines, true);

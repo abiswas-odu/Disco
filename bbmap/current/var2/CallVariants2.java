@@ -3,26 +3,28 @@ package var2;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
+
+import bloom.KCountArray7MTA;
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextFile;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
+import shared.TrimRead;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
 import stream.SamLine;
 import stream.SamReadStreamer;
+import stream.SamStreamer;
 import structures.ListNum;
-import dna.Gene;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ReadWrite;
-import fileIO.TextFile;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
-import shared.TrimRead;
-import fileIO.FileFormat;
-import bloom.KCountArray7MTA;
 
 /**
  * Calls variants from one or more sam or bam files.
@@ -46,10 +48,13 @@ public class CallVariants2 {
 		Timer t=new Timer();
 		
 		//Create an instance of this class
-		CallVariants2 as=new CallVariants2(args);
+		CallVariants2 x=new CallVariants2(args);
 		
 		//Run the object
-		as.process(t);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -57,6 +62,12 @@ public class CallVariants2 {
 	 * @param args Command line arguments
 	 */
 	public CallVariants2(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		SamLine.PARSE_0=false;
 //		SamLine.PARSE_2=false;
@@ -69,28 +80,25 @@ public class CallVariants2 {
 		SamLine.PARSE_OPTIONAL_MD_ONLY=true; //I only need the MD tag..
 		
 		SamLine.RNAME_AS_BYTES=false;
-		ReadWrite.SAMTOOLS_IGNORE_UNMAPPED_INPUT=true;
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
-		}
-		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		//Set some shared static variables regarding PIGZ
+		//Set shared static variables
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		
 		//Create a parser object
 		Parser parser=new Parser();
-		Shared.TRIM_READ_COMMENTS=true;
-		
+		parser.qtrimLeft=qtrimLeft;
+		parser.qtrimRight=qtrimRight;
+		parser.trimq=trimq;
+		Shared.TRIM_READ_COMMENTS=Shared.TRIM_RNAME=true;
+
+		samFilter.includeUnmapped=false;
+		samFilter.includeSupplimentary=false;
+		samFilter.includeDuplicate=false;
+		samFilter.includeNonPrimary=false;
+		samFilter.includeQfail=false;
+		samFilter.minMapq=4;
+		String atomic="auto";
 		
 		//Parse each argument
 		for(int i=0; i<args.length; i++){
@@ -100,9 +108,6 @@ public class CallVariants2 {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
@@ -115,12 +120,16 @@ public class CallVariants2 {
 				long fake_variable=Tools.parseKMG(b);
 				//Set a variable here
 			}else if(a.equals("ss") || a.equals("samstreamer")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
+				if(b!=null && Tools.isDigit(b.charAt(0))){
 					useStreamer=true;
 					streamerThreads=Tools.max(1, Integer.parseInt(b));
 				}else{
 					useStreamer=Tools.parseBoolean(b);
 				}
+			}else if(a.equals("parsename")){
+				SamLine.PARSE_0=Tools.parseBoolean(b);
+			}else if(a.equalsIgnoreCase("noPassDotGenotype") || a.equalsIgnoreCase("noPassDot")){
+				Var.noPassDotGenotype=Tools.parseBoolean(b);
 			}else if(a.equals("extended")){
 				Var.extendedText=Tools.parseBoolean(b);
 			}else if(a.equals("useidentity")){
@@ -137,17 +146,18 @@ public class CallVariants2 {
 				Var.useEdist=Tools.parseBoolean(b);
 			}else if(a.equals("prefilter")){
 				prefilter=Tools.parseBoolean(b);
-			}else if(a.equals("ploidy")){
-				ploidy=Integer.parseInt(b);
 			}else if(a.equals("ref")){
 				ref=b;
 			}else if(a.equals("vcf") || a.equals("vcfout") || a.equals("outvcf") || a.equals("out")){
 				vcf=b;
 			}else if(a.equals("vcf0") || a.equals("vcfout0") || a.equals("outvcf0")){
 				vcf0=b;
+			}else if(a.equals("scorehist") || a.equals("qualhist") || a.equals("qhist") || a.equals("shist")){
+				scoreHistFile=b;
 			}else if(a.equals("border")){
 				border=Integer.parseInt(b);
 			}else if(a.equals("sample") || a.equals("samplename")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				if(new File(b).exists()){sampleNames.add(b);}
 				else{
 					for(String s : b.split(",")){sampleNames.add(s);}
@@ -155,9 +165,11 @@ public class CallVariants2 {
 			}
 			
 			else if(a.equals("ca3") || a.equals("32bit")){
-				Scaffold.useCA3=Tools.parseBoolean(b);
+				Scaffold.setCA3(Tools.parseBoolean(b));
+			}else if(a.equals("atomic")){
+				atomic=b;
 			}else if(a.equals("strandedcov") || a.equals("trackstrand")){
-				Scaffold.trackStrand=Tools.parseBoolean(b);
+				Scaffold.setTrackStrand(Tools.parseBoolean(b));
 			}
 			
 			else if(a.equals("realign")){
@@ -174,7 +186,12 @@ public class CallVariants2 {
 				Realigner.defaultMsaType=b;
 			}
 			
+			else if(samFilter.parse(arg, a, b)){
+				//do nothing
+			}
+			
 			else if(a.equals("in") || a.equals("in1") || a.equals("in2")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				if(new File(b).exists()){in.add(b);}
 				else{
 					for(String s : b.split(",")){in.add(s);}
@@ -183,14 +200,34 @@ public class CallVariants2 {
 				for(String line : TextFile.toStringLines(b)){
 					in.add(line);
 				}
-			}else if(filter.parse(a, b, arg)){
+			}else if(a.equals("clearfilters")){
+				if(Tools.parseBoolean(b)){
+					varFilter.clear();
+					samFilter.clear();
+				}
+			}else if(varFilter.parse(a, b, arg)){
 				//do nothing
 			}else if(parser.parse(arg, a, b)){//Parse standard flags in the parser
 				//do nothing
 			}else if(arg.indexOf('=')<0 && (new File(arg).exists() || arg.indexOf(',')>0)){
-				if(new File(arg).exists()){in.add(arg);}
-				else{
-					for(String s : arg.split(",")){in.add(s);}
+				if(new File(arg).exists()){
+					if(FileFormat.isSamOrBamFile(arg)){
+						in.add(arg);
+					}else if(FileFormat.isFastaFile(arg) && (ref==null || ref.equals(arg))){
+						ref=arg;
+					}else{
+						assert(false) : "Unknown parameter "+arg;
+						outstream.println("Warning: Unknown parameter "+arg);
+					}
+				}else{
+					for(String s : arg.split(",")){
+						if(FileFormat.isSamOrBamFile(s)){
+							in.add(s);
+						}else{
+							assert(false) : "Unknown parameter "+arg+" part "+s;
+							outstream.println("Warning: Unknown parameter "+arg+" part "+s);
+						}
+					}
 				}
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
@@ -198,9 +235,11 @@ public class CallVariants2 {
 			}
 		}
 		
-		if(vcf==null){
-			Scaffold.trackStrand=false;
-		}
+		if("auto".equalsIgnoreCase(atomic)){Scaffold.setCA3A(Shared.threads()>8);}
+		else{Scaffold.setCA3A(Tools.parseBoolean(atomic));}
+		
+		if(ploidy<1){System.err.println("WARNING: ploidy not set; assuming ploidy=1."); ploidy=1;}
+		samFilter.setSamtoolsFilter();
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -210,17 +249,22 @@ public class CallVariants2 {
 			
 			extin=parser.extin;
 			extout=parser.extout;
+
+			qtrimLeft=parser.qtrimLeft;
+			qtrimRight=parser.qtrimRight;
+			trimq=parser.trimq;
+			trimE=parser.trimE();
 			
 			trimWhitespace=Shared.TRIM_READ_COMMENTS;
 		}
+		if(vcf==null){Scaffold.setTrackStrand(false);}
 		
 		assert(FastaReadInputStream.settingsOK());
 		
+		ploidyArray=new long[ploidy+1];
+		
 		//Ensure there is an input file
-		if(in.isEmpty()){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in.isEmpty()){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -234,7 +278,7 @@ public class CallVariants2 {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in.toArray(new String[0]))){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 
 		//Create input FileFormat objects
@@ -283,7 +327,7 @@ public class CallVariants2 {
 	private void loadReference(){
 		if(loadedRef){return;}
 		assert(ref!=null);
-		ScafMap.loadReference(ref, scafMap);
+		ScafMap.loadReference(ref, scafMap, samFilter, true);
 		if(realign){Realigner.map=scafMap;}
 		loadedRef=true;
 	}
@@ -343,8 +387,10 @@ public class CallVariants2 {
 			sample.process2(sharedVarMap);
 			
 			if(sample.vcfName!=null){
-				sample.varMap.writeVcfFile(sample.vcfName, filter, sample.name, sample.readsProcessed-sample.readsDiscarded,
-						sample.pairedInSequencingReadsProcessed, sample.properlyPairedReadsProcessed, ref, trimWhitespace);
+				VcfWriter vw=new VcfWriter(sample.varMap, varFilter, sample.readsProcessed-sample.readsDiscarded, 
+						sample.pairedInSequencingReadsProcessed, sample.properlyPairedReadsProcessed,
+						sample.trimmedBasesProcessed, ref, trimWhitespace, sample.name);
+				vw.writeVcfFile(sample.vcfName);
 			}
 			
 			readsProcessed+=sample.readsProcessed;
@@ -366,16 +412,13 @@ public class CallVariants2 {
 
 		t2.start("Finished second pass.");
 		
-		long[] types=new long[4];
-		for(Var v : sharedVarMap.toArray()){
-			types[v.type()]++;
-		}
+		long[] types=sharedVarMap.countTypes();
 		
 		if(vcf!=null){
 			t2.start("Writing output.");
 			MergeSamples merger=new MergeSamples();
-			merger.filter=filter;
-			merger.mergeSamples(samples, scafMap, vcf);
+			merger.filter=varFilter;
+			merger.mergeSamples(samples, scafMap, vcf, scoreHistFile);
 			t2.stop("Time: ");
 		}
 		
@@ -392,13 +435,13 @@ public class CallVariants2 {
 			double bmult=100.0/b;
 			outstream.println();
 			if(prefilter){
-				outstream.println(c+" of "+d+" events were screened by the prefilter ("+String.format("%.4f%%", c*100.0/d)+").");
+				outstream.println(c+" of "+d+" events were screened by the prefilter ("+String.format(Locale.ROOT, "%.4f%%", c*100.0/d)+").");
 			}
-			outstream.println(b+" of "+a+" variants passed filters ("+String.format("%.4f%%", b*amult)+").");
+			outstream.println(b+" of "+a+" variants passed filters ("+String.format(Locale.ROOT, "%.4f%%", b*amult)+").");
 			outstream.println();
-			outstream.println("Substitutions: \t"+types[Var.SUB]+String.format("\t%.1f%%", types[Var.SUB]*bmult));
-			outstream.println("Deletions:     \t"+types[Var.DEL]+String.format("\t%.1f%%", types[Var.DEL]*bmult));
-			outstream.println("Insertions:    \t"+types[Var.INS]+String.format("\t%.1f%%", types[Var.INS]*bmult));
+			outstream.println("Substitutions: \t"+types[Var.SUB]+String.format(Locale.ROOT, "\t%.1f%%", types[Var.SUB]*bmult));
+			outstream.println("Deletions:     \t"+types[Var.DEL]+String.format(Locale.ROOT, "\t%.1f%%", types[Var.DEL]*bmult));
+			outstream.println("Insertions:    \t"+types[Var.INS]+String.format(Locale.ROOT, "\t%.1f%%", types[Var.INS]*bmult));
 			outstream.println("Variation Rate:\t"+(b==0 ? 0 : 1)+"/"+(size/Tools.max(1,b))+"\n");
 			
 			if(realign){
@@ -409,21 +452,7 @@ public class CallVariants2 {
 				outstream.println();
 			}
 			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		}
 		
 		//Throw an exception of there was an error in a thread
@@ -435,11 +464,6 @@ public class CallVariants2 {
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO"); //TODO
-	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
@@ -462,10 +486,10 @@ public class CallVariants2 {
 			final KCountArray7MTA kca;
 			if(prefilter){
 				t2.start("Loading the prefilter.");
-				kca=prefilter(filter.minReads);
+				kca=prefilter(varFilter.minAlleleDepth);
 				double used=(100.0*kca.cellsUsed())/kca.cells;
 				outstream.println("Added "+varsProcessed+" events to prefilter; approximately "+(long)(kca.estimateUniqueKmers(2))+" were unique.");
-				outstream.println(String.format("The prefilter is %.2f%% full.", used));
+				outstream.println(String.format(Locale.ROOT, "The prefilter is %.2f%% full.", used));
 				varsProcessed=0;
 				t2.stop("Time: ");
 				outstream.println();
@@ -478,16 +502,18 @@ public class CallVariants2 {
 			assert(varMap==null);
 			varMap=new VarMap(scafMap);
 			processInput(ff, kca, null, true);
-			final float properPairRate=properlyPairedReadsProcessed/(float)Tools.max(1, readsProcessed-readsDiscarded);
-			final float pairedInSequencingRate=pairedInSequencingReadsProcessed/(float)Tools.max(1, readsProcessed-readsDiscarded);
-			final float totalQualityAvg=totalQualitySum/(float)Tools.max(1, trimmedBasesProcessed);
-			final float totalMapqAvg=totalMapqSum/(float)Tools.max(1, readsProcessed-readsDiscarded);
+			final double properPairRate=properlyPairedReadsProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double pairedInSequencingRate=pairedInSequencingReadsProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double totalQualityAvg=totalQualitySum/(double)Tools.max(1, trimmedBasesProcessed);
+			final double totalMapqAvg=totalMapqSum/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double readLengthAvg=trimmedBasesProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
 //			System.err.println(properlyPairedReadsProcessed+", "+readsProcessed+", "+readsDiscarded);
 			varMap.ploidy=ploidy;
 			varMap.properPairRate=properPairRate;
 			varMap.pairedInSequencingRate=pairedInSequencingRate;
 			varMap.totalQualityAvg=totalQualityAvg;
 			varMap.totalMapqAvg=totalMapqAvg;
+			varMap.readLengthAvg=readLengthAvg;
 			t2.stop("Time: ");
 			outstream.println();
 			
@@ -519,16 +545,18 @@ public class CallVariants2 {
 			assert(varMap==null);
 			varMap=new VarMap(scafMap);
 			processInput(ff, null, sharedVarMap, true);
-			final float properPairRate=properlyPairedReadsProcessed/(float)Tools.max(1, readsProcessed-readsDiscarded);
-			final float pairedInSequencingRate=pairedInSequencingReadsProcessed/(float)Tools.max(1, readsProcessed-readsDiscarded);
-			final float totalQualityAvg=totalQualitySum/(float)Tools.max(1, trimmedBasesProcessed);
-			final float totalMapqAvg=totalMapqSum/(float)Tools.max(1, readsProcessed-readsDiscarded);
+			final double properPairRate=properlyPairedReadsProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double pairedInSequencingRate=pairedInSequencingReadsProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double totalQualityAvg=totalQualitySum/(double)Tools.max(1, trimmedBasesProcessed);
+			final double totalMapqAvg=totalMapqSum/(double)Tools.max(1, readsProcessed-readsDiscarded);
+			final double readLengthAvg=trimmedBasesProcessed/(double)Tools.max(1, readsProcessed-readsDiscarded);
 //			System.err.println(properlyPairedReadsProcessed+", "+readsProcessed+", "+readsDiscarded);
 			varMap.ploidy=ploidy;
 			varMap.properPairRate=properPairRate;
 			varMap.pairedInSequencingRate=pairedInSequencingRate;
 			varMap.totalQualityAvg=totalQualityAvg;
 			varMap.totalMapqAvg=totalMapqAvg;
+			varMap.readLengthAvg=readLengthAvg;
 			t2.stop("Time: ");
 			outstream.println();
 			
@@ -537,9 +565,7 @@ public class CallVariants2 {
 			long initialCount=varMap.size();
 			t2.start("Processing variants.");
 			final long[] types=addSharedVariants(sharedVarMap);
-			for(Var v : varMap.toArray()){
-				v.calcCoverage(scafMap);
-			}
+			varMap.calcCoverage(scafMap);
 			t2.stop("Time: ");
 			outstream.println();
 			
@@ -573,7 +599,7 @@ public class CallVariants2 {
 			KCountArray7MTA kca=new KCountArray7MTA(precells, cbits, 0, 2, null, minReads);
 
 			if(ref==null){
-				ScafMap.loadHeader(ff, scafMap);
+				ScafMap.loadSamHeader(ff, scafMap);
 			}
 
 			final SamReadStreamer ss;
@@ -581,7 +607,7 @@ public class CallVariants2 {
 			final ConcurrentReadInputStream cris;
 			if(useStreamer && (maxReads<0 || maxReads==Long.MAX_VALUE)){
 				cris=null;
-				ss=new SamReadStreamer(ff, streamerThreads);
+				ss=new SamReadStreamer(ff, streamerThreads, false);
 				ss.start();
 				if(verbose){outstream.println("Started streamer");}
 			}else{
@@ -633,10 +659,10 @@ public class CallVariants2 {
 
 		/** Create read streams and process all data */
 		void processInput(FileFormat ff, KCountArray7MTA kca, VarMap sharedVarMap, boolean calcCoverage){
-			assert(ff.samOrBam());
+			assert(ff.samOrBam()) : ff.name();
 			
 			if(ref==null){
-				ScafMap.loadHeader(ff, scafMap);
+				ScafMap.loadSamHeader(ff, scafMap);
 			}
 			
 			final SamReadStreamer ss;
@@ -644,7 +670,7 @@ public class CallVariants2 {
 			final ConcurrentReadInputStream cris;
 			if(useStreamer && (maxReads<0 || maxReads==Long.MAX_VALUE)){
 				cris=null;
-				ss=new SamReadStreamer(ff, streamerThreads);
+				ss=new SamReadStreamer(ff, streamerThreads, false);
 				ss.start();
 				if(verbose){outstream.println("Started streamer");}
 			}else{
@@ -664,15 +690,15 @@ public class CallVariants2 {
 		}
 		
 		private long[] processVariants(){
-			return varMap.processVariantsMT(filter);
+			return varMap.processVariantsMT(varFilter, scoreArray, ploidyArray, avgQualityArray, maxQualityArray);
 		}
 		
 		private long[] addSharedVariants(VarMap sharedVarMap){
-			return varMap.addSharedVariantsST(filter, sharedVarMap);
+			return varMap.addSharedVariantsST(varFilter, sharedVarMap);
 		}
 		
 		/** Spawn process threads */
-		private void spawnThreads(final ConcurrentReadInputStream cris, final SamReadStreamer ss, 
+		private void spawnThreads(final ConcurrentReadInputStream cris, final SamReadStreamer ss,
 				final KCountArray7MTA kca, final VarMap sharedVarMap, final boolean calcCoverage){
 			
 			//Do anything necessary prior to processing
@@ -764,7 +790,7 @@ public class CallVariants2 {
 			varMap=null;
 //			varMap.clear();
 			
-			//errorState=false; 
+			//errorState=false;
 		}
 		
 		/*--------------------------------------------------------------*/
@@ -801,9 +827,8 @@ public class CallVariants2 {
 		protected long realignmentsRetained=0;
 
 		public VarMap varMap;
-		public final String sampleName=null;
 		
-		boolean errorState=false; 
+		boolean errorState=false;
 		
 		
 
@@ -815,7 +840,7 @@ public class CallVariants2 {
 		private class ProcessThread extends Thread {
 			
 			//Constructor
-			ProcessThread(final ConcurrentReadInputStream cris_, final SamReadStreamer ss_, final int tid_, 
+			ProcessThread(final ConcurrentReadInputStream cris_, final SamReadStreamer ss_, final int tid_,
 					final KCountArray7MTA kca_, final VarMap sharedVarMap_, final boolean prefilterOnly_,
 					final boolean calcCoverage_){
 				cris=cris_;
@@ -829,6 +854,7 @@ public class CallVariants2 {
 			}
 			
 			//Called by start()
+			@Override
 			public void run(){
 				//Do anything necessary prior to processing
 				
@@ -857,14 +883,8 @@ public class CallVariants2 {
 				//Grab the actual read list from the ListNum
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-				//Check to ensure pairing is as expected
-				if(reads!=null && !reads.isEmpty()){
-					Read r=reads.get(0);
-//					assert(ffin.samOrBam() || (r.mate!=null)==cris.properlyPaired()); //Disabled due to non-static access
-				}
-
 				//As long as there is a nonempty read list...
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 //					if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
 
 					//Loop through each read in the list
@@ -889,7 +909,7 @@ public class CallVariants2 {
 					}
 
 					//Notify the input stream that the list was used
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 //					if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
 
 					//Fetch a new list
@@ -907,10 +927,11 @@ public class CallVariants2 {
 			void processInner_ss(){
 				
 				//Grab the actual read list from the ListNum
-				ArrayList<Read> reads=ss.nextList();
+				ListNum<Read> ln=ss.nextList();
 
 				//As long as there is a nonempty read list...
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && ln.size()>0){
+					ArrayList<Read> reads=ln.list;
 //					if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
 
 					//Loop through each read in the list
@@ -933,7 +954,7 @@ public class CallVariants2 {
 						}
 					}
 					
-					reads=ss.nextList();
+					ln=ss.nextList();
 				}
 			}
 			
@@ -949,7 +970,7 @@ public class CallVariants2 {
 //				final SamLine oldSL=new SamLine(sl);
 //				final Read oldRead=r.clone();
 				
-				if(sl==null || !sl.mapped() || !sl.primary() || sl.supplementary()){return false;}
+				if(samFilter!=null && !samFilter.passesFilter(sl)){return false;}
 				if(sl.properPair()){properlyPairedReadsProcessedT++;}
 				if(sl.hasMate()){pairedInSequencingReadsProcessedT++;}
 				final Scaffold scaf=scafMap.getScaffold(sl);
@@ -961,8 +982,17 @@ public class CallVariants2 {
 				}
 //				System.err.println(sl);
 //				System.err.println(new String(r.match));
-				int trimmed=TrimRead.trimReadWithMatch(r, sl, border, border, 0, scaf.length);
-				int extra=Tools.min(border, trimmed/2);
+				
+				int leftTrimAmount=border, rightTrimAmount=border;
+				if(qtrimLeft || qtrimRight){
+					long packed=TrimRead.testOptimal(r.bases, r.quality, trimE);
+					if(qtrimLeft){leftTrimAmount=Tools.max(leftTrimAmount, (int)((packed>>32)&0xFFFFFFFFL));}
+					if(qtrimRight){rightTrimAmount=Tools.max(rightTrimAmount, (int)((packed)&0xFFFFFFFFL));}
+				}
+				
+				int trimmed=TrimRead.trimReadWithMatch(r, sl, leftTrimAmount, rightTrimAmount, 0, scaf.length, false);
+				if(trimmed<0){return false;}
+				int extra=(qtrimLeft || qtrimRight) ? trimmed/2 : Tools.min(border, trimmed/2);
 //				System.err.println(sl);
 //				System.err.println(new String(r.match));
 //				System.err.println();
@@ -998,7 +1028,7 @@ public class CallVariants2 {
 						if(kca!=null){
 							depth=kca.read(v.toKey());
 						}
-						if(depth>=filter.minReads){
+						if(depth>=varFilter.minAlleleDepth){
 							if(sharedVarMap==null || sharedVarMap.containsKey(v)){
 								v.endDistMax+=extra;
 								v.endDistSum+=extra;
@@ -1025,10 +1055,10 @@ public class CallVariants2 {
 			
 			HashMap<Var, Var> varMapT=new HashMap<Var, Var>();
 			
-			/** Number of vars blocked by the prefilter */ 
+			/** Number of vars blocked by the prefilter */
 			protected long prefilteredT=0;
-			/** Number of vars processed */ 
-			protected long varsProcessedT=0;	
+			/** Number of vars processed */
+			protected long varsProcessedT=0;
 			
 			/** Sum of trimmed, mapped base qualities */
 			protected long totalQualitySumT=0;
@@ -1085,14 +1115,13 @@ public class CallVariants2 {
 		
 		if(r.match!=null && r.shortmatch()){
 			r.toLongMatchString(false);
-			r.setShortMatch(false);
 		}
 		
 		int varsFound=0;
 		final byte[] match=r.match;
 		final byte[] bases=r.bases;
 		
-		if(r.strand()==Gene.MINUS){r.reverseComplement();}
+		if(r.strand()==Shared.MINUS){r.reverseComplement();}
 		
 		int rpos=sl.pos-1-SamLine.countLeadingClip(sl.cigar, true, true);
 		final int scafnum=scafMap.getNumber(sl.rnameS());
@@ -1103,7 +1132,7 @@ public class CallVariants2 {
 			final byte b=bases[qpos];
 			
 			if(m=='S' && scafnum>=0){
-				Var v=new Var(scafnum, rpos, rpos+1, b);
+				Var v=new Var(scafnum, rpos, rpos+1, b, Var.SUB);
 				if(varMap.containsKey(v)){
 					varsFound++;
 					match[mpos]='V';
@@ -1113,7 +1142,7 @@ public class CallVariants2 {
 			if(m!='D'){qpos++;}
 			if(m!='I'){rpos++;}
 		}
-		if(r.strand()==Gene.MINUS){r.reverseComplement();}
+		if(r.strand()==Shared.MINUS){r.reverseComplement();}
 		return varsFound;
 	}
 	
@@ -1130,6 +1159,8 @@ public class CallVariants2 {
 	/** Individual vcf files */
 	private String vcf0="individual_%.vcf.gz";
 	
+	private String scoreHistFile=null;
+	
 	/** Override input file extension */
 	private String extin=null;
 	/** Override output file extension */
@@ -1139,6 +1170,11 @@ public class CallVariants2 {
 	
 	private boolean loadedRef=false;
 	
+	private boolean qtrimLeft=false;
+	private boolean qtrimRight=true;
+	private float trimq=10;
+	private final float trimE;
+	
 	/*--------------------------------------------------------------*/
 	
 	public final ScafMap scafMap=new ScafMap();
@@ -1146,7 +1182,7 @@ public class CallVariants2 {
 	/** Quit after processing this many input reads; -1 means no limit */
 	private long maxReads=-1;
 
-	public int ploidy=1;
+	public int ploidy=-1;
 	
 	public int border=5;
 
@@ -1165,7 +1201,12 @@ public class CallVariants2 {
 	/** Sample names */
 	private final ArrayList<String> sampleNames=new ArrayList<String>();
 	
-	public final VarFilter filter=new VarFilter();
+	public final VarFilter varFilter=new VarFilter();
+	public final SamFilter samFilter=new SamFilter();
+	public final long[] scoreArray=new long[200]; //Not used.
+	public final long[] ploidyArray; //Not used.
+	public final long[] avgQualityArray=new long[100];
+	public final long[] maxQualityArray=new long[100];
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/
@@ -1177,7 +1218,7 @@ public class CallVariants2 {
 	static boolean trimWhitespace=true;
 	
 	static boolean useStreamer=true;
-	static int streamerThreads=3;
+	static int streamerThreads=SamStreamer.DEFAULT_THREADS;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Common Fields         ----------------*/

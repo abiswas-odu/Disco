@@ -3,24 +3,24 @@ package clump;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 
+import bloom.KCountArray;
+import bloom.KmerCount7MTA;
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import jgi.BBMerge;
+import shared.Parser;
+import shared.PreParser;
+import shared.ReadStats;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import bloom.KCountArray;
-import bloom.KmerCount7MTA;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import jgi.BBMerge;
-import shared.ReadStats;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 
 /**
  * Reduces reads to their feature kmer.
@@ -45,10 +45,14 @@ public class PivotSet {
 	public static KCountArray makeSet(String[] args){
 		final boolean pigz=ReadWrite.USE_PIGZ, unpigz=ReadWrite.USE_UNPIGZ;
 		Timer t=new Timer();
-		PivotSet kr=new PivotSet(args);
-		KCountArray kca=kr.process(t);
+		PivotSet x=new PivotSet(args);
+		KCountArray kca=x.process(t, false);
 		ReadWrite.USE_PIGZ=pigz;
 		ReadWrite.USE_UNPIGZ=unpigz;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
+		
 		return kca;
 	}
 
@@ -62,18 +66,14 @@ public class PivotSet {
 	 */
 	public PivotSet(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -81,8 +81,6 @@ public class PivotSet {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -105,7 +103,7 @@ public class PivotSet {
 				minCount=Integer.parseInt(b);
 			}else if(a.equals("correct") || a.equals("ecc")){
 				//do nothing
-			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){  
+			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){
 				//do nothing
 			}else if(a.equals("seed")){
 				KmerComparator.defaultSeed=Long.parseLong(b);
@@ -140,10 +138,7 @@ public class PivotSet {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -165,13 +160,13 @@ public class PivotSet {
 	}
 	
 	/** Create read streams and process all data */
-	public KCountArray process(Timer t){
+	public KCountArray process(Timer t, boolean amino){
 		int cbits=2;
 		while((1L<<cbits)<=minCount){cbits*=2;}
 		int filterHashes=2;
 		float fraction=0.1f;
 		long cells=getCells(fraction, cbits);
-		KCountArray kca=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, cells, filterHashes, 0, true, ecco, maxReads, 1, 1, 1, 1, null, 0);
+		KCountArray kca=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, cells, filterHashes, 0, true, ecco, false, maxReads, 1, 1, 1, 1, null, 0, amino);
 		
 		final ConcurrentReadInputStream cris;
 		{
@@ -197,27 +192,17 @@ public class PivotSet {
 		outstream.println("Estimated pivots:      \t"+(long)kca.estimateUniqueKmers(filterHashes));
 		outstream.println("Estimated pivots >1x:  \t"+(long)kca.estimateUniqueKmers(filterHashes, minCount));
 		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(errorState){
+			Clumpify.sharedErrorState=true;
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 		return kca;
 	}
 	
 	/** Manage threads */
-	public static KCountArray makeKcaStatic(final ConcurrentReadInputStream cris, int k, int minCount){
+	public static KCountArray makeKcaStatic(final ConcurrentReadInputStream cris, int k, int minCount, boolean amino){
 
 		KmerComparator kc=new KmerComparator(k, false, false);
 		int cbits=2;
@@ -225,7 +210,7 @@ public class PivotSet {
 		int filterHashes=2;
 		float fraction=0.1f;
 		long cells=getCells(fraction, cbits);
-		KCountArray kca=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, cells, filterHashes, 0, true, false, -1, 1, 1, 1, 1, null, 0);
+		KCountArray kca=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, cells, filterHashes, 0, true, false, false, -1, 1, 1, 1, 1, null, 0, amino);
 		
 		if(verbose){System.err.println("Making hash threads.");}
 		final int threads=Shared.threads();
@@ -302,11 +287,11 @@ public class PivotSet {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				for(Read r1 : reads){
 					Read r2=r1.mate;
-					readsProcessedT+=1+r1.mateCount();
-					basesProcessedT+=r1.length()+r1.mateLength();
+					readsProcessedT+=r1.pairCount();
+					basesProcessedT+=r1.pairLength();
 					if(ecco && r2!=null){
 						if(r2!=null){BBMerge.findOverlapStrict(r1, r2, true);}
 					}
@@ -323,7 +308,7 @@ public class PivotSet {
 						}
 					}
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -344,11 +329,6 @@ public class PivotSet {
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/

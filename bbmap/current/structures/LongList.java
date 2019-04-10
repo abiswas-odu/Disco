@@ -2,9 +2,9 @@ package structures;
 
 import java.util.Arrays;
 
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
-import stream.KillSwitch;
 
 
 
@@ -14,7 +14,7 @@ public final class LongList{
 	
 	public LongList(int initial){
 		assert(initial>0);
-		array=new long[initial];
+		array=KillSwitch.allocLong1D(initial);
 	}
 	
 	public void clear(){
@@ -29,6 +29,11 @@ public final class LongList{
 		size=max(size, loc+1);
 	}
 	
+	public final void setLast(long value){
+		assert(size>0);
+		array[size-1]=value;
+	}
+	
 	public final void increment(int loc, long value){
 		if(loc>=array.length){
 			resize(loc*2L+1);
@@ -41,13 +46,13 @@ public final class LongList{
 		increment(loc, 1);
 	}
 	
-	public final void add(LongList b){
+	public final void incrementBy(LongList b){
 		for(int i=b.size-1; i>=0; i--){
 			increment(i, b.get(i));
 		}
 	}
 	
-	public final void add(long[] b){
+	public final void incrementBy(long[] b){
 		for(int i=b.length-1; i>=0; i--){
 			increment(i, b[i]);
 		}
@@ -79,7 +84,7 @@ public final class LongList{
 	
 	private final void resize(final long size2){
 		assert(size2>size) : size+", "+size2;
-		final int size3=(int)Tools.min(Integer.MAX_VALUE, size2);
+		final int size3=(int)Tools.min(Shared.MAX_ARRAY_LEN, size2);
 		assert(size3>size) : "Overflow: "+size+", "+size2+" -> "+size3;
 		array=KillSwitch.copyOf(array, size3);
 	}
@@ -184,7 +189,7 @@ public final class LongList{
 			if(array[i]!=array[i-1]){unique++;}
 		}
 		if(unique==array.length){return;}
-		long[] alt=new long[unique];
+		long[] alt=KillSwitch.allocLong1D(unique);
 		
 		alt[0]=array[0];
 		for(int i=1, j=1; j<unique; i++){
@@ -198,6 +203,7 @@ public final class LongList{
 		size=alt.length;
 	}
 	
+	@Override
 	public String toString(){
 		return toStringListView();
 	}
@@ -229,7 +235,7 @@ public final class LongList{
 	}
 	
 	public long[] toArray(){
-		long[] x=new long[size];
+		long[] x=KillSwitch.allocLong1D(size);
 		for(int i=0; i<x.length; i++){
 			x[i]=array[i];
 		}
@@ -238,6 +244,10 @@ public final class LongList{
 	
 	public void sort() {
 		if(size>1){Shared.sort(array, 0, size);}
+	}
+	
+	public void sortSerial() {
+		if(size>1){Arrays.sort(array, 0, size);}
 	}
 	
 	public void reverse() {
@@ -253,6 +263,14 @@ public final class LongList{
 	
 	public int size() {
 		return size;
+	}
+	
+	public int capacity() {
+		return array.length;
+	}
+	
+	public int freeSpace() {
+		return array.length-size;
 	}
 	
 	private static final long min(long x, long y){return x<y ? x : y;}

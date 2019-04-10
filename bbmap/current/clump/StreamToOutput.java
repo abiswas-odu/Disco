@@ -14,18 +14,18 @@ import structures.ListNum;
 
 public class StreamToOutput {
 	
-	public StreamToOutput(FileFormat ffin1, FileFormat ffin2, ConcurrentReadOutputStream[] rosa_, KmerComparator old, boolean sortByName_){
+	public StreamToOutput(FileFormat ffin1, FileFormat ffin2, ConcurrentReadOutputStream[] rosa_, KmerComparator old, boolean sortByName_, boolean incrementComparator){
 		final ConcurrentReadInputStream cris=ConcurrentReadInputStream.getReadInputStream(-1, false, ffin1, ffin2, null, null);
 		cris.start();
 		rosa=rosa_;
-		kc=new KmerComparator(old.k, old.seed+1, old.border-1, old.hashes, false, false);
+		kc=(incrementComparator ? new KmerComparator(old.k, old.seed+1, old.border-1, old.hashes, false, false) : old);
 		sortByName=sortByName_;
 	}
 	
-	public StreamToOutput(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream[] rosa_, KmerComparator old, boolean sortByName_){
+	public StreamToOutput(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream[] rosa_, KmerComparator old, boolean sortByName_, boolean incrementComparator){
 		cris=cris_;
 		rosa=rosa_;
-		kc=new KmerComparator(old.k, old.seed+1, old.border-1, old.hashes, false, false);
+		kc=(incrementComparator ? new KmerComparator(old.k, old.seed+1, old.border-1, old.hashes, false, false) : old);
 		sortByName=sortByName_;
 	}
 	
@@ -64,10 +64,15 @@ public class StreamToOutput {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			if(rosa!=null){rosa[0].add(reads, ln.id);}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			for(Read r : reads){
+				readsIn+=r.pairCount();
+				basesIn+=r.pairLength();
+			}
+			
+			cris.returnList(ln);
 			
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
@@ -90,18 +95,21 @@ public class StreamToOutput {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(Read r : reads){
 				long kmer=kc.hash(r, null, 0, false);
 				int group=(int)(kmer%groups);
 				out[group].add(r);
+				
+				readsIn+=r.pairCount();
+				basesIn+=r.pairLength();
 			}
 			for(int group=0; group<groups; group++){
 				rosa[group].add(out[group], ln.id);
 				out[group]=new ArrayList<Read>();
 			}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
@@ -111,6 +119,9 @@ public class StreamToOutput {
 			cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 		}
 	}
+	
+	long readsIn=0;
+	long basesIn=0;
 	
 //	final FileFormat ffin1;
 //	final FileFormat ffin2;

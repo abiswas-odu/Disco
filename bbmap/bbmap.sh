@@ -1,13 +1,13 @@
 #!/bin/bash
-#bbmap in=<infile> out=<outfile>
 
 usage(){
 echo "
-BBMap v36.x
+BBMap
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified December 19, 2016
+Last modified February 11, 2019
 
 Description:  Fast and accurate splice-aware read aligner.
+Please read bbmap/docs/guides/BBMapGuide.txt for more information.
 
 To index:     bbmap.sh ref=<reference fasta>
 To map:       bbmap.sh in=<reads> out=<output sam>
@@ -20,7 +20,6 @@ input and output files e.g. in=stdin.fa.gz will read gzipped fasta from
 standard in; out=stdout.sam.gz will write gzipped sam.
 
 Indexing Parameters (required when building the index):
-
 nodisk=f                Set to true to build index in memory and write nothing 
                         to disk except output.
 ref=<file>              Specify the reference sequence.  Only do this ONCE, 
@@ -40,7 +39,6 @@ usemodulo=f             Throw away ~80% of kmers based on remainder modulo a
 rebuild=f               Force a rebuild of the index (ref= should be set).
 
 Input Parameters:
-
 build=1                 Designate index to use.  Corresponds to the number 
                         specified when building the index.
 in=<file>               Primary reads input; required parameter.
@@ -68,7 +66,6 @@ skipreads=0             Set to a number N to skip the first N reads (or pairs),
                         then map the rest.
 
 Mapping Parameters:
-
 fast=f                  This flag is a macro which sets other paramters to run 
                         faster, at reduced sensitivity.  Bad for RNA-seq.
 slow=f                  This flag is a macro which sets other paramters to run 
@@ -77,6 +74,8 @@ maxindel=16000          Don't look for indels longer than this. Lower is faster.
                         Set to >=100k for RNAseq with long introns like mammals.
 strictmaxindel=f        When enabled, do not allow indels longer than 'maxindel'.
                         By default these are not sought, but may be found anyway.
+tipsearch=100           Look this far for read-end deletions with anchors
+                        shorter than K, using brute force.
 minid=0.76              Approximate minimum alignment identity to look for. 
                         Higher is faster and less sensitive.
 minhits=1               Minimum number of seed hits required for candidate sites.
@@ -114,7 +113,13 @@ rescuemismatches=32     Maximum mismatches allowed in a rescued read.  Lower
                         is faster.
 averagepairdist=100     (apd) Initial average distance between paired reads.
                         Varies dynamically; does not need to be specified.
+deterministic=f         Run in deterministic mode.  In this case it is good
+                        to set averagepairdist.  BBMap is deterministic
+                        without this flag if using single-ended reads,
+                        or run singlethreaded.
 bandwidthratio=0        (bwr) If above zero, restrict alignment band to this 
+                        fraction of read length.  Faster but less accurate.
+bandwidth=0             (bw) Set the bandwidth directly.
                         fraction of read length.  Faster but less accurate.
 usejni=f                (jni) Do alignments faster, in C code.  Requires 
                         compiling the C code; details are in /jni/README.txt.
@@ -125,9 +130,11 @@ excludefraction=0.03    (ef) Fraction of kmers to ignore.  For example, 0.03
                         will ignore the most common 3% of kmers.
 greedy=t                Use a greedy algorithm to discard the least-useful
                         kmers on a per-read basis.
+kfilter=0               If positive, potential mapping sites must have at
+                        least this many consecutive exact matches.
+
 
 Quality and Trimming Parameters:
-
 qin=auto                Set to 33 or 64 to specify input quality value ASCII
                         offset. 33 is Sanger, 64 is old Solexa.
 qout=auto               Set to 33 or 64 to specify output quality value ASCII 
@@ -149,7 +156,6 @@ minaveragequality=0     (maq) Do not map reads with average quality below this.
 maqb=0                  If positive, calculate maq from this many initial bases.
 
 Output Parameters:
-
 out=<file>              Write all reads to this file.
 outu=<file>             Write only unmapped reads to this file.  Does not 
                         include unmapped paired reads with a mapped mate.
@@ -184,8 +190,17 @@ showprogress2=0         If positive, print the number of seconds since the
                         last progress update (instead of a '.').
 renamebyinsert=f        Renames reads based on their mapped insert size.
 
-Post-Filtering Parameters:
+Bloom-Filtering Parameters (bloomfilter.sh is the standalone version).
+bloom=f                 Use a Bloom filter to ignore reads not sharing kmers
+                        with the reference.  This uses more memory, but speeds
+                        mapping when most reads don't match the reference.
+bloomhashes=2           Number of hash functions.
+bloomminhits=3          Number of consecutive hits to be considered matched.
+bloomk=31               Bloom filter kmer length.
+bloomserial=t           Use the serialized Bloom filter for greater loading
+                        speed, if available.  If not, generate and write one.
 
+Post-Filtering Parameters:
 idfilter=0              Independant of minid; sets exact minimum identity 
                         allowed for alignments to be printed.  Range 0 to 1.
 subfilter=-1            Ban alignments with more than this many substitutions.
@@ -195,9 +210,10 @@ indelfilter=-1          Ban alignments with more than this many indels.
 editfilter=-1           Ban alignments with more than this many edits.
 inslenfilter=-1         Ban alignments with an insertion longer than this.
 dellenfilter=-1         Ban alignments with a deletion longer than this.
+nfilter=-1              Ban alignments with more than this many ns.  This 
+                        includes nocall, noref, and off scaffold ends.
 
 Sam flags and settings:
-
 noheader=f              Disable generation of header lines.
 sam=1.4                 Set to 1.4 to write Sam version 1.4 cigar strings, 
                         with = and X, or 1.3 to use M.
@@ -231,7 +247,6 @@ boundstag=f             Write a tag indicating whether either read in the pair
 notags=f                Turn off all optional tags.
 
 Histogram and statistics output parameters:
-
 scafstats=<file>        Statistics on how many reads mapped to which scaffold.
 refstats=<file>         Statistics on how many reads mapped to which reference
                         file; only for BBSplit.
@@ -256,7 +271,6 @@ idbins=100              Number idhist bins.  Set to 'auto' to use read length.
 statsfile=stderr        Mapping statistics are printed here.
 
 Coverage output parameters (these may reduce speed and use more RAM):
-
 covstats=<file>         Per-scaffold coverage info.
 rpkm=<file>             Per-scaffold RPKM/FPKM counts.
 covhist=<file>          Histogram of # occurrences of each depth level.
@@ -274,23 +288,26 @@ physcov=f               Calculate physical coverage for paired reads.
                         This includes the unsequenced bases.
 delcoverage=t           (delcov) Count bases covered by deletions as covered.
                         True is faster than false.
+covk=0                  If positive, calculate kmer coverage statistics.
 
 Java Parameters:
--Xmx                    This will be passed to Java to set memory usage, 
-                        overriding the program's automatic memory detection.
+-Xmx                    This will set Java's memory usage, 
+                        overriding autodetection.
                         -Xmx20g will specify 20 gigs of RAM, and -Xmx800m 
                         will specify 800 megs.  The max is typically 85% of 
                         physical memory.  The human genome requires around 24g,
                         or 12g with the 'usemodulo' flag.  The index uses 
                         roughly 6 bytes per reference base.
+-eoom                   This flag will cause the process to exit if an 
+                        out-of-memory exception occurs.  Requires Java 8u92+.
+-da                     Disable assertions.
 
-This list is not complete.  For more information, please consult 
-$DIR""docs/readme.txt. 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter 
 any problems, or post at: http://seqanswers.com/forums/showthread.php?t=41057
 "   
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -308,6 +325,7 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -329,13 +347,32 @@ calcXmx "$@"
 
 
 bbmap() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
-	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMap build=1 overwrite=true fastareadlen=500 $@"
+	#local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMap build=1 overwrite=true fastareadlen=500 $@"
+	local CMD="java $EA $z -cp $CP align2.BBMap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
 	eval $CMD
 }

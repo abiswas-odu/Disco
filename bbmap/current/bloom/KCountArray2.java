@@ -1,5 +1,7 @@
 package bloom;
 
+import java.util.Locale;
+
 /**
  * @author Brian Bushnell
  * @date Jul 5, 2012
@@ -7,7 +9,7 @@ package bloom;
 public class KCountArray2 {
 	
 	public static void main(String[] args){
-		KCountArray2 kca=new KCountArray2(1024, 16); 
+		KCountArray2 kca=new KCountArray2(1024, 16);
 	}
 	
 	public KCountArray2(long cells_, int bits_){
@@ -51,9 +53,9 @@ public class KCountArray2 {
 
 			long mem=words*4;
 			if(mem<(1<<30)){
-				System.out.println("memory:   \t"+String.format("%.2f MB", mem*1d/(1<<20)));
+				System.out.println("memory:   \t"+String.format(Locale.ROOT, "%.2f MB", mem*1d/(1<<20)));
 			}else{
-				System.out.println("memory:   \t"+String.format("%.2f GB", mem*1d/(1<<30)));
+				System.out.println("memory:   \t"+String.format(Locale.ROOT, "%.2f GB", mem*1d/(1<<30)));
 			}
 		}
 	}
@@ -149,6 +151,7 @@ public class KCountArray2 {
 		return freq;
 	}
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append("[");
@@ -192,11 +195,11 @@ public class KCountArray2 {
 	public String mem(){
 		long mem=(cells*cellBits)/8;
 		if(mem<(1<<20)){
-			return (String.format("%.2f KB", mem*1d/(1<<10)));
+			return (String.format(Locale.ROOT, "%.2f KB", mem*1d/(1<<10)));
 		}else if(mem<(1<<30)){
-			return (String.format("%.2f MB", mem*1d/(1<<20)));
+			return (String.format(Locale.ROOT, "%.2f MB", mem*1d/(1<<20)));
 		}else{
-			return (String.format("%.2f GB", mem*1d/(1<<30)));
+			return (String.format(Locale.ROOT, "%.2f GB", mem*1d/(1<<30)));
 		}
 	}
 	

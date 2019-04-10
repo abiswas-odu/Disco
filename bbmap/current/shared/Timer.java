@@ -1,20 +1,38 @@
 package shared;
 
 import java.io.PrintStream;
+import java.util.Locale;
 
 public class Timer {
 	
-	public Timer(){start();}
+	public Timer(){this(System.err, true);}
+	
+	public Timer(String s){
+		this(System.err, true);
+		if(outstream!=null){outstream.println(s);}
+	}
+	
+	public Timer(PrintStream outstream_, boolean addTab_){
+		outstream=outstream_;
+		addTab=addTab_;
+		start();
+	}
 	
 	public long start(String s){
-		outstream.println(s);
+		if(outstream!=null){outstream.println(s);}
 		return start();
+	}
+	
+	public long stopAndPrint(){
+		long x=stop();
+		if(outstream!=null){outstream.println(this);}
+		return x;
 	}
 	
 	public long stop(String s){
 		long x=stop();
 		if(addTab && s!=null && !s.endsWith("\t")){s=s+"\t";}
-		outstream.println(s+this);
+		if(outstream!=null){outstream.println(s+this);}
 		return x;
 	}
 	
@@ -30,8 +48,17 @@ public class Timer {
 		return time2;
 	}
 	
+	@Override
 	public String toString(){
-		return String.format("%.3f seconds.", elapsed/1000000000d);
+		return timeInSeconds(3)+" seconds.";
+	}
+	
+	public String timeInSeconds(int decimals) {
+		return String.format(Locale.ROOT, "%."+decimals+"f", timeInSeconds());
+	}
+	
+	public double timeInSeconds() {
+		return elapsed/1000000000d;
 	}
 
 	public long time1;

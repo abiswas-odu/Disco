@@ -1,15 +1,15 @@
 #!/bin/bash
-#bbduk in=<file> out=<file> ref=<ref file>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified January 4, 2016
+Last modified March 28, 2018
 
 Description:  Compares reads to the kmers in a reference dataset, optionally 
 allowing an edit distance. Splits the reads into two outputs - those that 
 match the reference, and those that don't. Can also trim (remove) the matching 
 parts of the reads rather than binning the reads.
+Please read bbmap/docs/guides/BBDukGuide.txt for more information.
 
 Usage:  bbduk.sh in=<input file> out=<output file> ref=<contaminant files>
 
@@ -17,11 +17,12 @@ Input may be stdin or a fasta or fastq file, compressed or uncompressed.
 If you pipe via stdin/stdout, please include the file type; e.g. for gzipped 
 fasta input, set in=stdin.fa.gz
 
-
 Input parameters:
 in=<file>           Main input. in=stdin.fq will pipe from stdin.
 in2=<file>          Input for 2nd read of pairs in a different file.
 ref=<file,file>     Comma-delimited list of reference files.
+                    In addition to filenames, you may also use the keywords:
+                    adapters, artifacts, phix, lambda, pjet, mtst, kapa
 literal=<seq,seq>   Comma-delimited list of literal reference sequences.
 touppercase=f       (tuc) Change all bases upper-case.
 interleaved=auto    (int) t/f overrides interleaved autodetection.
@@ -31,6 +32,7 @@ copyundefined=f     (cu) Process non-AGCT IUPAC reference bases by making all
                     possible unambiguous copies.  Intended for short motifs
                     or adapter barcodes, as time/memory use is exponential.
 samplerate=1        Set lower to only process a fraction of input reads.
+samref=<file>       Optional reference fasta for processing sam files.
 
 Output parameters:
 out=<file>          (outnonmatch) Write reads here that do not contain 
@@ -38,8 +40,11 @@ out=<file>          (outnonmatch) Write reads here that do not contain
                     to standard out.
 out2=<file>         (outnonmatch2) Use this to write 2nd read of pairs to a 
                     different file.
-outm=<file>         (outmatch) Write reads here that contain kmers matching
-                    the database.
+outm=<file>         (outmatch) Write reads here that fail filters.  In default
+                    kfilter mode, this means any read with a matching kmer.
+                    In any mode, it also includes reads that fail filters such
+                    as minlength, mingc, maxgc, entropy, etc.  In other words,
+                    it includes all reads that do not go to 'out'.
 outm2=<file>        (outmatch2) Use this to write 2nd read of pairs to a 
                     different file.
 outs=<file>         (outsingle) Use this to write singleton reads whose mate 
@@ -65,6 +70,7 @@ maxbasesout=-1      If positive, quit after writing approximately this many
                     bases to out (outu/outnonmatch).
 maxbasesoutm=-1     If positive, quit after writing approximately this many
                     bases to outm (outmatch).
+json=f              Print to screen in json format.
 
 Histogram output parameters:
 bhist=<file>        Base composition histogram by position.
@@ -73,10 +79,16 @@ qchist=<file>       Count of bases with each quality value.
 aqhist=<file>       Histogram of average read quality.
 bqhist=<file>       Quality histogram designed for box plots.
 lhist=<file>        Read length histogram.
+phist=<file>        Polymer length histogram.
 gchist=<file>       Read GC content histogram.
+ihist=<file>        Insert size histogram, for paired reads in mapped sam.
 gcbins=100          Number gchist bins.  Set to 'auto' to use read length.
+maxhistlen=6000     Set an upper bound for histogram lengths; higher uses 
+                    more memory.  The default is 6000 for some histograms
+                    and 80000 for others.
 
 Histograms for mapped sam/bam files only:
+histbefore=t        Calculate histograms from reads before processing.
 ehist=<file>        Errors-per-read histogram.
 qahist=<file>       Quality accuracy histogram of error rates versus quality 
                     score.
@@ -89,6 +101,7 @@ varfile=<file>      Ignore substitution errors listed in this file when
                     CallVariants.
 vcf=<file>          Ignore substitution errors listed in this VCF file 
                     when calculating error rates.
+ignorevcfindels=t   Also ignore indels listed in the VCF.
 
 Processing parameters:
 k=27                Kmer length used for finding contaminants.  Contaminants 
@@ -119,6 +132,8 @@ forbidn=f           (fn) Forbids matching of read kmers containing N.
 removeifeitherbad=t (rieb) Paired reads get sent to 'outmatch' if either is 
                     match (or either is trimmed shorter than minlen).  
                     Set to false to require both.
+trimfailures=f      Instead of discarding failed reads, trim them to 1bp.
+                    This makes the statistics a bit odd.
 findbestmatch=f     (fbm) If multiple matches, associate read with sequence 
                     sharing most kmers.  Reduces speed.
 skipr1=f            Don't do kmer-based operations on read 1.
@@ -129,6 +144,8 @@ recalibrate=f       (recal) Recalibrate quality scores.  Requires calibration
                     matrices generated by CalcTrueQuality.
 sam=<file,file>     If recalibration is desired, and matrices have not already
                     been generated, BBDuk will create them from the sam file.
+amino=f             Run in amino acid mode.  Some features have not been
+                    tested, but kmer-matching works fine.  Maximum k is 12.
 
 Speed and Memory parameters:
 threads=auto        (t) Set number of threads to use; default is number of 
@@ -150,31 +167,39 @@ speed=0             Ignore this fraction of kmer space (0-15 out of 16) in both
 Note: Do not use more than one of 'speed', 'qskip', and 'rskip'.
 
 Trimming/Filtering/Masking parameters:
-Note - if neither ktrim nor kmask is set, the default behavior is kfilter.
-All three are mutually exclusive.
+Note - if ktrim, kmask, and ksplit are unset, the default behavior is kfilter.
+All kmer processing modes are mutually exclusive.
+Reads only get sent to 'outm' purely based on kmer matches in kfilter mode.
 
 ktrim=f             Trim reads to remove bases matching reference kmers.
                     Values: 
-                            f (don't trim), 
-                            r (trim to the right), 
-                            l (trim to the left)
-kmask=f             Replace bases matching ref kmers with another symbol.
-                    Allows any non-whitespace character other than t or f,
-                    and processes short kmers on both ends.  'kmask=lc' will
+                       f (don't trim), 
+                       r (trim to the right), 
+                       l (trim to the left)
+kmask=              Replace bases matching ref kmers with another symbol.
+                    Allows any non-whitespace character, and processes short
+                    kmers on both ends if mink is set.  'kmask=lc' will
                     convert masked bases to lowercase.
 maskfullycovered=f  (mfc) Only mask bases that are fully covered by kmers.
+ksplit=f            For single-ended reads only.  Reads will be split into
+                    pairs around the kmer.  If the kmer is at the end of the
+                    read, it will be trimmed instead.  Singletons will go to
+                    out, and pairs will go to outm.  Do not use ksplit with
+                    other operations such as quality-trimming or filtering.
 mink=0              Look for shorter kmers at read tips down to this length, 
                     when k-trimming or masking.  0 means disabled.  Enabling
                     this will disable maskmiddle.
 qtrim=f             Trim read ends to remove bases with quality below trimq.
-                    Performed AFTER looking for kmers.
-                    Values: 
-                            rl (trim both ends), 
-                            f (neither end), 
-                            r (right end only), 
-                            l (left end only),
-                            w (sliding window).
-trimq=6             Regions with average quality BELOW this will be trimmed.
+                    Performed AFTER looking for kmers.  Values: 
+                       rl (trim both ends), 
+                       f (neither end), 
+                       r (right end only), 
+                       l (left end only),
+                       w (sliding window).
+trimq=6             Regions with average quality BELOW this will be trimmed,
+                    if qtrim is set to something other than f.  Can be a 
+                    floating-point number like 7.3.
+trimclip=f          Trim soft-clipped bases from sam files.
 minlength=10        (ml) Reads shorter than this after trimming will be 
                     discarded.  Pairs will be discarded if both are shorter.
 mlf=0               (minlengthfraction) Reads shorter than this fraction of 
@@ -184,6 +209,8 @@ maxlength=          Reads longer than this after trimming will be discarded.
 minavgquality=0     (maq) Reads with average quality (after trimming) below 
                     this will be discarded.
 maqb=0              If positive, calculate maq from this many initial bases.
+minbasequality=0    (mbq) Reads with any base below this quality (after 
+                    trimming) will be discarded.
 maxns=-1            If non-negative, reads with more Ns than this 
                     (after trimming) will be discarded.
 mcb=0               (minconsecutivebases) Discard reads without at least 
@@ -214,17 +241,38 @@ mingc=0             Discard reads with GC content below this.
 maxgc=1             Discard reads with GC content above this.
 gcpairs=t           Use average GC of paired reads.
                     Also affects gchist.
+tossjunk=f          Discard reads with invalid characters as bases.
+swift=f             Trim Swift sequences: Trailing C/T/N R1, leading G/A/N R2.
 
 Header-parsing parameters - these require Illumina headers:
 chastityfilter=f    (cf) Discard reads with id containing ' 1:Y:' or ' 2:Y:'.
 barcodefilter=f     Remove reads with unexpected barcodes if barcodes is set,
                     or barcodes containing 'N' otherwise.  A barcode must be
-                    the last part of the read header.
+                    the last part of the read header.  Values:
+                       t:     Remove reads with bad barcodes.
+                       f:     Ignore barcodes.
+                       crash: Crash upon encountering bad barcodes.
 barcodes=           Comma-delimited list of barcodes or files of barcodes.
 xmin=-1             If positive, discard reads with a lesser X coordinate.
 ymin=-1             If positive, discard reads with a lesser Y coordinate.
 xmax=-1             If positive, discard reads with a greater X coordinate.
 ymax=-1             If positive, discard reads with a greater Y coordinate.
+
+Polymer trimming:
+trimpolya=0         If greater than 0, trim poly-A or poly-T tails of
+                    at least this length on either end of reads.
+trimpolygleft=0     If greater than 0, trim poly-G prefixes of at least this
+                    length on the left end of reads.  Does not trim poly-C.
+trimpolygright=0    If greater than 0, trim poly-G tails of at least this 
+                    length on the right end of reads.  Does not trim poly-C.
+trimpolyg=0         This sets both left and right at once.
+filterpolyg=0       If greater than 0, remove reads with a poly-G prefix of
+                    at least this length (on the left).
+Note: there are also equivalent poly-C flags.
+
+Polymer tracking:
+pratio=base,base    'pratio=G,C' will print the ratio of G to C polymers.
+plen=20             Length of homopolymers to count.
 
 Entropy/Complexity parameters:
 entropy=-1          Set between 0 and 1 to filter reads with entropy below
@@ -232,24 +280,35 @@ entropy=-1          Set between 0 and 1 to filter reads with entropy below
 entropywindow=50    Calculate entropy using a sliding window of this length.
 entropyk=5          Calculate entropy using kmers of this length.
 minbasefrequency=0  Discard reads with a minimum base frequency below this.
+entropymask=f       Values:
+                       f:  Discard low-entropy sequences.
+                       t:  Mask low-entropy parts of sequences with N.
+                       lc: Change low-entropy parts of sequences to lowercase.
+entropymark=f       Mark each base with its entropy value.  This is on a scale
+                    of 0-41 and is reported as quality scores, so the output
+                    should be fastq or fasta+qual.
 
 Cardinality estimation:
 cardinality=f       (loglog) Count unique kmers using the LogLog algorithm.
+cardinalityout=f    (loglogout) Count unique kmers in output reads.
 loglogk=31          Use this kmer length for counting.
 loglogbuckets=1999  Use this many buckets for counting.
 
 Java Parameters:
 
--Xmx                This will be passed to Java to set memory usage, overriding 
-                    the program's automatic memory detection. -Xmx20g will 
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will 
                     specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  
                     The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an 
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
-There is a changelog at /bbmap/docs/changelog_bbduk.txt
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "	
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -267,7 +326,10 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
+silent=0
+json=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
@@ -287,14 +349,35 @@ calcXmx () {
 calcXmx "$@"
 
 bbduk() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
-	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBDukF $@"
-	echo $CMD >&2
+	#local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBDuk $@"
+	local CMD="java $EA $z $z2 -cp $CP jgi.BBDuk $@"
+	if [[ $silent == 0 ]] && [[ $json == 0 ]]; then
+		echo $CMD >&2
+	fi
 	eval $CMD
 }
 

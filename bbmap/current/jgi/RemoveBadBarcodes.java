@@ -33,6 +33,7 @@ public class RemoveBadBarcodes extends BBTool_ST {
 		super(args);
 	}
 	
+	@Override
 	void setDefaults(){}
 	
 	@Override

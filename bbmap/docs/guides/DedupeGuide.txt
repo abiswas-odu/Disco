@@ -1,6 +1,6 @@
 Dedupe Guide
 Written by Brian Bushnell
-Last updated December 18, 2015
+Last updated November 20, 2015
 
 Dedupe was written to eliminate duplicate contigs in assemblies, and later expanded to find all contained and overlapping sequences in a dataset, allowing a specified number of substitutions or edit distance.  It is now also capable of clustering sequences based on similarity, and printing dot-formatted all-to-all overlap graphs.
 Kmer-based assemblers do not typically create redundant contigs when working correctly, though an exception can be made in the case of transcriptome assemblers.  However, overlap-based assemblers may create duplicate sequences, and merged kmer-based assemblies (such as 5 assemblies of the same reads with different kmer lengths) will usually contain massive redundancy.  Also, public databases such as nt and RefSeq often have hundreds of thousands of duplicate sequences due to poor curation.  Dedupe is primarily designed to handle these situations.  While there are other tools designed for this purpose, none are even remotely as fast or comprehensive as Dedupe.
@@ -104,6 +104,12 @@ then:
 dedupe.sh in=filtered.fq csf=stats_e26.txt outbest=best_e26.fq qin=33 usejni=t am=f ac=f fo c rnc=f mcs=3 k=27 mo=1420 ow cc pto nam=4 e=26 pattern=cluster_%.fq dot=graph.dot
 
 This first filters out low-quality data and probable chimeras (based on length) using Reformat.  Then, clustering is done allowing up to 26 edits (this was chosen to allow roughly 99% accurate 1540bp amplicons to overlap; it should be adjusted depending on the accuracy and length of the data).  A minimum overlap length is set to 1420bp.  "nam=4 k=27" means 4 nonoverlapping 27-mers are used as seeds from each end of the sequences.
+
+
+*Proteins / Amino Acids*
+
+Dedupe supports amino acid space via the 'amino' flag.  This also changes the default kmer length to 10.
+In amino acid mode, all flags related to canonicity and reverse-complementation are disabled, and nam (numaffixmaps) is currently limited to 2 per tip (2 suffix and 2 prefix kmers per sequence as seeds for overlap detection).
 
 
 *Set Operations*

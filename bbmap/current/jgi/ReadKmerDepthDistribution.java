@@ -6,31 +6,28 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 import bloom.KCountArray;
 import bloom.KmerCount7MTA;
 import bloom.KmerCountAbstract;
-
-
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import dna.AminoAcid;
-import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 
 
@@ -43,10 +40,12 @@ import shared.Tools;
 public class ReadKmerDepthDistribution {
 
 	public static void main(String[] args){
-		for(String s : args){if(s.contains("=standardout") || s.contains("=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
-		
-		if(args.length<1){throw new RuntimeException("No parameters.");}
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		String reads1=(args[0].indexOf("=")>0 ? null : args[0]);
 		String reads2=(reads1!=null && args.length>1 ? args[1] : null);
@@ -60,7 +59,7 @@ public class ReadKmerDepthDistribution {
 			if(reads2!=null && !reads2.contains(",")){
 				File f=new File(reads2);
 				if(!f.exists() || !f.isFile()){throw new RuntimeException(reads2+" does not exist.");}
-				if(reads1.equalsIgnoreCase(reads2)){
+				if(reads2.equalsIgnoreCase(reads1)){
 					throw new RuntimeException("Both input files are the same.");
 				}
 			}
@@ -68,6 +67,7 @@ public class ReadKmerDepthDistribution {
 		
 		KmerCountAbstract.minQuality=4;
 		KmerCountAbstract.minProb=0.4f;
+		KmerCountAbstract.CANONICAL=true;
 		
 		int k=31;
 		int cbits=32;
@@ -85,34 +85,24 @@ public class ReadKmerDepthDistribution {
 		String histFile=null;
 		int threads=-1;
 		ReadWrite.ZIPLEVEL=2;
-		
 		int minq=KmerCountAbstract.minQuality;
-		KmerCountAbstract.CANONICAL=true;
 		
 		boolean auto=true;
 		boolean deterministic=true;
 		
-		FastaReadInputStream.TARGET_READ_LEN=Integer.MAX_VALUE;
-		
 		List<String> extra=null;
 		
 		long memory=Runtime.getRuntime().maxMemory();
-		long tmemory=Runtime.getRuntime().totalMemory();
-//		assert(false) : memory+", "+tmemory;
 		
 		Parser parser=new Parser();
 		for(int i=(reads1==null ? 0 : 1); i<args.length; i++){
 			if(args[i]==null){args[i]="null";}
 			final String arg=args[i];
 			final String[] split=arg.split("=");
-			assert(split.length<3) : "To many '=' signs: "+args[i];
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -269,7 +259,7 @@ public class ReadKmerDepthDistribution {
 //		}
 		
 		if(threads<=0){
-			if(auto){THREADS=Data.LOGICAL_PROCESSORS;}
+			if(auto){THREADS=Shared.LOGICAL_PROCESSORS;}
 			else{THREADS=8;}
 		}else{
 			THREADS=threads;
@@ -284,7 +274,7 @@ public class ReadKmerDepthDistribution {
 			long mem=usable-(USE_HISTOGRAM ? (HIST_LEN*8*(1)) : 0);
 			if(buildpasses>1){mem/=2;}
 			cells=(mem*8)/cbits;
-//			
+//
 //			long tablebytes=((1L<<matrixbits)*cbits)/8;
 //			if(tablebytes*3<usable){matrixbits++;}
 //			outstream.println(tablebytes/1000000+", "+usable/1000000+", "+(tablebytes*3)/1000000);
@@ -329,7 +319,7 @@ public class ReadKmerDepthDistribution {
 			outstream.println("min depth:        \t"+MIN_DEPTH);
 			outstream.println("max depth:        \t"+MAX_DEPTH);
 			outstream.println("min good kmers:   \t"+MIN_KMERS_OVER_MIN_DEPTH);
-			outstream.println("depth percentile: \t"+String.format("%.1f", 100*DEPTH_PERCENTILE));
+			outstream.println("depth percentile: \t"+String.format(Locale.ROOT, "%.1f", 100*DEPTH_PERCENTILE));
 			outstream.println("remove duplicates:\t"+!KmerCountAbstract.KEEP_DUPLICATE_KMERS);
 			outstream.println("fix spikes:       \t"+FIX_SPIKES);
 			if(USE_HISTOGRAM && HIST_LEN>0){
@@ -357,23 +347,25 @@ public class ReadKmerDepthDistribution {
 		KCountArray prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(reads1, reads2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null, 0);
+			prefilterArray=KmerCount7MTA.makeKca(reads1, reads2, extra, k, 2, gap, precells, prehashes, minq, true, false, false,
+					tablereads, 1, buildStepsize, 1, 1, null, 0, Shared.AMINO_IN);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 			double uf=prefilterArray.usedFraction();
 			if(uf>0.6){
-				outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" : 
+				outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" :
 					uf>0.7 ? "fairly" : "somewhat")+" full, which may reduce accuracy for kmers of depth under 3.  Ideal load is under 60% used." +
 						"\nFor better accuracy, run on a node with more memory; quality-trim or error-correct reads; " +
 						"or increase the values of the minprob flag to reduce spurious kmers.");
 			}
 		}
-		kca=KmerCount7MTA.makeKca(reads1, reads2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue));
+		kca=KmerCount7MTA.makeKca(reads1, reads2, extra, k, cbits, gap, cells, hashes, minq, true, false, false,
+				tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue), Shared.AMINO_IN);
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));
 		double uf=kca.usedFraction();
 		if(uf>0.6){
-			outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" : 
+			outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" :
 				uf>0.7 ? "fairly" : "somewhat")+" full, which may reduce accuracy.  Ideal load is under 60% used." +
 				"\nFor better accuracy, use the 'prefilter' flag; run on a node with more memory; quality-trim or error-correct reads; " +
 					"or increase the values of the minprob flag to reduce spurious kmers.  In practice you should still get good normalization results " +
@@ -413,7 +405,7 @@ public class ReadKmerDepthDistribution {
 		outstream.println("Estimated unique kmers:     \t"+estUnique);//+", or "+estUnique+" counting forward kmers only.");
 //		outstream.println("(Includes forward and reverse kmers)");
 		outstream.println();
-		outstream.println("Table creation time:\t\t"+ht);//+"   \t"+String.format("%.2f", totalBases*1000000.0/(ht.elapsed))+" kb/sec");
+		outstream.println("Table creation time:\t\t"+ht);//+"   \t"+String.format(Locale.ROOT, "%.2f", totalBases*1000000.0/(ht.elapsed))+" kb/sec");
 		
 		long bases=0;
 		
@@ -427,8 +419,10 @@ public class ReadKmerDepthDistribution {
 		printTopology();
 		
 		t.stop();
-		outstream.println("\nTotal time:      \t\t"+t+"   \t"+String.format("%.2f", bases*1000000.0/(t.elapsed))+" kb/sec");
+		outstream.println("\nTotal time:      \t\t"+t+"   \t"+String.format(Locale.ROOT, "%.2f", bases*1000000.0/(t.elapsed))+" kb/sec");
 		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	
@@ -448,15 +442,15 @@ public class ReadKmerDepthDistribution {
 		double dfl=mult*fl;
 		
 		System.err.println("\nDepth Topology:\t");
-		System.err.println("Spikes:     \t\t\t"+(dsp<10 ? " " : "")+String.format("%.3f%%  \t%d",dsp,sp));
-		System.err.println("Peaks:      \t\t\t"+(dpe<10 ? " " : "")+String.format("%.3f%%  \t%d",dpe,pe));
-		System.err.println("Valleys:    \t\t\t"+(dva<10 ? " " : "")+String.format("%.3f%%  \t%d",dva,va));
-		System.err.println("Slopes:     \t\t\t"+(dsl<10 ? " " : "")+String.format("%.3f%%  \t%d",dsl,sl));
-		System.err.println("Flats:      \t\t\t"+(dfl<10 ? " " : "")+String.format("%.3f%%  \t%d",dfl,fl));
+		System.err.println("Spikes:     \t\t\t"+(dsp<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dsp,sp));
+		System.err.println("Peaks:      \t\t\t"+(dpe<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dpe,pe));
+		System.err.println("Valleys:    \t\t\t"+(dva<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dva,va));
+		System.err.println("Slopes:     \t\t\t"+(dsl<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dsl,sl));
+		System.err.println("Flats:      \t\t\t"+(dfl<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dfl,fl));
 	}
 
 
-	public static long count(String in1, String in2, KCountArray kca, int k, long maxReads, 
+	public static long count(String in1, String in2, KCountArray kca, int k, long maxReads,
 			String outKeep, boolean overwrite, String histFile, long estUnique) {
 		final ConcurrentReadInputStream cris;
 		{
@@ -509,7 +503,7 @@ public class ReadKmerDepthDistribution {
 	
 	
 	
-	public static long downsample(ConcurrentReadInputStream cris, KCountArray kca, int k, long maxReads, ConcurrentReadOutputStream rosKeep, 
+	public static long downsample(ConcurrentReadInputStream cris, KCountArray kca, int k, long maxReads, ConcurrentReadOutputStream rosKeep,
 			String histFile, boolean overwrite, long estUnique) {
 		Timer tdetect=new Timer();
 		tdetect.start();
@@ -559,16 +553,16 @@ public class ReadKmerDepthDistribution {
 		
 //		outstream.println();
 		tdetect.stop();
-		outstream.println("Table read time: \t\t"+tdetect+"   \t"+String.format("%.2f", totalBases*1000000.0/(tdetect.elapsed))+" kb/sec");
+		outstream.println("Table read time: \t\t"+tdetect+"   \t"+String.format(Locale.ROOT, "%.2f", totalBases*1000000.0/(tdetect.elapsed))+" kb/sec");
 		
 		{
 			String pad="";
 			String s=""+totalReads;
 			while(pad.length()+s.length()<9){pad+=" ";}
-			outstream.println("Total reads in:  \t\t"+totalReads+pad+String.format("\t(%.3f%% Kept)", (readsKept*100.0/totalReads)));
+			outstream.println("Total reads in:  \t\t"+totalReads+pad+String.format(Locale.ROOT, "\t(%.3f%% Kept)", (readsKept*100.0/totalReads)));
 			s=""+totalBases;
 			while(pad.length()+s.length()<9){pad+=" ";}
-			outstream.println("Total bases in:  \t\t"+totalBases+pad+String.format("\t(%.3f%% Kept)", (basesKept*100.0/totalBases)));
+			outstream.println("Total bases in:  \t\t"+totalBases+pad+String.format(Locale.ROOT, "\t(%.3f%% Kept)", (basesKept*100.0/totalBases)));
 		}
 //		outstream.println();
 		if(histogram_total!=null){
@@ -662,15 +656,15 @@ public class ReadKmerDepthDistribution {
 			outstream.println("The most accurate value is the greater of the two.");
 			outstream.println();
 			
-			outstream.println("Percent unique:               \t"+(uniqueM<10 ? " " : "")+String.format("%.2f%%", uniqueM));
+			outstream.println("Percent unique:               \t"+(uniqueM<10 ? " " : "")+String.format(Locale.ROOT, "%.2f%%", uniqueM));
 
-			outstream.println("Depth average:                \t"+String.format("%.2f\t(unique kmers)", avg_unique));
-			outstream.println("Depth median:                 \t"+String.format("%d\t(unique kmers)", median_unique));
-			outstream.println("Depth standard deviation:     \t"+String.format("%.2f\t(unique kmers)", stdev_unique));
+			outstream.println("Depth average:                \t"+String.format(Locale.ROOT, "%.2f\t(unique kmers)", avg_unique));
+			outstream.println("Depth median:                 \t"+String.format(Locale.ROOT, "%d\t(unique kmers)", median_unique));
+			outstream.println("Depth standard deviation:     \t"+String.format(Locale.ROOT, "%.2f\t(unique kmers)", stdev_unique));
 			
-			outstream.println("\nDepth average:                \t"+String.format("%.2f\t(all kmers)", avg_all));
-			outstream.println("Depth median:                 \t"+String.format("%d\t(all kmers)", median_all));
-			outstream.println("Depth standard deviation:     \t"+String.format("%.2f\t(all kmers)", stdev_all));
+			outstream.println("\nDepth average:                \t"+String.format(Locale.ROOT, "%.2f\t(all kmers)", avg_all));
+			outstream.println("Depth median:                 \t"+String.format(Locale.ROOT, "%d\t(all kmers)", median_all));
+			outstream.println("Depth standard deviation:     \t"+String.format(Locale.ROOT, "%.2f\t(all kmers)", stdev_all));
 		}
 		
 		return totalBases;
@@ -681,7 +675,7 @@ public class ReadKmerDepthDistribution {
 	/**
 	 * Locates and fixes spikes in a coverage profile (potentially) caused by false positives in a bloom filter.
 	 * Theory:  If a high-count kmer is adjacent on both sides to low-count kmers, it may be a false positive.
-	 * It could either be reduced to the max of the two flanking points or examined in more detail. 
+	 * It could either be reduced to the max of the two flanking points or examined in more detail.
 	 * @param array An array of kmer counts for adjacent kmers in a read.
 	 */
 	private static void fixSpikes(int[] array){
@@ -732,11 +726,11 @@ public class ReadKmerDepthDistribution {
 					////					array[i]=kca.readPreciseMin(key, k, CANONICAL);
 					//				}
 				}
-				//			else 
+				//			else
 				//				if(Tools.max(ada, adc)>=Tools.max(2, Tools.min((int)a, b, (int)c)/4)){
 				//					array[i]=kca.readPrecise(key, k, CANONICAL);
 				//				}
-				//			else 
+				//			else
 				//				if(b>a+1 || b>c+1){
 				//					//steep
 				//					array[i]=kca.readPrecise(key, k, CANONICAL);
@@ -773,19 +767,13 @@ public class ReadKmerDepthDistribution {
 		if(slopecount>0){slopes.addAndGet(slopecount);}
 	}
 	
-
-	/**
-	 * @param r
-	 * @param kca
-	 * @return
-	 */
 	public static int[] generateCoverage(Read r, KCountArray kca, int k, int[] out, long[] kmers) {
 		if(k>31){return generateCoverageLong(r, kca, k, out);}
 		if(kca.gap>0){throw new RuntimeException("Gapped reads: TODO");}
 		if(r==null || r.bases==null || r.length()<k){return new int[] {0};}
 		
 		final int kbits=2*k;
-		final long mask=~((-1L)<<(kbits));
+		final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 		final int gap=kca.gap;
 		
 		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
@@ -827,13 +815,6 @@ public class ReadKmerDepthDistribution {
 		return out;
 	}
 	
-	
-
-	/**
-	 * @param r
-	 * @param kca
-	 * @return
-	 */
 	public static int[] generateCoverageLong(Read r, KCountArray kca, int k, int[] out) {
 		assert(k>31);
 		if(kca.gap>0){throw new RuntimeException();}
@@ -893,6 +874,7 @@ public class ReadKmerDepthDistribution {
 			rosk=rosk_;
 		}
 		
+		@Override
 		public void run(){
 			countInThread();
 		}
@@ -902,12 +884,12 @@ public class ReadKmerDepthDistribution {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			final ArrayList<Read> keep=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
+			final ArrayList<Read> keep=new ArrayList<Read>(Shared.bufferLen());
 			
 			int[] cov1=null;
 			long[] kmers1=null;
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				for(int rnum=0; rnum<reads.size(); rnum++){
 					Read r=reads.get(rnum);
 					Read r2=r.mate;
@@ -972,13 +954,13 @@ public class ReadKmerDepthDistribution {
 				}
 				keep.clear();
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){System.err.println("Returned list");}
 		}
 		
@@ -1026,7 +1008,7 @@ public class ReadKmerDepthDistribution {
 		}
 		
 		private final ConcurrentReadInputStream cris;
-		private final KCountArray kca; 
+		private final KCountArray kca;
 		private final int k;
 		/** Stream for kept reads */
 		private final ConcurrentReadOutputStream rosk;
@@ -1041,7 +1023,7 @@ public class ReadKmerDepthDistribution {
 		public long basesTossed=0;
 	}
 	
-	public static PrintStream outstream=Data.sysout;
+	public static PrintStream outstream=System.err;
 
 	public static int THREAD_HIST_LEN=1<<12;
 	public static int HIST_LEN=1<<20;

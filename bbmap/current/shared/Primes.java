@@ -4,9 +4,10 @@ import java.io.File;
 import java.util.Arrays;
 
 import dna.Data;
-
+import fileIO.ByteFile1;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import structures.LongList;
 
 /**
  * @author Brian Bushnell
@@ -68,7 +69,7 @@ public class Primes {
 		long next=1;
 		
 		if(!new File(in).exists()){throw new RuntimeException("File not found: "+in);}
-		TextFile tf=new TextFile(in, true, false);
+		TextFile tf=new TextFile(in, true);
 		TextStreamWriter tsw=new TextStreamWriter(out, true, false, false);
 		tsw.start();
 		
@@ -114,25 +115,29 @@ public class Primes {
 //		}
 //		throw new RuntimeException("No primes big enough for "+x);
 	}
+
+	public static int primeAtMost(int x){
+		return (int)primeAtMost((long)x);
+	}
 	
-	
-	public static long primeAtMost(long x){
-		int loc=Arrays.binarySearch(primes, x);
+	public static long primeAtMost(final long x){
+		final int loc0=Arrays.binarySearch(primes, x);
+		int loc=loc0;
 		if(loc<0){
 			loc=-(loc+1);
 			assert(loc>=primes.length || primes[loc]>x) : x;
 		}
 		assert(loc>=0) : loc+", "+x;
 		if(loc>=primes.length){//Out of bounds
-			long d=(long)Math.pow(x, 0.4);
-			long a=primeAtMost(x/d);
-			long b=primeAtMost(x/a);
-			long c=a*b;
+			final long d=(long)Math.pow(x, 0.4);
+			final long a=primeAtMost(x/d);
+			final long b=primeAtMost(x/a);
+			final long c=a*b;
 			assert(c<=x && c>(x*7)/8) : x+", "+a+", "+b+", "+c+", "+d;
 			return c;
 		}
 		assert(loc>=0) : loc+", "+x;
-		assert(x>=primes[0]) : loc+", "+x+", "+primes[0];
+		assert(x>=primes[0]) : loc0+", "+loc+", "+x+", "+primes[0];
 		while(primes[loc]>x){loc--;}
 		return primes[loc];
 		
@@ -143,19 +148,30 @@ public class Primes {
 	}
 	
 
-	/**
-	 * @return
-	 */
+//	/**
+//	 * @return
+//	 */
+//	private static long[] fetchPrimes() {
+//		String fname=Data.findPath("?primes.txt.gz");
+//		
+//		TextFile tf=new TextFile(fname, false);
+//		String[] lines=tf.toStringLines();
+//		long[] array=new long[lines.length];
+//		for(int i=0; i<lines.length; i++){
+//			array[i]=Long.parseLong(lines[i].trim());
+//		}
+//		return array;
+//	}
+	
 	private static long[] fetchPrimes() {
 		String fname=Data.findPath("?primes.txt.gz");
 		
-		TextFile tf=new TextFile(fname, false, false);
-		String[] lines=tf.toStringLines();
-		long[] array=new long[lines.length];
-		for(int i=0; i<lines.length; i++){
-			array[i]=Long.parseLong(lines[i].trim());
+		ByteFile1 tf=new ByteFile1(fname, false);
+		LongList list=new LongList();
+		for(byte[] line=tf.nextLine(); line!=null; line=tf.nextLine()){
+			list.add(Tools.parseLong(line));
 		}
-		return array;
+		return list.toArray();
 	}
 	
 	public static final long[] primes=fetchPrimes();

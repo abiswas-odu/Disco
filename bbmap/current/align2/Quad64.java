@@ -8,6 +8,7 @@ public class Quad64 implements Comparable<Quad64>{
 		site=val_;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		assert(false);
 		return site==((Quad64)other).site;
@@ -23,6 +24,7 @@ public class Quad64 implements Comparable<Quad64>{
 //		return(x>0 ? 1 : x<0 ? -1 : column-other.column);
 	}
 	
+	@Override
 	public String toString(){
 		return("("+column+","+row+","+site+")");
 	}

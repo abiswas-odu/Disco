@@ -2,22 +2,20 @@ package pacbio;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import stream.SiteScore;
-import structures.CoverageArray;
-import structures.CoverageArray2;
-import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays2;
-import dna.Parser;
-import dna.Range;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.Timer;
 import shared.Tools;
+import stream.SiteScore;
+import structures.CoverageArray;
+import structures.CoverageArray2;
+import structures.Range;
 
 /**
  * @author Brian Bushnell
@@ -27,7 +25,12 @@ import shared.Tools;
 public class SplitOffPerfectContigs {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		
 //		ChromosomeArray c=new ChromosomeArray(1, (byte)1, "ANNNAAAANAAANNA");
@@ -55,11 +58,9 @@ public class SplitOffPerfectContigs {
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=split.length>1 ? split[1] : "true";
+			String b=split.length>1 ? split[1] : null;
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("genome") || a.equals("build")){
+			if(a.equals("genome") || a.equals("build")){
 				Data.setGenome(Integer.parseInt(b));
 				name=Data.name;
 				source=Data.genomeSource;
@@ -103,7 +104,7 @@ public class SplitOffPerfectContigs {
 		
 		if(contigfile!=null){
 			if(new File(contigfile).exists()){
-				TextFile tf=new TextFile(contigfile, false, false);
+				TextFile tf=new TextFile(contigfile, false);
 				String s=tf.nextLine();
 				if(s!=null){contig=Long.parseLong(s);}
 				tf.close();
@@ -170,7 +171,7 @@ public class SplitOffPerfectContigs {
 		System.out.println("Time:\t"+t);
 	}
 	
-	public static long writeContigs(ChromosomeArray cha, CoverageArray ca, long contig, int trigger, int minAcceptableCoverage, int fastaBlocklen, 
+	public static long writeContigs(ChromosomeArray cha, CoverageArray ca, long contig, int trigger, int minAcceptableCoverage, int fastaBlocklen,
 			TextStreamWriter tsw, int buildout, int tipbuffer){
 		
 		ArrayList<Range> list=cha.toContigRanges(trigger);
@@ -343,7 +344,7 @@ public class SplitOffPerfectContigs {
 		
 		String[] files=sitesfile.split(",");
 		for(String f : files){
-			TextFile tf=new TextFile(f, false, false);
+			TextFile tf=new TextFile(f, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				for(String s : split){

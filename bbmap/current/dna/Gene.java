@@ -1,12 +1,14 @@
 package dna;
 import java.io.Serializable;
-import java.util.HashSet;
+
+import shared.Shared;
+import shared.Tools;
 
 
 public class Gene implements Comparable<Gene>, Serializable{
 	
 //	/**
-//	 * 
+//	 *
 //	 */
 	private static final long serialVersionUID = -1342555621377050981L;
 	
@@ -43,9 +45,9 @@ public class Gene implements Comparable<Gene>, Serializable{
 		primarySource=-1;
 	}
 	
-	public Gene(byte chrom, byte strand_, int txStart_, int txStop_, int cdStart_, int cdStop_, int gid, 
-			String name_, String trans_, String protTrans_, String status_, String completeness_, 
-			Exon[] exons_, boolean untran, boolean pseudo_, boolean valid_, 
+	public Gene(byte chrom, byte strand_, int txStart_, int txStop_, int cdStart_, int cdStop_, int gid,
+			String name_, String trans_, String protTrans_, String status_, String completeness_,
+			Exon[] exons_, boolean untran, boolean pseudo_, boolean valid_,
 			String primarySource_, String descript_, String fullDescript_){
 		
 		chromosome=chrom;
@@ -55,13 +57,13 @@ public class Gene implements Comparable<Gene>, Serializable{
 		mrnaAcc=((trans_==null || trans_.length()<1 || trans_.equals("-")) ? null : trans_);
 		proteinAcc=((protTrans_==null || protTrans_.length()<1 || protTrans_.equals("-")) ? null : protTrans_);
 		
-		primarySource=primarySource_==null ? -1 : (byte)find3(primarySource_, sourceCodes);
+		primarySource=primarySource_==null ? -1 : (byte)Tools.find(primarySource_, sourceCodes);
 		description=descript_;
 		fullDescription=fullDescript_;
 		
 		
-		status=status_==null ? -1 : (byte)find3(status_, statusCodes);
-		completeness=completeness_==null ? -1 : (byte)find3(completeness_, completenessCodes);
+		status=status_==null ? -1 : (byte)Tools.find(status_, statusCodes);
+		completeness=completeness_==null ? -1 : (byte)Tools.find(completeness_, completenessCodes);
 		strand=strand_;
 		
 		exons=exons_;
@@ -115,7 +117,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 		//assert(exonCodeLength%3 == 0); //This should be true with a correct database
 		
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			utrLength5prime=untranslated ? 0 : utr0;
 			utrLength3prime=untranslated ? 0 : utr2;
 		}else{
@@ -132,7 +134,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	
 	public Gene merge(Gene g){
 
-		assert((exons==null && g.exons==null) || 
+		assert((exons==null && g.exons==null) ||
 				(exons!=null && g.exons!=null && exons.length==g.exons.length));
 //		assert(exonLength==g.exonLength);
 		assert(Math.abs(exonLength-g.exonLength)<=8) : "\n\n"+this+"\n\n"+g+"\n\n";
@@ -208,27 +210,21 @@ public class Gene implements Comparable<Gene>, Serializable{
 //		if(Xvalid){}
 		
 		//TODO Note that the readCorrectly field gets lost here
-		Gene out=new Gene(chromosome, strand, XtxStart, XtxStop, XcodeStart, XcodeStop, Xid, 
-				symbol, XmrnaAcc, XproteinAcc, 
-				Xstatus< 0 ? null : statusCodes[Xstatus], Xcompleteness<0 ? null : completenessCodes[Xcompleteness], 
+		Gene out=new Gene(chromosome, strand, XtxStart, XtxStop, XcodeStart, XcodeStop, Xid,
+				symbol, XmrnaAcc, XproteinAcc,
+				Xstatus< 0 ? null : statusCodes[Xstatus], Xcompleteness<0 ? null : completenessCodes[Xcompleteness],
 				exons, Xuntranslated, Xpseudo, Xvalid, sourceCodes[primarySource], Xdescription, XfullDescription);
 		
 		return out;
 	}
-
 	
 	public static byte toStrand(String s){
-		byte r=2;
-		if("-".equals(s)){
-			r=1;
-		}else if("+".equals(s)){
-			r=0;
-		}else if("?".equals(s) || ".".equals(s)){
-			r=2;
-		}else{
-			throw new RuntimeException("Unknown strand: "+s);
-		}
-		return r;
+		assert(s!=null && s.length()==1);
+		final char c=s.charAt(0);
+		if(c=='+'){return Shared.PLUS;}
+		else if(c=='-'){return Shared.MINUS;}
+		else if(c=='?'){return 2;}
+		throw new RuntimeException("Unknown strand: "+s);
 	}
 	
 	public static int toChromosome(final String s){
@@ -239,9 +235,9 @@ public class Gene implements Comparable<Gene>, Serializable{
 //		if(s2.equals("MT")){s2="M";}
 ////		int loc=find2(s2.toUpperCase(), chromCodes);
 //		int loc=find3(s2.toUpperCase(), chromCodes);
-//		
+//
 //		if(loc<0){
-//			if(!Character.isDigit(s2.charAt(0))){
+//			if(!Tools.isDigit(s2.charAt(0))){
 //				loc=find3("U", chromCodes);
 //			}else{
 //				try {
@@ -271,7 +267,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 		if(s2.startsWith("=")){s2=s2.substring(1);}
 		
-		assert(Character.isDigit(s2.charAt(0))) : s;
+		assert(Tools.isDigit(s2.charAt(0))) : s;
 		
 		return Integer.parseInt(s2);
 	}
@@ -333,7 +329,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 		int off=0;
 
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 
 			//		System.out.println();
 			for(Exon e : exons){
@@ -352,7 +348,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 				off+=temp;
 			}
 
-		}else if(strand==MINUS){
+		}else if(strand==Shared.MINUS){
 			for(int i=exons.length-1; i>=0; i--){
 				Exon e=exons[i];
 
@@ -421,7 +417,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 //			assert(false) : ("\n\nLooking for "+index+" in\n"+this+
 //					"\n\nwith exons\n"+Arrays.toString(exons)+"\n\nResult: "+off+"\n\n");
 //		}
-//		
+//
 //		if((index-143053111)>-10 && (index-143053111)<10){
 //			assert(false) : ("\n\nLooking for "+index+" in\n"+this+
 //					"\n\nwith exons\n"+Arrays.toString(exons)+"\n\nResult: "+off+"\n\n");
@@ -445,7 +441,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	public static boolean isHypothetical(String s){
 		if(s==null){return false;}
 		if(s.startsWith("C") && s.contains("orf")){return true;}
-		if(s.length()>=4 && s.startsWith("LOC") && Character.isDigit(s.charAt(3))){return true;}
+		if(s.length()>=4 && s.startsWith("LOC") && Tools.isDigit(s.charAt(3))){return true;}
 		return false;
 	}
 	
@@ -546,7 +542,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	 * @param a
 	 * @param b
 	 * @return {
-	 * 	distance,<br> 
+	 * 	distance,<br>
 	 * 	nearest exon number (-1 means coding start or stop),<br>
 	 * 	side (0 means start, 1 means stop),<br>
 	 * 	position (1 means inside, 2 means outside, 3 means both),<br>
@@ -574,10 +570,10 @@ public class Gene implements Comparable<Gene>, Serializable{
 					position=0;
 					if(a<point){position|=2;}
 					if(b>=point){position|=1;}
-					side=(strand==PLUS ? 0 : 1);
-					if(strand==PLUS){
+					side=(strand==Shared.PLUS ? 0 : 1);
+					if(strand==Shared.PLUS){
 						side=0;
-					}else if(strand==MINUS){
+					}else if(strand==Shared.MINUS){
 						side=1;
 					}
 				}
@@ -591,7 +587,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 					position=0;
 					if(b>point){position|=2;}
 					if(a<=point){position|=1;}
-					side=(strand==PLUS ? 1 : 0);
+					side=(strand==Shared.PLUS ? 1 : 0);
 				}
 			}
 		}
@@ -605,7 +601,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 				bestDist=x;
 				bestSite=point;
 				nearestExon=i;
-				side=(strand==PLUS ? 0 : 1);
+				side=(strand==Shared.PLUS ? 0 : 1);
 				position=0;
 				if(a<point){position|=2;}
 				if(b>=point){position|=1;}
@@ -617,14 +613,14 @@ public class Gene implements Comparable<Gene>, Serializable{
 				bestDist=x;
 				bestSite=point;
 				nearestExon=i;
-				side=(strand==PLUS ? 1 : 0);
+				side=(strand==Shared.PLUS ? 1 : 0);
 				position=0;
 				if(b>point){position|=2;}
 				if(a<=point){position|=1;}
 			}
 		}
 		
-		if(nearestExon>=0 && strand==MINUS){
+		if(nearestExon>=0 && strand==Shared.MINUS){
 			nearestExon=exons.length-nearestExon-1;
 		}
 		
@@ -667,7 +663,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	public boolean intersectsUTR3(int a, int b){
 		if(!intersectsTx(a,b)){return false;}
 		if(untranslated){return false;}
-		if(strand==MINUS){
+		if(strand==Shared.MINUS){
 			if(overlap(a, b, txStart, codeStart)){return true;}
 		}else{
 			if(overlap(a, b, codeStop, txStop)){return true;}
@@ -678,7 +674,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	public boolean intersectsUTR5(int a, int b){
 		if(!intersectsTx(a,b)){return false;}
 		if(untranslated){return false;}
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			if(overlap(a, b, txStart, codeStart)){return true;}
 		}else{
 			if(overlap(a, b, codeStop, txStop)){return true;}
@@ -688,7 +684,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	
 	private static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	
 	public static final String header(){
@@ -703,6 +699,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 //		return driver.ToRefGeneFormat.format(this);
 //	}
 	
+	@Override
 	public String toString(){
 		
 		StringBuilder sb=new StringBuilder(256);
@@ -713,7 +710,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		sb.append(mrnaAcc+"\t");
 		assert(proteinAcc==null || !proteinAcc.equals("null"));
 		sb.append((proteinAcc==null ? "" : proteinAcc)+"\t");
-		sb.append(strandCodes[strand]+"\t");
+		sb.append(Shared.strandCodes[strand]+"\t");
 		sb.append(codeStart+"\t");
 		sb.append(codeStop+"\t");
 		sb.append(txStart+"\t");
@@ -751,11 +748,12 @@ public class Gene implements Comparable<Gene>, Serializable{
 		sb.append("chr"+chromosome+"\t");
 		sb.append(symbol+"\t");
 		sb.append(mrnaAcc+"\t");
-		sb.append(strandCodes[strand]+"\t");
+		sb.append(Shared.strandCodes[strand]+"\t");
 		sb.append("("+codeStart+" - "+codeStop+")");
 		return sb.toString();
 	}
 	
+	@Override
 	public int compareTo(Gene other){
 		if(chromosome<other.chromosome){return -1;}
 		if(chromosome>other.chromosome){return 1;}
@@ -808,6 +806,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		return true;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return equals((Gene)other);
 	}
@@ -816,6 +815,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		return this==other ? true : compareTo(other)==0;
 	}
 	
+	@Override
 	public int hashCode(){
 		int xor=txStart^(Integer.rotateLeft(txStop, 16));
 		xor^=(chromosome<<20);
@@ -832,15 +832,15 @@ public class Gene implements Comparable<Gene>, Serializable{
 	}
 	
 	public int codeStartStrandCompensated(){ //TODO Make into a field
-		return strand==PLUS ? codeStart : codeStop;
+		return strand==Shared.PLUS ? codeStart : codeStop;
 	}
 	
 	public int codeStopStrandCompensated(){ //TODO Make into a field
-		return strand==PLUS ? codeStop : codeStart;
+		return strand==Shared.PLUS ? codeStop : codeStart;
 	}
 	
 	public int translationStartStrandCompensated(){ //TODO Make into a field
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			return (exons==null || exons.length==0) ? codeStart : exons[0].a;
 		}else{
 			return (exons==null || exons.length==0) ? codeStop : exons[exons.length-1].b;
@@ -848,7 +848,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	}
 	
 	public int translationStopStrandCompensated(){ //TODO Make into a field
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			return (exons==null || exons.length==0) ? codeStop : exons[exons.length-1].b;
 		}else{
 			return (exons==null || exons.length==0) ? codeStart : exons[0].a;
@@ -856,7 +856,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	}
 	
 	public int exonStartStrandCompensated(int exNum){
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			return (exons==null || exons.length==0) ? codeStart : exons[exNum].a;
 		}else{
 			return (exons==null || exons.length==0) ? codeStop : exons[exons.length-exNum-1].b;
@@ -864,7 +864,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 	}
 	
 	public int exonStopStrandCompensated(int exNum){
-		if(strand==PLUS){
+		if(strand==Shared.PLUS){
 			return (exons==null || exons.length==0) ? codeStop : exons[exNum].b;
 		}else{
 			return (exons==null || exons.length==0) ? codeStart : exons[exons.length-exNum-1].a;
@@ -880,7 +880,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 			int x=calcDistance(a, b, e.a, e.b);
 			if(x<best){
 				best=x;
-				if(strand==PLUS){exnum=i;}
+				if(strand==Shared.PLUS){exnum=i;}
 				else{exnum=exons.length-i-1;}
 			}
 		}
@@ -888,37 +888,6 @@ public class Gene implements Comparable<Gene>, Serializable{
 		return exnum;
 	}
 	
-	
-	public static final int find(String a, String[] array){
-		for(int i=0; i<array.length; i++){
-			if(a.equals(array[i])){return i;}
-		}
-//		assert(false) : "\n\nCan't find "+a+" in \n"+Arrays.toString(array);
-//		System.err.println("Can't find "+a+" in "+Arrays.toString(array));
-		if(!asdf.contains(a)){
-			System.err.println("Can't find "+a);
-			asdf.add(a);
-		}
-		return -1;
-	}
-	
-	private static final HashSet<String> asdf=new HashSet<String>();
-	
-	public static final int find2(String a, String[] array){
-		for(int i=0; i<array.length; i++){
-			if(a.equals(array[i])){return i;}
-		}
-		return array.length-1; //No assertion
-	}
-	
-	
-	public static final int find3(String a, String[] array){
-//		if(a==null){return -1;}
-		for(int i=0; i<array.length; i++){
-			if(a.equals(array[i])){return i;}
-		}
-		return -1;
-	}
 	
 	/** Calculates the minimal distance between two ranges: (a1, b1) and (a2, b2). */
 	public static final int calcDistance(int a1, int b1, int a2, int b2){
@@ -1006,8 +975,8 @@ public class Gene implements Comparable<Gene>, Serializable{
 	public final int id;
 	
 
-	public final boolean untranslated; 
-	public final boolean pseudo; 
+	public final boolean untranslated;
+	public final boolean pseudo;
 	public final boolean valid;
 	
 	public static final String[] sourceCodes={
@@ -1023,7 +992,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 //		"Public", "Reviewed, update pending", "Reviewed, withdrawal pending",
 //		"Withdrawn", "Withdrawn, inconsistent annotation",
-//		"Under review, withdrawal", "Under review, update", 
+//		"Under review, withdrawal", "Under review, update",
 		
 	};
 	
@@ -1033,16 +1002,10 @@ public class Gene implements Comparable<Gene>, Serializable{
 	
 	
 	/** Index with chromosome number */
-	public static final String[] chromCodes={"A", "1", "2", "3", "4", "5", "6", 
-		"7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", 
+	public static final String[] chromCodes={"A", "1", "2", "3", "4", "5", "6",
+		"7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18",
 		"19", "20", "21", "22", "X", "Y", "M", "U"};
 	
-	/** Index with strand number */
-	public static final String[] strandCodes={"+", "-", "?"};
-	public static final char[] strandCodes2={'+', '-', '?'};
-	
-	public static final byte PLUS=0;
-	public static final byte MINUS=1;
 	private static final int NEAR=Data.NEAR;
 
 	public static final byte STAT_UNKNOWN=0;

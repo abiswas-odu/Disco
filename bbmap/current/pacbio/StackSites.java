@@ -1,9 +1,17 @@
 package pacbio;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 
+import align2.MultiStateAligner9PacBio;
+import dna.AminoAcid;
+import dna.ChromosomeArray;
+import dna.Data;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
@@ -12,17 +20,6 @@ import stream.SiteScoreR;
 import structures.CoverageArray;
 import structures.CoverageArray2;
 import structures.ListNum;
-import dna.AminoAcid;
-import dna.ChromosomeArray;
-import dna.Data;
-import dna.Gene;
-import dna.Parser;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
-import align2.MultiStateAligner9PacBio;
 
 /**
  * @author Brian Bushnell
@@ -32,7 +29,12 @@ import align2.MultiStateAligner9PacBio;
 public class StackSites {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		
 		for(int i=4; i<args.length; i++){
@@ -41,9 +43,7 @@ public class StackSites {
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("genome") || a.equals("build")){
+			if(a.equals("genome") || a.equals("build")){
 				Data.setGenome(Integer.parseInt(b));
 			}
 		}
@@ -77,7 +77,7 @@ public class StackSites {
 				assert(paired==(r.mate!=null));
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 					readsProcessed++;
@@ -99,7 +99,7 @@ public class StackSites {
 									}else{//Check for no-refs
 										int len=ss.stop-ss.start+1;
 										if(len==r.length() && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
-											b=checkPerfection(ss.start, ss.stop, r.bases, Data.getChromosome(ss.chrom), ss.strand==Gene.MINUS, 0.5f);
+											b=checkPerfection(ss.start, ss.stop, r.bases, Data.getChromosome(ss.chrom), ss.strand==Shared.MINUS, 0.5f);
 										}
 									}
 									if(b){
@@ -140,7 +140,7 @@ public class StackSites {
 									}else{//Check for no-refs
 										int len=ss.stop-ss.start+1;
 										if(len==r2.length() && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
-											b=checkPerfection(ss.start, ss.stop, r2.bases, Data.getChromosome(ss.chrom), ss.strand==Gene.MINUS, 0.5f);
+											b=checkPerfection(ss.start, ss.stop, r2.bases, Data.getChromosome(ss.chrom), ss.strand==Shared.MINUS, 0.5f);
 										}
 									}
 									if(b){
@@ -171,13 +171,13 @@ public class StackSites {
 					
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			System.err.println("Returned list");
 			ReadWrite.closeStream(cris);
 			System.err.println("Closed stream");
@@ -198,7 +198,7 @@ public class StackSites {
 		out.start();
 		
 		//This is split by chrom to avoid getting more than 2^31 sites in a single list.
-		//Ultimately, it may be better to split output files by chrom and output unsorted, to avoid memory usage. 
+		//Ultimately, it may be better to split output files by chrom and output unsorted, to avoid memory usage.
 		for(int i=0; i<g.array.length; i++){
 			Shared.sort(g.array[i], SiteScoreR.PCOMP);
 			write(g.array[i], out);

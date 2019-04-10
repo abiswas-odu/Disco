@@ -1,23 +1,21 @@
 package assemble;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.file.CopyOption;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 
 import dna.Data;
-import dna.Parser;
 import jgi.AssemblyStats2;
 import jgi.ReformatReads;
+import shared.PreParser;
+import shared.Shared;
 import shared.Tools;
 import ukmer.Kmer;
 
 /**
- * Assembles with multiple kmer lengths to find the best kmer length. 
+ * Assembles with multiple kmer lengths to find the best kmer length.
  * @author Brian Bushnell
  * @date Oct 15, 2015
  *
@@ -27,21 +25,19 @@ public class TadpoleWrapper {
 
 	public static void main(String[] args){
 		process(args);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 		
 	
 	public static int process(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			System.exit(1);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), true);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		//Print the program name and arguments
-		outstream.println("Executing TadpoleWrapper "+Arrays.toString(args)+"\n");
 		
 		HashSet<Integer> set=new HashSet<Integer>();
 		ArrayList<String> argList=new ArrayList<String>();
@@ -49,21 +45,20 @@ public class TadpoleWrapper {
 		String outFinal=null;
 		bestAssembly=null;
 		for(int i=0; i<args.length; i++){
-
 			final String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
 			if(a.equals("k")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				for(String s2 : b.split(",")){
 					int x=Integer.parseInt(s2);
 					x=Kmer.getKbig(x);
 					set.add(x);
 				}
 			}else if(a.equals("out")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				contigsName=b;
 				assert(b.contains("%")) : "Output name must contain % symbol.";
 			}else if(a.equals("outfinal")){
@@ -116,7 +111,7 @@ public class TadpoleWrapper {
 			System.gc();
 			Tadpole.main(args2);
 			
-			Record r=new Record(k, AssemblyStats2.lastL50, AssemblyStats2.lastL90, 
+			Record r=new Record(k, AssemblyStats2.lastL50, AssemblyStats2.lastL90,
 					AssemblyStats2.lastSize, AssemblyStats2.lastContigs, AssemblyStats2.lastMaxContig);
 			records.add(r);
 			
@@ -129,7 +124,7 @@ public class TadpoleWrapper {
 					bestRecord=r;
 					best=i;
 				}else if(x>0 && quitEarly){
-					System.err.println("Metrics stopped improving; quit early."); 
+					System.err.println("Metrics stopped improving; quit early.");
 					break;
 				}
 			}
@@ -140,6 +135,7 @@ public class TadpoleWrapper {
 			bestRecord=records.get(best);
 		}
 		
+		assert(bestRecord!=null);
 		int bestK=bestRecord.k;
 		bestAssembly=(contigsName.replace("%", ""+bestK));
 		System.err.println("Recommended K:\t"+bestK);
@@ -194,7 +190,7 @@ public class TadpoleWrapper {
 			System.gc();
 			Tadpole.main(args2);
 
-			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90, 
+			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90,
 					AssemblyStats2.lastSize, AssemblyStats2.lastContigs, AssemblyStats2.lastMaxContig);
 			list.add(best, r);
 			best++;
@@ -220,7 +216,7 @@ public class TadpoleWrapper {
 			System.gc();
 			Tadpole.main(args2);
 
-			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90, 
+			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90,
 					AssemblyStats2.lastSize, AssemblyStats2.lastContigs, AssemblyStats2.lastMaxContig);
 			list.add(r);
 			
@@ -261,7 +257,7 @@ public class TadpoleWrapper {
 			System.gc();
 			Tadpole.main(args2);
 
-			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90, 
+			Record r=new Record(k1, AssemblyStats2.lastL50, AssemblyStats2.lastL90,
 					AssemblyStats2.lastSize, AssemblyStats2.lastContigs, AssemblyStats2.lastMaxContig);
 			list.add(best, r);
 			best++;
@@ -278,7 +274,7 @@ public class TadpoleWrapper {
 			System.gc();
 			Tadpole.main(args2);
 
-			Record r=new Record(k2, AssemblyStats2.lastL50, AssemblyStats2.lastL90, 
+			Record r=new Record(k2, AssemblyStats2.lastL50, AssemblyStats2.lastL90,
 					AssemblyStats2.lastSize, AssemblyStats2.lastContigs, AssemblyStats2.lastMaxContig);
 			list.add(best+1, r);
 			
@@ -307,6 +303,7 @@ public class TadpoleWrapper {
 			maxContig=maxContig_;
 		}
 		
+		@Override
 		public int compareTo(Record b){
 			if(b==null){return 1;}
 			

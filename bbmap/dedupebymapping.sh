@@ -1,5 +1,4 @@
 #!/bin/bash
-#dedupebymapping in=<infile> out=<outfile>
 
 usage(){
 echo "
@@ -9,9 +8,6 @@ Last modified January 4, 2017
 Description:  Deduplicates mapped reads based on pair mapping coordinates.
 
 Usage:   dedupebymapping.sh in=<file> out=<file>
-
-Input may be stdin or a sam/bam file, compressed or uncompressed.
-
 
 Parameters:
 in=<file>           The 'in=' flag is needed if the input file is not the 
@@ -30,15 +26,19 @@ ignorepairorder=f   (ipo) If true, consider reverse-complementary pairs
                     as duplicates.
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding
-                    the program's automatic memory detection.  -Xmx20g will 
-                    specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
                     The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -55,6 +55,7 @@ CP="$DIR""current/"
 z="-Xmx3g"
 z2="-Xms3g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -75,13 +76,31 @@ calcXmx () {
 calcXmx "$@"
 
 dedupebymapping() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP jgi.DedupeByMapping $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP jgi.DedupeByMapping $@"
 	echo $CMD >&2
 	eval $CMD
 }

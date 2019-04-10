@@ -2,9 +2,9 @@ package dna;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.Timer;
 import shared.Tools;
 
@@ -16,7 +16,12 @@ import shared.Tools;
 public class ChromToFasta {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		
 		if(args[0].contains("=") && (args[0].startsWith("build") || args[0].startsWith("genome"))){
@@ -72,7 +77,7 @@ public class ChromToFasta {
 		
 		tsw.poison();
 		
-		try {tsw.join();} 
+		try {tsw.join();}
 		catch (InterruptedException e) {e.printStackTrace();}
 		
 		t.stop();

@@ -7,6 +7,11 @@ package bloom;
  */
 public class KCountArray3 extends KCountArray {
 		
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -5466091642729698944L;
+	
 	public KCountArray3(long cells_, int bits_, int gap_){
 		super(cells_, bits_, gap_);
 		long words=cells/cellsPerWord;
@@ -14,6 +19,7 @@ public class KCountArray3 extends KCountArray {
 		matrix=new int[numArrays][wordsPerArray];
 	}
 	
+	@Override
 	public int read(long key){
 		if(verbose){System.err.println("Reading "+key);}
 //		System.out.println("key="+key);
@@ -33,6 +39,7 @@ public class KCountArray3 extends KCountArray {
 		return value;
 	}
 	
+	@Override
 	public void write(long key, int value){
 		if(verbose){System.err.println("Writing "+key+", "+value);}
 		int arrayNum=(int)(key&arrayMask);
@@ -46,6 +53,7 @@ public class KCountArray3 extends KCountArray {
 	}
 	
 //	static int count138=0;
+	@Override
 	public int incrementAndReturn(long key, int incr){
 		if(verbose){System.err.println("*** Incrementing "+key);}
 //		if(key==138){
@@ -69,6 +77,7 @@ public class KCountArray3 extends KCountArray {
 	}
 	
 	/** Returns unincremented value */
+	@Override
 	public int incrementAndReturnUnincremented(long key, int incr){
 		if(verbose){System.err.println("Incrementing2 "+key);}
 		int arrayNum=(int)(key&arrayMask);
@@ -85,10 +94,12 @@ public class KCountArray3 extends KCountArray {
 		return value;
 	}
 	
+	@Override
 	public long[] transformToFrequency(){
 		return transformToFrequency(matrix);
 	}
 	
+	@Override
 	public String toContentsString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append("[");
@@ -109,10 +120,13 @@ public class KCountArray3 extends KCountArray {
 		return sb.toString();
 	}
 	
+	@Override
 	public double usedFraction(){return cellsUsed/(double)cells;}
 	
+	@Override
 	public double usedFraction(int mindepth){return cellsUsed(mindepth)/(double)cells;}
 	
+	@Override
 	public long cellsUsed(int mindepth){
 		long count=0;
 		for(int[] array : matrix){

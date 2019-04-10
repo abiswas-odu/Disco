@@ -4,28 +4,31 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.PriorityQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.KillSwitch;
-import stream.ConcurrentReadOutputStream;
-import stream.CrisContainer;
-import stream.Read;
-import stream.SamLine;
-import structures.ListNum;
-import var2.ScafMap;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.CrisContainer;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import stream.SamLine;
+import structures.ListNum;
+import tax.AccessionToTaxid;
+import tax.GiToNcbi;
+import tax.TaxTree;
+import var2.ScafMap;
 
 /**
  * Sorts reads by name, potentially from multiple input files.
@@ -47,10 +50,13 @@ public class SortByName {
 	public static void main(String[] args){
 		Timer t=new Timer();
 		final boolean oldFI=FASTQ.FORCE_INTERLEAVED, oldTI=FASTQ.TEST_INTERLEAVED;
-		SortByName as=new SortByName(args);
-		as.process(t);
+		SortByName x=new SortByName(args);
+		x.process(t);
 		FASTQ.FORCE_INTERLEAVED=oldFI;
 		FASTQ.TEST_INTERLEAVED=oldTI;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -59,25 +65,20 @@ public class SortByName {
 	 */
 	public SortByName(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		boolean setInterleaved=false; //Whether interleaved was explicitly set.
 		
-		//Set some shared static variables regarding PIGZ
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
+		//Set shared static variables
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
+		FASTQ.TEST_INTERLEAVED=true; //TEST_INTERLEAVED must explicitly be disabled with int=f to sort corrupt files.
+		FASTQ.FORCE_INTERLEAVED=false;
 		
 		//Create a parser object
 		Parser parser=new Parser();
@@ -91,9 +92,6 @@ public class SortByName {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
@@ -102,20 +100,59 @@ public class SortByName {
 //				verbose2=Tools.parseBoolean(b);
 			}else if(a.equals("delete")){
 				delete=Tools.parseBoolean(b);
+			}else if(a.equals("allowtemp") || a.equals("usetemp")){
+				allowTempFiles=Tools.parseBoolean(b);
+			}else if(a.equals("memmult") || a.equals("mult")){
+				memMult=(float) Double.parseDouble(b);
 			}else if(a.equals("ascending")){
 				ascending=Tools.parseBoolean(b);
 			}else if(a.equals("descending")){
 				ascending=!Tools.parseBoolean(b);
 			}else if(a.equals("length")){
-				comparator=ReadLengthComparator.comparator;
+				if(Tools.parseBoolean(b)){
+					comparator=ReadLengthComparator.comparator;
+				}
 			}else if(a.equals("name")){
-				comparator=ReadComparatorName.comparator;
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorName.comparator;
+				}
 			}else if(a.equals("quality")){
-				comparator=ReadQualityComparator.comparator;
+				if(Tools.parseBoolean(b)){
+					comparator=ReadQualityComparator.comparator;
+				}
 			}else if(a.equals("position")){
-				comparator=ReadComparatorPosition.comparator;
-			}else if(a.equals("parse_flag_goes_here")){
-				//Set a variable here
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorPosition.comparator;
+				}
+			}else if(a.equals("list") || a.equals("names")){
+				comparator=new ReadComparatorList(b);
+			}else if(a.equals("random") || a.equals("shuffle")){
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorRandom.comparator;
+				}
+			}else if(a.equals("taxa")){
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorTaxa.comparator;
+				}
+			}else if(a.equals("topo") || a.equals("topological") || a.equals("alphabetic") || a.equals("sequence") || a.equals("lexographic")){
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorTopological.comparator;
+				}
+			}else if(a.equals("flowcell")){
+				if(Tools.parseBoolean(b)){
+					comparator=ReadComparatorFlowcell.comparator;
+				}
+			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
+				if(b==null || "ignore".equalsIgnoreCase(b) || "skip".equalsIgnoreCase(b)){
+					giTableFile=null;
+					TaxTree.CRASH_IF_NO_GI_TABLE=false;
+				}else{giTableFile=b;}
+			}else if(a.equals("accession")){
+				accessionFile=b;
+			}else if(a.equals("tree") || a.equals("taxtree")){
+				taxTreeFile=b;
+			}else if(a.equals("maxfiles") || a.equals("files")){
+				maxFiles=Integer.parseInt(b);
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
 			}else if(parser.parse(arg, a, b)){//Parse standard flags in the parser
@@ -126,9 +163,17 @@ public class SortByName {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		if("auto".equalsIgnoreCase(taxTreeFile)){taxTreeFile=TaxTree.defaultTreeFile();}
+		if("auto".equalsIgnoreCase(giTableFile)){giTableFile=TaxTree.defaultTableFile();}
+		if("auto".equalsIgnoreCase(accessionFile)){accessionFile=TaxTree.defaultAccessionFile();}
 		
 		comparator.setAscending(ascending);
 		SamLine.SET_FROM_OK=true;
+		
+		if(comparator==ReadComparatorRandom.comparator){
+			ListNum.setDeterministicRandomSeed(-1);
+			ListNum.setDeterministicRandom(true);
+		}
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -149,6 +194,8 @@ public class SortByName {
 			
 			extin=parser.extin;
 			extout=parser.extout;
+			
+			minlen=parser.minReadLength;
 		}
 		
 //		assert(false) : setInterleaved+", "+FASTQ.FORCE_INTERLEAVED+", "+FASTQ.TEST_INTERLEAVED;
@@ -176,10 +223,7 @@ public class SortByName {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -187,16 +231,17 @@ public class SortByName {
 		}
 		
 		//Ensure out2 is not set without out1
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		//Adjust interleaved settings based on number of output files
 		if(!setInterleaved){
-			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+			if(in2==null && out2!=null){
+				FASTQ.FORCE_INTERLEAVED=true;
+				FASTQ.TEST_INTERLEAVED=false;
+			}else if(in2!=null){
+				FASTQ.FORCE_INTERLEAVED=false;
+				FASTQ.TEST_INTERLEAVED=false;
+			}
 		}
 		
 		//Ensure output files can be written
@@ -207,24 +252,21 @@ public class SortByName {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure that no file was specified multiple times
 		if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2)){
 			throw new RuntimeException("\nSome file names were specified multiple times.\n");
 		}
-		
-		//Create output FileFormat objects
-//		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
-//		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
 
 		//Create input FileFormat objects
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
+		//Create output FileFormat objects
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		
 		tempExt=".fq.gz";
 		if(extout==null){
@@ -237,9 +279,27 @@ public class SortByName {
 		
 		if(comparator==ReadComparatorPosition.comparator){
 			if(ReadComparatorPosition.scafMap==null){
-				ReadComparatorPosition.scafMap=ScafMap.loadHeader(in1);
+				ReadComparatorPosition.scafMap=ScafMap.loadSamHeader(in1);
 			}
 		}
+		
+		if((comparator==ReadComparatorTaxa.comparator)){
+			if(giTableFile!=null){
+				outstream.println("Loading gi table.");
+				GiToNcbi.initialize(giTableFile);
+			}
+			if(accessionFile!=null){
+				outstream.println("Loading accession table.");
+				AccessionToTaxid.load(accessionFile);
+			}
+			if(taxTreeFile!=null){
+				ReadComparatorTaxa.tree=TaxTree.loadTaxTree(taxTreeFile, outstream, true, false);
+				assert(ReadComparatorTaxa.tree.nameMap()!=null);
+			}else{
+				throw new RuntimeException("No tree specified.");
+			}
+		}
+		
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -264,11 +324,11 @@ public class SortByName {
 //		final ConcurrentReadOutputStream ros;
 //		if(ffout1!=null){
 //			final int buff=4;
-//			
+//
 //			if(cris.paired() && out2==null && (in1!=null && !ffin1.samOrBam() && !ffout1.samOrBam())){
 //				outstream.println("Writing interleaved.");
 //			}
-//			
+//
 //			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
 //			ros.start(); //Start the stream
 //		}else{ros=null;}
@@ -288,25 +348,8 @@ public class SortByName {
 		errorState|=ReadWrite.closeStreams(cris);
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
+		t.stop();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
@@ -317,17 +360,22 @@ public class SortByName {
 	/** Iterate through the reads */
 	public void processInner(final ConcurrentReadInputStream cris){
 		//Do anything necessary prior to processing
+		final int ziplevel0=ReadWrite.ZIPLEVEL;
+		ReadWrite.ZIPLEVEL=Tools.mid(1, ReadWrite.ZIPLEVEL, 2);
 		
 		ArrayList<Read> storage=new ArrayList<Read>();
 		
 		final long maxMem=Shared.memAvailable(1);
 		final long memLimit=(long)(maxMem*.75);
-		final long currentLimit=(long)(maxMem*.28);
+		final long currentLimit=(long)(maxMem*memMult);
+		final int readLimit=2000000000;
 		long currentMem=0;
 		long dumped=0;
+		long dumps=0;
+//		IntList dumpCount=new IntList();
 		AtomicLong outstandingMem=new AtomicLong();
 		
-		if(verbose){System.err.println("maxMem="+maxMem+", memLimit="+memLimit+", currentLimit="+currentLimit+", currentLimit="+currentLimit);}
+		if(verbose){outstream.println("maxMem="+maxMem+", memLimit="+memLimit+", currentLimit="+currentLimit+", currentLimit="+currentLimit);}
 		
 		{
 			//Grab the first ListNum of reads
@@ -342,7 +390,7 @@ public class SortByName {
 			}
 			
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose2){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				//Loop through each read in the list
@@ -355,28 +403,32 @@ public class SortByName {
 					final int initialLength2=(r1.mateLength());
 					
 					//Increment counters
-					readsProcessed+=1+r1.mateCount();
+					readsProcessed+=r1.pairCount();
 					basesProcessed+=initialLength1+initialLength2;
+					maxLengthObserved=Tools.max(maxLengthObserved, initialLength1, initialLength2);
 					
-					currentMem+=r1.countBytes()+(r2==null ? 0 : r2.countBytes());
-					
-					storage.add(r1);
+					if(minlen<1 || initialLength1>=minlen || initialLength2>=minlen){
+						currentMem+=r1.countBytes()+(r2==null ? 0 : r2.countBytes());
+						storage.add(r1);
+					}
 				}
 				
-				if(currentMem>=currentLimit){
-					if(verbose){System.err.println("currentMem: "+currentMem+" >= "+currentLimit+", dumping. ");}
+				if(allowTempFiles && (currentMem>=currentLimit || storage.size()>=readLimit)){
+					if(verbose){outstream.println("currentMem: "+currentMem+" >= "+currentLimit+", dumping. ");}
 					outstandingMem.addAndGet(currentMem);
+//					dumpCount.add(storage.size());
 					sortAndDump(storage, currentMem, outstandingMem, null, false);
 					storage=new ArrayList<Read>();
 					dumped+=currentMem;
+					dumps++;
 					currentMem=0;
-					if(verbose){System.err.println("Waiting on memory; outstandingMem="+outstandingMem);}
+					if(verbose){outstream.println("Waiting on memory; outstandingMem="+outstandingMem);}
 					waitOnMemory(outstandingMem, memLimit);
-					if(verbose){System.err.println("Done waiting; outstandingMem="+outstandingMem);}
+					if(verbose){outstream.println("Done waiting; outstandingMem="+outstandingMem);}
 				}
 				
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 //				if(verbose){outstream.println("Returned a list.");}
 				
 				//Fetch a new list
@@ -389,19 +441,31 @@ public class SortByName {
 				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
-
+		
+		outstream.println("Finished reading input.");
+		
 		outstandingMem.addAndGet(currentMem);
-		if(dumped==0){
+		if(dumps==0){
+			ReadWrite.ZIPLEVEL=ziplevel0;
+			outstream.println("Sorting.");
 			if(out1!=null){
 				sortAndDump(storage, currentMem, outstandingMem, out1, useSharedHeader);
 				storage=null;
 				waitOnMemory(outstandingMem, 0);
 			}
 		}else{
+//			dumpCount.add(storage.size());
 			sortAndDump(storage, currentMem, outstandingMem, null, false);
 			storage=null;
 			waitOnMemory(outstandingMem, 0);
-			mergeAndDump(outTemp, useSharedHeader);
+			outstream.println("Merging "+(dumps+1)+" files.");
+			ReadWrite.ZIPLEVEL=ziplevel0;
+			if(maxLengthObserved*(dumped+1)>200000000L){
+				outstream.println("Reduced buffer sizes prior to merging due to low memory.");
+				Shared.capBufferLen(4);
+				Shared.capBuffers(1);
+			}
+			mergeAndDump(outTemp, /*dumpCount, */useSharedHeader);
 		}
 		
 	}
@@ -426,19 +490,81 @@ public class SortByName {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private boolean mergeAndDump(ArrayList<String> fnames, boolean useHeader) {
-		return mergeAndDump(fnames, ffout1, ffout2, delete, useHeader);
+	private ArrayList<String> mergeRecursive(final ArrayList<String> inList){
+		assert(maxFiles>1);
+		ArrayList<String> currentList=inList;
+		final int oldZL=ReadWrite.ZIPLEVEL;
+		while(currentList.size()>maxFiles){
+			ReadWrite.ZIPLEVEL=Tools.min(ReadWrite.ZIPLEVEL, 4);
+			final int size=currentList.size();
+			final int groups=(size+maxFiles-1)/maxFiles;
+			assert(groups>0 && groups<size);
+			ArrayList<ArrayList<String>> listList=new ArrayList<ArrayList<String>>();
+			ArrayList<String> outList=new ArrayList<String>();
+			for(int i=0; i<groups; i++){
+				listList.add(new ArrayList<String>());
+			}
+			for(int i=0; i<size; i++){
+				listList.get(i%groups).add(currentList.get(i));
+			}
+			for(ArrayList<String> subList : listList){
+				String temp=getTempFile();
+				FileFormat ff=FileFormat.testOutput(temp, FileFormat.FASTQ, null, true, false, false, false);
+				merge(subList, ff, null);
+				outList.add(temp);
+			}
+			currentList=outList;
+		}
+		ReadWrite.ZIPLEVEL=oldZL;
+		return currentList;
 	}
 	
-	public static boolean mergeAndDump(ArrayList<String> fnames, FileFormat ffout1, FileFormat ffout2, boolean delete, boolean useHeader) {
+	public void merge(ArrayList<String> inList, FileFormat ff1, FileFormat ff2){
+		errorState|=mergeAndDump(inList, /*null, */ff1, ff2, delete, useSharedHeader, outstream, maxLengthObserved);
+	}
+	
+	private String getTempFile(){
+		String temp;
+		File dir=new File(".");//(Shared.tmpdir()==null ? null : new File(Shared.tmpdir()));
+		if(dir!=null && !dir.exists()){dir.mkdirs();}
+		try {
+			temp=File.createTempFile("sort_temp_", tempExt, dir).toString();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			KillSwitch.kill(e.getMessage());
+			return null;
+		}
+		return temp;
+	}
+	
+	private boolean mergeAndDump(ArrayList<String> fnames, /*IntList dumpCount, */boolean useHeader) {
+		if(fnames.size()*maxLengthObserved>2000000000 || fnames.size()>64){
+			outstream.println("Performing recursive merge to reduce open files.");
+			fnames=mergeRecursive(fnames);
+		}
+		return mergeAndDump(fnames, /*dumpCount,*/ ffout1, ffout2, delete, useHeader, outstream, maxLengthObserved);
+	}
+	
+	public static boolean mergeAndDump(ArrayList<String> fnames, FileFormat ffout1, FileFormat ffout2, 
+			boolean delete, boolean useHeader, PrintStream outstream, long maxLengthObserved) {
+		
+		final int oldBuffers=Shared.numBuffers();
+		final int oldBufferLen=Shared.bufferLen();
+		
+		if(fnames.size()>3 && (maxLengthObserved<1 || maxLengthObserved>100000)){
+			outstream.println("Reduced buffer sizes prior to merging.");
+			Shared.capBufferLen(4);
+			Shared.capBuffers(1);
+		}
 		
 		System.err.println("Merging "+fnames);
-//		System.err.println("zl="+ReadWrite.ZIPLEVEL);
-//		System.err.println("ztd="+ReadWrite.ZIP_THREAD_DIVISOR);
-//		System.err.println("mzt="+ReadWrite.MAX_ZIP_THREADS);
-//		System.err.println("pigz="+ReadWrite.USE_PIGZ);
+//		outstream.println("zl="+ReadWrite.ZIPLEVEL);
+//		outstream.println("ztd="+ReadWrite.ZIP_THREAD_DIVISOR);
+//		outstream.println("mzt="+ReadWrite.MAX_ZIP_THREADS);
+//		outstream.println("pigz="+ReadWrite.USE_PIGZ);
 		
-		
+		ListNum.setDeterministicRandom(false);
 		boolean errorState=false;
 		final ConcurrentReadOutputStream ros;
 		if(ffout1!=null){
@@ -449,17 +575,20 @@ public class SortByName {
 		
 		ArrayList<CrisContainer> cclist=new ArrayList<CrisContainer>(fnames.size());
 		PriorityQueue<CrisContainer> q=new PriorityQueue<CrisContainer>(fnames.size());
-		for(String fname : fnames){
-			CrisContainer cc=new CrisContainer(fname, comparator);
+		for(int i=0; i<fnames.size(); i++){
+			String fname=fnames.get(i);
+//			int size=(dumpCount==null ? -1 : dumpCount.get(i));
+			CrisContainer cc=new CrisContainer(fname, /*size, */comparator);
 			if(cc.peek()!=null){
 				cclist.add(cc);
 				q.add(cc);
 			}
 		}
 		
-		mergeAndDump(q, ros);
+		//TODO: Use the read counts, stored in dumpCount, to approximately restore random values for shuffling.
+		mergeAndDump(q, ros, outstream);
 		if(verbose){
-			System.err.println("Finished processing "+fnames);
+			outstream.println("Finished processing "+fnames);
 		}
 		
 		for(CrisContainer cc : cclist){
@@ -471,35 +600,41 @@ public class SortByName {
 			}
 		}
 		if(ros!=null){errorState|=ReadWrite.closeStream(ros);}
+		
+		Shared.setBufferLen(oldBufferLen);
+		Shared.setBuffers(oldBuffers);
+		
 		return errorState;
 	}
 	
-	private static void mergeAndDump(final PriorityQueue<CrisContainer> q, final ConcurrentReadOutputStream ros) {
+	private static void mergeAndDump(final PriorityQueue<CrisContainer> q, final ConcurrentReadOutputStream ros, PrintStream outstream) {
 		
 		for(CrisContainer cc : q){
 			assert(!cc.cris().paired()) : FASTQ.TEST_INTERLEAVED+", "+FASTQ.FORCE_INTERLEAVED;
 		}
 		
+		long maxLen=0;
+		
 		final int limit=100000;
 		ArrayList<Read> buffer=new ArrayList<Read>(2*limit);
 		while(!q.isEmpty()){
-			if(verbose2){System.err.println("q size: "+q.size());}
+			if(verbose2){outstream.println("q size: "+q.size());}
 			for(int i=0; !q.isEmpty() && (buffer.size()<limit || i<1); i++){//For loop to force it to run at least once
 				CrisContainer cc=q.poll();
-				if(verbose2){System.err.println("Polled a cc.");}
+				if(verbose2){outstream.println("Polled a cc.");}
 				ArrayList<Read> list=cc.fetch();
-				if(verbose2){System.err.println("Grabbed "+list.size()+" reads.");}
+				if(verbose2){outstream.println("Grabbed "+list.size()+" reads.");}
 				buffer.addAll(list);
-				if(verbose2){System.err.println("Buffer size: "+buffer.size());}
+				if(verbose2){outstream.println("Buffer size: "+buffer.size());}
 				if(cc.hasMore()){
-					if(verbose2){System.err.println("Returned cc.");}
+					if(verbose2){outstream.println("Returned cc.");}
 					q.add(cc);
 				}else{
-					if(verbose2){System.err.println("Discarded cc.");}
+					if(verbose2){outstream.println("Discarded cc.");}
 				}
 			}
 			Shared.sort(buffer, comparator);
-			if(verbose2){System.err.println("Sorted buffer.");}
+			if(verbose2){outstream.println("Sorted buffer.");}
 //			if(repair){
 //				assert(false) : "TODO";
 //			}
@@ -519,6 +654,7 @@ public class SortByName {
 				Read r=buffer.get(index);
 				assert(peek==null || comparator.compare(peek, r)>0) : "\n"+peek+"\n"+r;
 				list.add(r);
+				maxLen=Tools.max(maxLen, r.length());
 			}
 			if(ros!=null){ros.add(list, 0);}
 			
@@ -527,17 +663,20 @@ public class SortByName {
 			for(int i=maxIndex, size=oldbuffer.size(); i<size; i++){
 				buffer.add(oldbuffer.get(i));
 			}
-			if(verbose2){System.err.println("Buffer contains "+buffer.size()+" reads.");}
+			if(verbose2){outstream.println("Buffer contains "+buffer.size()+" reads.");}
 		}
 		
 		assert(buffer.isEmpty());
+		synchronized(SortByName.class){
+			maxLengthObservedStatic=Tools.max(maxLengthObservedStatic, maxLen);
+		}
 	}
 
-//	
+//
 //	final Read peek=(q.isEmpty() ? null : q.peek().peek());
-//	
+//
 //	final int maxIndex=(peek==null ? buffer.size() : indexOfLowestAbovePivot(buffer, peek));
-//	
+//
 //	for(int index=0; index<maxIndex; index++){
 //		Read r=buffer.get(index);
 //		list.add(r);
@@ -546,19 +685,19 @@ public class SortByName {
 //			list=new ArrayList<Read>(200);
 //		}
 //	}
-//	
+//
 //	if(!list.isEmpty()){
 //		if(ros!=null){ros.add(list, 0);}
 //		list=null;
 //	}
-////	if(verbose2){System.err.println("Stopped at index "+index+".");}
-//	
+////	if(verbose2){outstream.println("Stopped at index "+index+".");}
+//
 //	ArrayList<Read> oldbuffer=buffer;
 //	buffer=new ArrayList<Read>(2*limit);
 //	for(int i=maxIndex, size=oldbuffer.size(); i<size; i++){
 //		buffer.add(oldbuffer.get(i));
 //	}
-//	if(verbose2){System.err.println("Buffer contains "+buffer.size()+" reads.");}
+//	if(verbose2){outstream.println("Buffer contains "+buffer.size()+" reads.");}
 //}
 	
 	private static final int indexOfLowestAbovePivot(final ArrayList<Read> list, final Read pivot){
@@ -590,8 +729,8 @@ public class SortByName {
 //		for(int i=1; i<list.size(); i++){
 //			assert(comparator.compare(list.get(i-1), list.get(i))<=0) : i+"\n"+list.get(i-1)+"\n"+ list.get(i)+"\n";
 //		}
-//		
-//		assert(a>=list.size() || comparator.compare(pivot, list.get(a))<=0) : 
+//
+//		assert(a>=list.size() || comparator.compare(pivot, list.get(a))<=0) :
 //			comparator.compare(pivot, list.get(a))+"\n"+
 //					a+", "+b+", "+list.size()+"\n"+pivot.id+"\n"+list.get(a).id;
 //			comparator.compare(pivot, list.get(a))+", "+a+", "+b+", "+list.size()+"\n"+pivot.id+"\n"+list.get(a-1).id+"\n"+list.get(a).id+"\n"+list.get(a+1).id;
@@ -606,7 +745,7 @@ public class SortByName {
 			if(comparator.compare(pivot, list.get(a))>0){a++;}
 		}
 		
-		assert(a>=list.size() || comparator.compare(pivot, list.get(a))<=0) : 
+		assert(a>=list.size() || comparator.compare(pivot, list.get(a))<=0) :
 			comparator.compare(pivot, list.get(a))+"\n"+
 					a+", "+b+", "+list.size()+"\n"+pivot.id+"\n"+list.get(a).id;
 		
@@ -617,29 +756,16 @@ public class SortByName {
 		String temp=fname;
 		if(temp==null){
 			synchronized(outTemp){
-				if(verbose2){System.err.println("Synced to outTemp to make a temp file.");}
-				File tmpfile=new File(".");//(Shared.tmpdir()==null ? null : new File(Shared.tmpdir()));
-				if(tmpfile!=null && !tmpfile.exists()){tmpfile.mkdirs();}
-				try {
-					temp=File.createTempFile("sort_temp_", tempExt, tmpfile).toString();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-					KillSwitch.kill(e.getMessage());
-				}
-				if(verbose2){System.err.println("Temp file: "+temp);}
+				if(verbose2){outstream.println("Synced to outTemp to make a temp file.");}
+				temp=getTempFile();
+				if(verbose2){outstream.println("Temp file: "+temp);}
 				outTemp.add(temp);
 			}
 		}
 
-		if(verbose || true){System.err.println("Created a WriteThread for "+temp);}
-		WriteThread wt=new WriteThread(storage, currentMem, outstandingMem, temp, useHeader);
+		if(verbose || true){outstream.println("Created a WriteThread for "+temp);}
+		WriteThread wt=new WriteThread(storage, currentMem, outstandingMem, temp, useHeader, outstream);
 		wt.start();
-	}
-
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -648,17 +774,19 @@ public class SortByName {
 	
 	private static class WriteThread extends Thread{
 		
-		public WriteThread(final ArrayList<Read> storage_, final long currentMem_, final AtomicLong outstandingMem_, String fname_, boolean useHeader_){
+		public WriteThread(final ArrayList<Read> storage_, final long currentMem_, final AtomicLong outstandingMem_, String fname_, boolean useHeader_, PrintStream outstream_){
 			storage=storage_;
 			currentMem=currentMem_;
 			outstandingMem=outstandingMem_;
 			fname=fname_;
 			useHeader=useHeader_;
+			outstream=outstream_;
 		}
 		
+		@Override
 		public void run(){
 			
-			if(verbose){System.err.println("Started a WriteThread.");}
+			if(verbose){outstream.println("Started a WriteThread.");}
 			final FileFormat ffout=FileFormat.testOutput(fname, FileFormat.FASTQ, null, true, false, false, false);
 			final ConcurrentReadOutputStream ros;
 			if(ffout!=null){
@@ -667,10 +795,10 @@ public class SortByName {
 				ros.start(); //Start the stream
 			}else{ros=null;}
 
-			if(verbose){System.err.println("Started a ros.");}
+			if(verbose){outstream.println("Started a ros.");}
 			Shared.sort(storage, comparator);
 			
-			if(verbose){System.err.println("Sorted reads.");}
+			if(verbose){outstream.println("Sorted reads.");}
 			
 			ArrayList<Read> buffer=new ArrayList<Read>(200);
 			long id=0;
@@ -685,13 +813,13 @@ public class SortByName {
 			}
 			if(ros!=null && buffer.size()>0){ros.add(buffer, id);}
 			errorState|=ReadWrite.closeStream(ros);
-			if(verbose){System.err.println("Closed ros.");}
+			if(verbose){outstream.println("Closed ros.");}
 			
 			synchronized(outstandingMem){
 				outstandingMem.addAndGet(-currentMem);
-				if(verbose){System.err.println("Decremented outstandingMem: "+outstandingMem);}
+				if(verbose){outstream.println("Decremented outstandingMem: "+outstandingMem);}
 				outstandingMem.notify();
-				if(verbose){System.err.println("Notified outstandingMem.");}
+				if(verbose){outstream.println("Notified outstandingMem.");}
 			}
 		}
 		
@@ -701,6 +829,7 @@ public class SortByName {
 		final String fname;
 		final boolean useHeader;
 		boolean errorState=false;
+		final PrintStream outstream;
 		
 	}
 	
@@ -729,9 +858,16 @@ public class SortByName {
 	private String extout=null;
 	
 	private String tempExt=null;
+
+	private String giTableFile=null;;
+	private String taxTreeFile=null;
+	private String accessionFile=null;
 	
 	/*--------------------------------------------------------------*/
 
+	long maxLengthObserved=0;
+	static long maxLengthObservedStatic=0;
+	
 	/** Number of reads processed */
 	protected long readsProcessed=0;
 	/** Number of bases processed */
@@ -743,6 +879,15 @@ public class SortByName {
 	private boolean delete=true;
 	
 	private boolean useSharedHeader=false;
+	
+	private boolean allowTempFiles=true;
+	
+	private int minlen=0;
+	
+	private float memMult=0.35f;
+	
+	/** Max files to merge per pass */
+	private int maxFiles=12;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Final Fields         ----------------*/

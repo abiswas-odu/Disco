@@ -1,7 +1,5 @@
 package sort;
 
-import java.util.Comparator;
-
 import stream.Read;
 
 /**
@@ -20,7 +18,7 @@ public final class ReadComparatorName extends ReadComparator {
 		return ascending*x;
 	}
 	
-	public int compareInner(Read r1, Read r2) {
+	public static int compareInner(Read r1, Read r2) {
 		
 		if(r1.id==null && r2.id==null){return r1.pairnum()-r2.pairnum();}
 		if(r1.id==null){return -1;}
@@ -32,6 +30,7 @@ public final class ReadComparatorName extends ReadComparator {
 	
 	private int ascending=1;
 	
+	@Override
 	public void setAscending(boolean asc){
 		ascending=(asc ? 1 : -1);
 	}

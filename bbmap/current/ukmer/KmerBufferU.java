@@ -1,6 +1,6 @@
 package ukmer;
 
-import stream.ByteBuilder;
+import structures.ByteBuilder;
 import structures.IntList;
 import structures.LongList;
 
@@ -50,6 +50,7 @@ public class KmerBufferU {
 	//Returns raw size of kmers array, rather than actual number of kmers
 	final int size(){return kmers.size;}
 	
+	@Override
 	public String toString(){
 		ByteBuilder bb=new ByteBuilder();
 		for(int i=0; i<kmers.size; i++){

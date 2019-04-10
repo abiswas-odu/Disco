@@ -1,10 +1,10 @@
 package jgi;
 
-import stream.SamLine;
 import fileIO.ByteFile;
 import fileIO.ByteStreamWriter;
 import shared.Timer;
 import shared.Tools;
+import stream.SamLine;
 
 public class SplitSamFile {
 	
@@ -21,7 +21,7 @@ public class SplitSamFile {
 			if(args[4].equalsIgnoreCase("header")){includeHeader=true;}
 		}
 		
-		ByteFile tf=ByteFile.makeByteFile(in, true, false);
+		ByteFile tf=ByteFile.makeByteFile(in, false);
 		
 		Tools.testForDuplicateFiles(true, in, outF, outR, outU);
 		Tools.testOutputFiles(true, false, false, outF, outR, outU);
@@ -48,7 +48,7 @@ public class SplitSamFile {
 					if(includeHeader){
 						if(fStream!=null){fStream.println(s);}
 						if(rStream!=null){rStream.println(s);}
-						if(uStream!=null){uStream.println(s);} 
+						if(uStream!=null){uStream.println(s);}
 					}
 				}else{
 					int flag=SamLine.parseFlagOnly(s);
@@ -70,7 +70,7 @@ public class SplitSamFile {
 		tf.close();
 		if(fStream!=null){fStream.poisonAndWait();}
 		if(rStream!=null){rStream.poisonAndWait();}
-		if(uStream!=null){uStream.poisonAndWait();} 
+		if(uStream!=null){uStream.poisonAndWait();}
 		
 		System.err.println("Total reads:   \t"+(plus+minus+other));
 		System.err.println("Plus reads:    \t"+(plus));

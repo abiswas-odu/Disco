@@ -1,24 +1,26 @@
 package jgi;
 
-import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
 import assemble.Shaver;
 import assemble.Tadpole;
-import dna.Parser;
+import bloom.KmerCountAbstract;
 import fileIO.ByteFile;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import kmer.AbstractKmerTableSet;
 import kmer.DumpThread;
 import kmer.KmerTableSet;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import sketch.Sketch;
+import sketch.SketchObject;
 import sketch.SketchTool;
 import stream.FastaReadInputStream;
 import ukmer.KmerTableSetU;
@@ -35,67 +37,33 @@ public class KmerCountExact {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
-		}
-		
 		Timer t=new Timer(), t2=new Timer();
 		t.start();
 		t2.start();
 		
 		//Create a new CountKmersExact instance
-		KmerCountExact cke=new KmerCountExact(args);
+		KmerCountExact x=new KmerCountExact(args);
 		t2.stop();
 //		outstream.println("Initialization Time:      \t"+t2);
 		
 		///And run it
-		cke.process(t);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
-	
-	/**
-	 * Display usage information.
-	 */
-	private static void printOptions(){
-		System.err.println("Please consult the shellscript for usage information.");
-//		outstream.println("Syntax:\n");
-//		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.KmerCountExact in=<input file>");
-//		outstream.println("\nOptional flags:");
-//		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-//		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-//		outstream.println("out=<file>         \tDump kmers and counts to this file.");
-//		outstream.println("");
-//		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-//		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-//		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-//		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-//		outstream.println("k=28               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
-//		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
-//		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
-//		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
-//		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-//		outstream.println("minq=4             \tTrim quality threshold.");
-//		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
-//		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-//		outstream.println("fastawrap=70       \tLength of lines in fasta output");
-//		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
-//		outstream.println("forest=t           \tUse HashForest data structure");
-//		outstream.println("table=f            \tUse KmerTable data structure");
-//		outstream.println("array=f            \tUse HashArray data structure");
-	}
-	
 	
 	/**
 	 * Constructor.
 	 * @param args Command line arguments
 	 */
 	public KmerCountExact(String[] args){
-		for(String s : args){if(s.contains("standardout") || s.contains("stdout")){outstream=System.err;}}
-		System.err.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		/* Set global defaults */
 		ReadWrite.ZIPLEVEL=2;
@@ -106,9 +74,8 @@ public class KmerCountExact {
 		}
 		
 		/* Initialize local variables with defaults */
-		Parser parser=new Parser();
-		boolean setOut=false;
 		boolean useForest_=false, useTable_=false, useArray_=true;
+		Parser parser=new Parser();
 		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
@@ -117,12 +84,8 @@ public class KmerCountExact {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -136,9 +99,10 @@ public class KmerCountExact {
 				//do nothing
 			}else if(a.equals("out") || a.equals("out1") || a.equals("outkmers") || a.equals("outk") || a.equals("dump")){
 				outKmers=b;
-				setOut=true;
 			}else if(a.equals("mincounttodump") || a.equals("mindump") || a.equals("mincount")){
 				minToDump=Integer.parseInt(b);
+			}else if(a.equals("maxcounttodump") || a.equals("maxdump") || a.equals("maxcount")){
+				maxToDump=Integer.parseInt(b);
 			}else if(a.equals("dumpthreads")){
 				DumpThread.NUM_THREADS=Integer.parseInt(b);
 			}else if(a.equals("hist") || a.equals("khist")){
@@ -172,26 +136,20 @@ public class KmerCountExact {
 				shaveDepth=Integer.parseInt(b);
 			}else if(a.equals("histcolumns")){
 				histColumns=Integer.parseInt(b);
-			}else if(a.equals("histmax")){
-				histMax=Integer.parseInt(b);
+			}else if(a.equals("histmax") || a.equals("histlen") || a.equals("khistlen") || a.equals("histsize") || a.equals("khistsize")){
+				histMax=Tools.parseIntKMG(b);
 			}else if(a.equals("histheader")){
 				histHeader=Tools.parseBoolean(b);
 			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
 				histZeros=!Tools.parseBoolean(b);
 			}else if(a.equals("gchist")){
 				gcHist=Tools.parseBoolean(b);
-			}
-			
-			else if(a.equals("sketch")){
-				sketchPath=b;
-			}else if(a.equals("sketchlen") || a.equals("sketchlength")){
-				sketchLength=(int)Tools.parseKMG(b);
-			}else if(a.equals("sketchfasta")){
-				sketchFasta=Tools.parseBoolean(b);
-			}else if(a.equals("sketchname")){
-				sketchName=b;
-			}else if(a.equals("sketchid")){
-				sketchID=Integer.parseInt(b);
+			}else if(a.equals("logscale")){
+				doLogScale=Tools.parseBoolean(b);
+			}else if(a.equals("logwidth")){
+				logWidth=Double.parseDouble(b);
+			}else if(a.equals("logpasses")){
+				logPasses=Integer.parseInt(b);
 			}
 			
 			else if(a.equals("minheight")){
@@ -211,18 +169,46 @@ public class KmerCountExact {
 			}else if(a.equals("peaks") || a.equals("peaksout")){
 				outPeaks=b;
 			}else if(a.equals("smooth") || a.equals("smoothe")){
-				smooth=Tools.parseBoolean(b);
+				smoothKhist=smoothPeaks=Tools.parseBoolean(b);
+			}else if(a.equals("smoothkhist") || a.equals("smoothhist")){
+				smoothKhist=Tools.parseBoolean(b);
+			}else if(a.equals("smoothpeaks")){
+				smoothPeaks=Tools.parseBoolean(b);
 			}else if(a.equals("smoothradius") || a.equals("smootheradius")){
 				smoothRadius=Integer.parseInt(b);
 			}else if(a.equals("maxradius")){
 				CallPeaks.maxRadius=Integer.parseInt(b);
 			}else if(a.equals("progressivemult")){
 				CallPeaks.progressiveMult=Float.parseFloat(b);
-			}else if(KmerTableSet.isValidArgument(a)){
+			}
+			
+			else if(KmerTableSet.isValidArgument(a)){
 				//Do nothing
-			}else{
+			}else if(a.equals("decimals")){
+				decimals=Integer.parseInt(b);
+			}
+			
+			else if(a.equals("sketchmode")){
+				KmerCountAbstract.SKETCH_MODE=Tools.parseBoolean(b);
+			}else if(a.equals("sketch")){
+				sketchPath=b;
+			}else if(a.equals("sketchlen") || a.equals("sketchlength") || a.equals("sketchsize")){
+				sketchLength=Tools.parseIntKMG(b);
+			}else if(a.equals("sketchname")){
+				sketchName=b;
+			}else if(a.equals("sketchid")){
+				sketchID=Integer.parseInt(b);
+			}else if(SketchObject.parseSketchFlags(arg, a, b)){
+				//Do nothing
+			}
+			
+			else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		if(sketchPath!=null){
+			SketchObject.postParse();
 		}
 		
 		{//Process parser fields
@@ -250,7 +236,7 @@ public class KmerCountExact {
 		if(k<=31){//TODO: 123 add "false" to the clause to force KmerTableSetU usage.
 			tables=new KmerTableSet(args, 12);
 		}else{
-			tables=new KmerTableSetU(args, 12);
+			tables=new KmerTableSetU(args, 0);
 		}
 		if(tables.prefilter){tables.minProbMain=false;}
 		
@@ -309,12 +295,12 @@ public class KmerCountExact {
 		outstream.println("Input:                      \t"+tables.readsIn+" reads \t\t"+tables.basesIn+" bases.");
 		
 		if(tables.qtrimLeft() || tables.qtrimRight()){
-			outstream.println("QTrimmed:               \t"+tables.readsTrimmed+" reads ("+String.format("%.2f",tables.readsTrimmed*100.0/tables.readsIn)+"%) \t"+
-					tables.basesTrimmed+" bases ("+String.format("%.2f",tables.basesTrimmed*100.0/tables.basesIn)+"%)");
+			outstream.println("QTrimmed:               \t"+tables.readsTrimmed+" reads ("+String.format(Locale.ROOT, "%.2f",tables.readsTrimmed*100.0/tables.readsIn)+"%) \t"+
+					tables.basesTrimmed+" bases ("+String.format(Locale.ROOT, "%.2f",tables.basesTrimmed*100.0/tables.basesIn)+"%)");
 		}
 		if(tables.minAvgQuality()>0){
-			outstream.println("Low quality discards:   \t"+tables.lowqReads+" reads ("+String.format("%.2f",tables.lowqReads*100.0/tables.readsIn)+"%) \t"+
-					tables.lowqBases+" bases ("+String.format("%.2f",tables.lowqBases*100.0/tables.basesIn)+"%)");
+			outstream.println("Low quality discards:   \t"+tables.lowqReads+" reads ("+String.format(Locale.ROOT, "%.2f",tables.lowqReads*100.0/tables.readsIn)+"%) \t"+
+					tables.lowqBases+" bases ("+String.format(Locale.ROOT, "%.2f",tables.lowqBases*100.0/tables.basesIn)+"%)");
 		}
 		
 		if(shave || rinse){
@@ -326,6 +312,16 @@ public class KmerCountExact {
 		if(shave || rinse){
 			outstream.println("After Shaving:              \t"+(tables.kmersLoaded-kmersRemoved));
 		}
+
+		averageCount=tables.kmersIn*1.0/tables.kmersLoaded;
+		double actualDepth=Tools.observedToActualCoverage(averageCount);
+		double readDepth=(actualDepth*tables.basesIn)/(tables.kmersIn);
+		
+		outstream.println("Average Kmer Count:         \t"+String.format("%."+decimals+"f", averageCount));
+		outstream.println("Estimated Kmer Depth:       \t"+String.format("%."+decimals+"f", actualDepth));
+		outstream.println("Estimated Read Depth:       \t"+String.format("%."+decimals+"f", readDepth));
+		outstream.println();
+		
 		outstream.println("Load Time:                  \t"+t);
 	}
 	
@@ -334,43 +330,58 @@ public class KmerCountExact {
 	/*--------------------------------------------------------------*/
 	
 	long shave(boolean shave, boolean rinse, int maxShaveDepth){
-		final Shaver shaver=Shaver.makeShaver(tables, THREADS);
 		long sum=0;
 
 		for(int i=0; i<maxShaveDepth; i++){
 			int a=i+1, b=maxShaveDepth, c=i+1;
 			//				if(i>3){Shaver2.verbose2=true;}
 			outstream.println("\nShave("+a+", "+b+", "+c+")");
-			sum+=shaver.shave(a, b, c, 100, 100, shave, rinse);
+			final Shaver shaver=Shaver.makeShaver(tables, THREADS, a, b, c, 1, 3, 100, 100, shave, rinse);
+			long removed=shaver.shave(a, b);
+			sum+=removed;
 		}
 
 		System.err.println();
 		return sum;
 	}
 	
-	private void makeKhist(String fname, String peaks, int cols, int max, boolean printHeader, boolean printZeros, boolean printTime, boolean smooth){
-		if(fname==null && peaks==null){return;}
+	private double makeKhist(String fname, String peaks, int cols, int max, boolean printHeader, boolean printZeros, boolean printTime, boolean smoothKhist, boolean smoothPeaks){
+		if(fname==null && peaks==null){return -1;}
 		
-		long[] array=tables.makeKhist(fname, cols, max, printHeader, printZeros, printTime, smooth, gcHist, smoothRadius);
+		final long[][] arrays=tables.makeKhist(fname, cols, max, printHeader, printZeros, printTime, smoothKhist, gcHist, doLogScale, logWidth, logPasses, smoothRadius);
+		final long[] array=arrays[0];
+		final long[] gcArray=arrays[1];
+		
+		double avg=Tools.averageHistogram(array);
 		
 		if(peaks!=null){
 			CallPeaks.printClass=false;
 			ArrayList<String> args=new ArrayList<String>();
-			if(!smooth && smoothRadius>0){
+			if((smoothPeaks && !smoothKhist) && smoothRadius>0){//!smoothKhist because if smoothKhist is true the array will already be smoothed
 				args.add("smoothradius="+smoothRadius);
 				args.add("smoothprogressive=t");
 			}
-			CallPeaks.printPeaks(array, peaks, overwrite, minHeight, minVolume, minWidth, Tools.max(tables.filterMax()+2, minPeak), maxPeak, maxPeakCount, k, ploidy, args);
+			CallPeaks.printPeaks(array, gcArray, peaks, overwrite, minHeight, minVolume, minWidth, 
+					Tools.max(tables.filterMax()+2, minPeak), maxPeak, maxPeakCount, k, ploidy, doLogScale, logWidth, args);
 		}
+		return avg;
 	}
 	
 	private void makeSketch(){
 		Timer ts=new Timer();
 		outstream.println("Generating sketch.");
-		SketchTool sketcher=new SketchTool(sketchLength, k, minToDump, true);
+		SketchObject.maxGenomeFraction=1;
+		SketchObject.k=k;
+		SketchTool sketcher=new SketchTool(sketchLength, minToDump, false, false);
 		Sketch sketch=sketcher.toSketch((KmerTableSet)tables, true);
+		if(sketch==null){
+			errorState=true;
+			System.err.println("WARNING: No sketch was produced, presumably because no kmers passed the filter criteria.");
+			assert(false);
+			return;
+		}
 		sketch.setName0(ReadWrite.stripToCore(ffSketch.name()));
-		sketcher.write(sketch, ffSketch);
+		SketchTool.write(sketch, ffSketch);
 		ts.stop();
 		outstream.println("Sketch Time:                \t"+ts);
 	}
@@ -403,11 +414,11 @@ public class KmerCountExact {
 			outstream.println("Write Time:                 \t"+tout);
 		}else{
 			if(outHist!=null || outPeaks!=null){
-				makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, true, smooth);
+				averageCount=makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, true, smoothKhist, smoothPeaks);
 			}
 			if(outKmers!=null){
 				//			tables.dumpKmersAsText(outKmers, minToDump, true);
-				tables.dumpKmersAsBytes_MT(outKmers, minToDump, true);
+				tables.dumpKmersAsBytes_MT(outKmers, minToDump, maxToDump, true, null);
 			}
 		}
 	}
@@ -420,8 +431,9 @@ public class KmerCountExact {
 		
 		DumpKmersThread(){}
 		
+		@Override
 		public void run(){
-			tables.dumpKmersAsBytes_MT(outKmers, minToDump, false);
+			tables.dumpKmersAsBytes_MT(outKmers, minToDump, maxToDump, false, null);
 		}
 		
 	}
@@ -430,8 +442,9 @@ public class KmerCountExact {
 		
 		MakeKhistThread(){}
 		
+		@Override
 		public void run(){
-			makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, false, smooth);
+			makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, false, smoothKhist, smoothPeaks);
 		}
 	}
 	
@@ -439,14 +452,17 @@ public class KmerCountExact {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private long prime1, prime2;
-	
 	/** Hold kmers. */
 	private final AbstractKmerTableSet tables;
 	
 	private boolean shave=false;
 	private boolean rinse=false;
 	private int shaveDepth=1;
+	
+	private double averageCount=-1;
+	private long basesIn=-1;
+	private long readsIn=-1;
+	private int decimals=3;
 	
 	private long kmersRemoved=0;
 	
@@ -458,7 +474,8 @@ public class KmerCountExact {
 	private String outPeaks=null;
 	
 	private int smoothRadius=1;
-	private boolean smooth=false;
+	private boolean smoothKhist=false;
+	private boolean smoothPeaks=false;
 	
 	private boolean errorState=false;
 	
@@ -473,10 +490,13 @@ public class KmerCountExact {
 	/** Add gc information to kmer histogram */
 	protected boolean gcHist=false;
 	
+	boolean doLogScale=true;
+	double logWidth=0.1;
+	int logPasses=1;
 	
 	private long minHeight=2;
-	private long minVolume=2;
-	private int minWidth=2;
+	private long minVolume=5;
+	private int minWidth=3;
 	private int minPeak=2;
 	private int maxPeak=Integer.MAX_VALUE;
 	private int maxPeakCount=12;
@@ -485,7 +505,6 @@ public class KmerCountExact {
 	
 	private String sketchPath=null;
 	private int sketchLength=10000;
-	private boolean sketchFasta=false;
 	private String sketchName;
 	private int sketchID;
 	private final FileFormat ffSketch;
@@ -496,6 +515,7 @@ public class KmerCountExact {
 	
 	/** min kmer count to dump to text */
 	private int minToDump=1;
+	private int maxToDump=Integer.MAX_VALUE;
 
 	final int k;
 	

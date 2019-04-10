@@ -6,29 +6,28 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 import bloom.KCountArray;
 import bloom.KmerCount7MTA;
 import bloom.KmerCountAbstract;
-
-
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import dna.AminoAcid;
-import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ByteBuilder;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -38,10 +37,12 @@ import shared.Tools;
 public class KmerCoverage {
 
 	public static void main(String[] args){
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
-		
-		if(args.length<1){throw new RuntimeException("No parameters.");}
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		String in1=(args[0].indexOf("=")>0 ? null : args[0]);
 		String in2=(in1!=null && args.length>1 ? args[1] : null);
@@ -61,15 +62,14 @@ public class KmerCoverage {
 			}
 		}
 		
-		Parser parser=new Parser();
 		KmerCountAbstract.minQuality=4;
 		KmerCountAbstract.minProb=0.1f;
+		KmerCountAbstract.CANONICAL=true;
 		
 		int k=31;
 		int cbits=16;
 		int gap=0;
 		int hashes=4;
-//		int matrixbits=-1;
 		long cells=-1;
 		long maxReads=-1;
 		int buildpasses=1;
@@ -80,19 +80,12 @@ public class KmerCoverage {
 		long precells=-1;
 		String histFile=null;
 		int threads=-1;
-		
 		int minq=KmerCountAbstract.minQuality;
-		KmerCountAbstract.CANONICAL=true;
-		
 		boolean auto=true;
-		
-		FastaReadInputStream.TARGET_READ_LEN=Integer.MAX_VALUE;
-		
 		List<String> extra=null;
+		Parser parser=new Parser();
 		
 		long memory=Runtime.getRuntime().maxMemory();
-		long tmemory=Runtime.getRuntime().totalMemory();
-//		assert(false) : memory+", "+tmemory;
 		
 		for(int i=(in1==null ? 0 : 1); i<args.length; i++){
 			if(args[i]==null){args[i]="null";}
@@ -100,11 +93,8 @@ public class KmerCoverage {
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -258,7 +248,7 @@ public class KmerCoverage {
 //		}
 		
 		if(threads<=0){
-			if(auto){THREADS=Data.LOGICAL_PROCESSORS;}
+			if(auto){THREADS=Shared.LOGICAL_PROCESSORS;}
 			else{THREADS=8;}
 		}else{
 			THREADS=threads;
@@ -273,7 +263,7 @@ public class KmerCoverage {
 			long mem=usable-(USE_HISTOGRAM ? (HIST_LEN*8*(THREADS+1)) : 0);
 			if(buildpasses>1){mem/=2;}
 			cells=(mem*8)/cbits;
-//			
+//
 //			long tablebytes=((1L<<matrixbits)*cbits)/8;
 //			if(tablebytes*3<usable){matrixbits++;}
 //			outstream.println(tablebytes/1000000+", "+usable/1000000+", "+(tablebytes*3)/1000000);
@@ -340,11 +330,12 @@ public class KmerCoverage {
 		KCountArray prefilterArray=null;
 		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null, 0);
+			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, false, false,
+					tablereads, 1, buildStepsize, 1, 1, null, 0, Shared.AMINO_IN);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 		}
-		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, 
-				prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue));
+		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, false, false,
+				tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue), Shared.AMINO_IN);
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));
@@ -382,7 +373,7 @@ public class KmerCoverage {
 		outstream.println("Estimated unique kmers:     \t"+estUnique);//+", or "+estUnique+" counting forward kmers only.");
 //		outstream.println("(Includes forward and reverse kmers)");
 		outstream.println();
-		outstream.println("Table creation time:\t\t"+ht);//+"   \t"+String.format("%.2f", totalBases*1000000.0/(ht.elapsed))+" kb/sec");
+		outstream.println("Table creation time:\t\t"+ht);//+"   \t"+String.format(Locale.ROOT, "%.2f", totalBases*1000000.0/(ht.elapsed))+" kb/sec");
 		
 		long bases=0;
 		
@@ -396,8 +387,10 @@ public class KmerCoverage {
 		printTopology();
 		
 		t.stop();
-		outstream.println("\nTotal time:      \t\t"+t+"   \t"+String.format("%.2f", bases*1000000.0/(t.elapsed))+" kb/sec");
+		outstream.println("\nTotal time:      \t\t"+t+"   \t"+String.format(Locale.ROOT, "%.2f", bases*1000000.0/(t.elapsed))+" kb/sec");
 		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	
@@ -417,15 +410,15 @@ public class KmerCoverage {
 		double dfl=mult*fl;
 		
 		System.err.println("\nDepth Topology\t");
-		System.err.println("Spikes:     \t\t\t"+(dsp<10 ? " " : "")+String.format("%.3f%%  \t%d",dsp,sp));
-		System.err.println("Peaks:      \t\t\t"+(dpe<10 ? " " : "")+String.format("%.3f%%  \t%d",dpe,pe));
-		System.err.println("Valleys:    \t\t\t"+(dva<10 ? " " : "")+String.format("%.3f%%  \t%d",dva,va));
-		System.err.println("Slopes:     \t\t\t"+(dsl<10 ? " " : "")+String.format("%.3f%%  \t%d",dsl,sl));
-		System.err.println("Flats:      \t\t\t"+(dfl<10 ? " " : "")+String.format("%.3f%%  \t%d",dfl,fl));
+		System.err.println("Spikes:     \t\t\t"+(dsp<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dsp,sp));
+		System.err.println("Peaks:      \t\t\t"+(dpe<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dpe,pe));
+		System.err.println("Valleys:    \t\t\t"+(dva<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dva,va));
+		System.err.println("Slopes:     \t\t\t"+(dsl<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dsl,sl));
+		System.err.println("Flats:      \t\t\t"+(dfl<10 ? " " : "")+String.format(Locale.ROOT, "%.3f%%  \t%d",dfl,fl));
 	}
 
 
-	public static long count(String reads1, String reads2, KCountArray kca, int k, long maxReads, 
+	public static long count(String reads1, String reads2, KCountArray kca, int k, long maxReads,
 			String output, boolean ordered, boolean overwrite, String histFile, long estUnique) {
 		final ConcurrentReadInputStream cris;
 		{
@@ -481,7 +474,7 @@ public class KmerCoverage {
 	}
 	
 	
-	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads, 
+	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads,
 			String output, boolean ordered, boolean overwrite, String histFile, long estUnique) {
 		
 		ConcurrentReadOutputStream ros=null;
@@ -515,12 +508,12 @@ public class KmerCoverage {
 					}
 					
 					FileFormat ff1=FileFormat.testOutput(out1[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(out2[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
+					FileFormat ff2=out2==null ? null : FileFormat.testOutput(out2[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
 					ros=ConcurrentReadOutputStream.getStream(ff1, ff2, buff, null, true);
 					
 					ros.start();
 					outstream.println("Started output threads.");
-				}else{
+				}else if(ros!=null){
 					ros.resetNextListID();
 				}
 			}
@@ -556,7 +549,7 @@ public class KmerCoverage {
 	
 
 	
-	public static long calcCoverage(ConcurrentReadInputStream cris, KCountArray kca, int k, long maxReads, ConcurrentReadOutputStream ros, 
+	public static long calcCoverage(ConcurrentReadInputStream cris, KCountArray kca, int k, long maxReads, ConcurrentReadOutputStream ros,
 			String histFile, boolean overwrite, long estUnique) {
 		Timer tdetect=new Timer();
 		tdetect.start();
@@ -598,7 +591,7 @@ public class KmerCoverage {
 		
 //		outstream.println();
 		tdetect.stop();
-		outstream.println("Table read time: \t\t"+tdetect+"   \t"+String.format("%.2f", totalBases*1000000.0/(tdetect.elapsed))+" kb/sec");
+		outstream.println("Table read time: \t\t"+tdetect+"   \t"+String.format(Locale.ROOT, "%.2f", totalBases*1000000.0/(tdetect.elapsed))+" kb/sec");
 		outstream.println("Total reads:     \t\t"+totalReads);
 		outstream.println("Total bases:     \t\t"+totalBases);
 //		outstream.println();
@@ -693,15 +686,15 @@ public class KmerCoverage {
 			outstream.println("The most accurate value is the greater of the two.");
 			outstream.println();
 			
-			outstream.println("Percent unique:               \t"+(uniqueM<10 ? " " : "")+String.format("%.2f%%", uniqueM));
+			outstream.println("Percent unique:               \t"+(uniqueM<10 ? " " : "")+String.format(Locale.ROOT, "%.2f%%", uniqueM));
 
-			outstream.println("Depth average:                \t"+String.format("%.2f\t(unique kmers)", avg_unique));
-			outstream.println("Depth median:                 \t"+String.format("%d\t(unique kmers)", median_unique));
-			outstream.println("Depth standard deviation:     \t"+String.format("%.2f\t(unique kmers)", stdev_unique));
+			outstream.println("Depth average:                \t"+String.format(Locale.ROOT, "%.2f\t(unique kmers)", avg_unique));
+			outstream.println("Depth median:                 \t"+String.format(Locale.ROOT, "%d\t(unique kmers)", median_unique));
+			outstream.println("Depth standard deviation:     \t"+String.format(Locale.ROOT, "%.2f\t(unique kmers)", stdev_unique));
 			
-			outstream.println("\nDepth average:                \t"+String.format("%.2f\t(all kmers)", avg_all));
-			outstream.println("Depth median:                 \t"+String.format("%d\t(all kmers)", median_all));
-			outstream.println("Depth standard deviation:     \t"+String.format("%.2f\t(all kmers)", stdev_all));
+			outstream.println("\nDepth average:                \t"+String.format(Locale.ROOT, "%.2f\t(all kmers)", avg_all));
+			outstream.println("Depth median:                 \t"+String.format(Locale.ROOT, "%d\t(all kmers)", median_all));
+			outstream.println("Depth standard deviation:     \t"+String.format(Locale.ROOT, "%.2f\t(all kmers)", stdev_all));
 		}
 		
 		return totalBases;
@@ -712,7 +705,7 @@ public class KmerCoverage {
 	/**
 	 * Locates and fixes spikes in a coverage profile (potentially) caused by false positives in a bloom filter.
 	 * Theory:  If a high-count kmer is adjacent on both sides to low-count kmers, it may be a false positive.
-	 * It could either be reduced to the max of the two flanking points or examined in more detail. 
+	 * It could either be reduced to the max of the two flanking points or examined in more detail.
 	 * @param array An array of kmer counts for adjacent kmers in a read.
 	 */
 	private static void fixSpikes(int[] array){
@@ -763,11 +756,11 @@ public class KmerCoverage {
 					////					array[i]=kca.readPreciseMin(key, k, CANONICAL);
 					//				}
 				}
-				//			else 
+				//			else
 				//				if(Tools.max(ada, adc)>=Tools.max(2, Tools.min((int)a, b, (int)c)/4)){
 				//					array[i]=kca.readPrecise(key, k, CANONICAL);
 				//				}
-				//			else 
+				//			else
 				//				if(b>a+1 || b>c+1){
 				//					//steep
 				//					array[i]=kca.readPrecise(key, k, CANONICAL);
@@ -804,19 +797,13 @@ public class KmerCoverage {
 		if(slopecount>0){slopes.addAndGet(slopecount);}
 	}
 	
-
-	/**
-	 * @param r
-	 * @param kca
-	 * @return
-	 */
 	public static int[] generateCoverage(Read r, KCountArray kca, int k) {
 		if(k>31){return generateCoverageLong(r, kca, k);}
 		if(kca.gap>0){throw new RuntimeException();}
 		if(r==null || r.bases==null || r.length()<k){return new int[] {0};}
 		
 		final int kbits=2*k;
-		final long mask=~((-1L)<<(kbits));
+		final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 		final int gap=kca.gap;
 		
 		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
@@ -877,13 +864,6 @@ public class KmerCoverage {
 		return out;
 	}
 	
-	
-
-	/**
-	 * @param r
-	 * @param kca
-	 * @return
-	 */
 	public static int[] generateCoverageLong(Read r, KCountArray kca, int k) {
 //		assert(false) : "todo";
 //		assert(k>31);
@@ -967,6 +947,7 @@ public class KmerCoverage {
 			ros=ros_;
 		}
 		
+		@Override
 		public void run(){
 			countInThread();
 		}
@@ -977,7 +958,7 @@ public class KmerCoverage {
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				for(int rnum=0; rnum<reads.size(); rnum++){
 					Read r=reads.get(rnum);
 					Read r2=r.mate;
@@ -997,7 +978,7 @@ public class KmerCoverage {
 								 if(cov==null){toss1=true;}
 								 else{
 									 Arrays.sort(cov);
-									 toss1=(cov[cov.length/2]<MIN_MEDIAN && Tools.average(cov)<MIN_AVERAGE);
+									 toss1=(cov[cov.length/2]<MIN_MEDIAN && Tools.averageInt(cov)<MIN_AVERAGE);
 								 }
 							}
 						}
@@ -1012,7 +993,7 @@ public class KmerCoverage {
 								 if(cov==null){toss2=true;}
 								 else{
 									 Arrays.sort(cov);
-									 toss2=(cov[cov.length/2]<MIN_MEDIAN && Tools.average(cov)<MIN_AVERAGE);
+									 toss2=(cov[cov.length/2]<MIN_MEDIAN && Tools.averageInt(cov)<MIN_AVERAGE);
 								 }
 							}
 						}
@@ -1025,13 +1006,13 @@ public class KmerCoverage {
 					ros.add(reads, ln.id);
 				}
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){System.err.println("Returned list");}
 		}
 		
@@ -1091,8 +1072,8 @@ public class KmerCoverage {
 					Arrays.sort(cov);
 					int median=cov[cov.length/2];
 					sb.append(median).append(' ');
-					sb.append(String.format("%.3f ", sum/(float)cov.length));
-					sb.append(String.format("%.3f ", Tools.standardDeviation(cov)));
+					sb.append(String.format(Locale.ROOT, "%.3f ", sum/(float)cov.length));
+					sb.append(String.format(Locale.ROOT, "%.3f ", Tools.standardDeviation(cov)));
 					sb.append(min).append(' ');
 					sb.append(max).append('\n');
 					
@@ -1117,8 +1098,8 @@ public class KmerCoverage {
 					Arrays.sort(cov);
 					int median=cov[cov.length/2];
 					sb.append(median).append(' ');
-					sb.append(String.format("%.3f ", sum/(float)cov.length));
-					sb.append(String.format("%.3f ", Tools.standardDeviation(cov)));
+					sb.append(String.format(Locale.ROOT, "%.3f ", sum/(float)cov.length));
+					sb.append(String.format(Locale.ROOT, "%.3f ", Tools.standardDeviation(cov)));
 					sb.append(min).append(' ');
 					sb.append(max);
 					
@@ -1128,8 +1109,8 @@ public class KmerCoverage {
 			}
 		}
 		
-		private StringBuilder toFastqString(Read r){
-			StringBuilder sb=r.toFastq();
+		private ByteBuilder toFastqString(Read r){
+			ByteBuilder sb=r.toFastq();
 			if(r.bases==null || r.length()<k){
 				if(MIN_MEDIAN>0 || MIN_AVERAGE>0){r.setDiscarded(true);}
 				sb.append("\n0\n0 0 0 0 0");
@@ -1160,8 +1141,8 @@ public class KmerCoverage {
 				Arrays.sort(cov);
 				int median=cov[cov.length/2];
 				sb.append(median).append(' ');
-				sb.append(String.format("%.3f ", sum/(float)cov.length));
-				sb.append(String.format("%.3f ", Tools.standardDeviation(cov)));
+				sb.append(String.format(Locale.ROOT, "%.3f ", sum/(float)cov.length));
+				sb.append(String.format(Locale.ROOT, "%.3f ", Tools.standardDeviation(cov)));
 				sb.append(min).append(' ');
 				sb.append(max);
 
@@ -1171,8 +1152,8 @@ public class KmerCoverage {
 		}
 		
 		private final ConcurrentReadInputStream cris;
-		private final KCountArray kca; 
-		private final int k; 
+		private final KCountArray kca;
+		private final int k;
 		private final ConcurrentReadOutputStream ros;
 		public final long[] hist=new long[HIST_LEN];//(USE_HISTOGRAM ? new long[HIST_LEN] : null);
 		

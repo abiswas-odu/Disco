@@ -1,6 +1,6 @@
 CallVariants Guide
 Written by Brian Bushnell
-Last updated December 22, 2016
+Last updated March 22, 2017
 
 
 CallVariants is a high-speed, multithreaded variant caller that can input sam or bam files, and output VCF files.  It is capable of indel realignment, multi-sample variant-calling, and processing samples with arbitrary ploidy.
@@ -79,9 +79,9 @@ CallVariants will attempt to autodetect the available physical memory and use ro
 
 Threads, speed, and efficiency:
 
-CallVariants is multithreaded and will use all available processors, unless you manually specify the number of threads to use with the "threads=" flag.  In practice, it is unlikely to scale beyond 8 cores for gzipped sam files and 5 cores for compressed bam files, unless the "realign" flag is used, in which case all allowed CPUs will be fully saturated.
+CallVariants is multithreaded and will use all available processors, unless you manually specify the number of threads to use with the "threads=" flag.  In practice, it is unlikely to scale beyond 8 cores (being rate-limited by reading the input file), unless the "realign" flag is used, in which case all allowed CPUs will be fully saturated.
 
-CallVariants is very fast - the speed is generally limited by reading the input files.  This means that uncompressed sam files, or gzipped sam files with pigz installed, are faster than bam files, because bam files are relatively slow to decompress.  Also, unmapped reads and secondary/supplementary alignments are not used, so a file with those reads removed will be faster.  For example, if 99% of your reads are unmapped or 99% of your alignments are secondary, CallVariants would go up to 100x faster when given a file with only the primary alignments of mapped reads, because the input file would be much smaller.  BBMap will produce a file with only mapped reads (and their mates) by using the "outm" flag, and by default it does not produce secondary alignments.
+CallVariants is very fast - the speed is generally limited by reading the input files.  This means that uncompressed sam files, or gzipped sam files with pigz installed, are faster than bam files, because bam files are relatively slow to decompress (at least, prior to samtools 1.4).  Also, unmapped reads and secondary/supplementary alignments are not used, so a file with those reads removed will be faster.  For example, if 99% of your reads are unmapped or 99% of your alignments are secondary, CallVariants would go up to 100x faster when given a file with only the primary alignments of mapped reads, because the input file would be much smaller.  BBMap will produce a file with only mapped reads (and their mates) by using the "outm" flag, and by default it does not produce secondary alignments.
 
 
 *Usage Examples*
@@ -105,7 +105,7 @@ callvariants.sh in=mapped.sam out=vars.vcf ref=human.fa maf=0.02 rarity=0.02 plo
 Raw PacBio variant-calling:
 callvariants.sh in=mapped.sam out=vars.vcf ref=human.fa ploidy=2 minquality=0 minqualitymax=0 minscore=10 usequality=f
 
-Quality score recalibration:
+Quality score recalibration (be sure to trim adapters first):
 bbmap.sh ref=ref.fa in=reads.fq out=mapped.sam
 callvariants.sh in=mapped.sam out=initial.vcf ref=ref.fa ploidy=1
 calctruequality.sh in=mapped.sam
@@ -116,4 +116,18 @@ Restricting the memory and thread usage:
 callvariants.sh in=mapped.sam out=vars.vcf ref=ref.fa ploidy=1 -Xmx10g threads=4 prefilter
 
 This command will use 10 GB RAM (plus some overhead depending on your version of Java) and 4 worker threads (plus some additional threads for I/O and garbage collection).  It will also use the "prefilter" flag to reduce memory demand by not storing variants that only occur once, at the cost of speed.
+
+Calling medium-length insertions with paired reads:
+bbmap.sh ref=ref.fa
+filterbytile.sh in=clumped1.fq.gz out=filtered_by_tile.fq.gz indump=dump.flowcell ud=1.5 qd=1.75 ed=1.75 ua=.8 qa=.9 ea=.9 pigz=32 unpigz zl=8
+bbduk.sh in=filtered_by_tile.fq.gz out=trimmed.fq.gz ordered maxns=0 ktrim=r k=23 mink=11 hdist=1 tbo tpe minlen=85 ref=adapters.fa pigz=32 unpigz zl=8
+clumpify.sh in=trimmed.fq.gz out=eccc.fq.gz passes=4 ecc unpair repair groups=1 pigz=32 unpigz zl=8
+tadpole.sh in=eccc.fq.gz out=ecct.fq.gz ecc ordered pigz=32 unpigz zl=8
+tadpole.sh in=ecct.fq.gz out=extended.fq.gz ordered mode=extend el=20 er=20 k=62 pigz=32 unpigz zl=8
+bbmerge-auto.sh in=extended.fq.gz out=merged.fq.gz outu=unmerged.fq.gz rem k=81 extend2=120 zl=8 ordered pigz=32 unpigz zl=8
+bbmap.sh in=merged.fq.gz out=merged.sam.gz slow bs=bsm.sh pigz=16 unpigz zl=8
+callvariants.sh in=merged.sam.gz out=vars.txt vcf=vars.vcf.gz ref=ref.fa ow ploidy=2 rarity=0.1 ow bgzip
+
+This pipeline thoroughly error-corrects the reads, then extends the reads and merges pairs.  Only successfully merged pairs are used for variant-calling, which reduces bias against longer insertions.  This methodology has been successfully used to identify insertions >200bp long from 2x100bp reads; without extension, only insertions less than half of read length will be discovered.
+
 

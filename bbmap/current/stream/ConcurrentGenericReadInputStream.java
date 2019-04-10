@@ -1,11 +1,14 @@
 package stream;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import dna.Data;
-import dna.Parser;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.Timer;
 import shared.Tools;
 import structures.ListNum;
@@ -13,6 +16,13 @@ import structures.ListNum;
 public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream {
 	
 	public static void main(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		String in1=args[0];
 		String in2=(args.length<2 || args[1].equalsIgnoreCase("null") || args[1].contains("=") ? null : args[1]);
 		if(in2!=null){
@@ -28,11 +38,9 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
+			String b=split.length>1 ? split[1] : null;
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
@@ -80,7 +88,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		long readCount=0;
 		long baseCount=0;
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			
 			for(Read r : reads){
 				Read r2=r.mate;
@@ -95,23 +103,23 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 					if(r2.bases!=null){
 						baseCount+=r2.length();
 					}
-				}	
+				}
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 //			System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 //			System.out.println("reads: "+(reads==null ? "null" : reads.size()));
 		}
 		System.err.println("Finished reading");
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		
 		cris.close();
 		t.stop();
 
 		System.out.println("Reads:      \t"+readCount);
 		System.out.println("Bases:      \t"+baseCount);
-		System.out.println("Avg Length: \t"+String.format("%.2f",baseCount*1.0/readCount));
+		System.out.println("Avg Length: \t"+String.format(Locale.ROOT, "%.2f",baseCount*1.0/readCount));
 		System.out.println("Time:      \t"+t);
 	}
 	
@@ -133,6 +141,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		if(producer2!=null){p2q=new ArrayBlockingQueue<ArrayList<Read>>(4);}
 	}
 	
+	@Override
 	public synchronized ListNum<Read> nextList() {
 		ArrayList<Read> list=null;
 		if(verbose){System.err.println("crisG:    **************** nextList() was called; shutdown="+shutdown+", depot.full="+depot.full.size());}
@@ -156,6 +165,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		return ln;
 	}
 	
+	@Override
 	public void returnList(long listNumber, boolean poison){
 		if(poison){
 			if(verbose){System.err.println("crisG:    A: Adding empty list to full.");}
@@ -168,6 +178,14 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 	
 	@Override
 	public void run() {
+		try {
+			run0();
+		} catch (AssertionError e) {
+			KillSwitch.assertionKill(e);
+		}
+	}
+	
+	private void run0() {
 //		producer.start();
 		synchronized(running){
 			assert(!running[0]) : "This cris was started by multiple threads.";
@@ -181,8 +199,8 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		rt1.start();
 		if(rt2!=null){rt2.start();}
 		
-		threads=(rt1==null ? new Thread[] {Thread.currentThread()} : 
-			rt2==null ? new Thread[] {Thread.currentThread(), rt1} : 
+		threads=(rt1==null ? new Thread[] {Thread.currentThread()} :
+			rt2==null ? new Thread[] {Thread.currentThread(), rt1} :
 				new Thread[] {Thread.currentThread(), rt1, rt2});
 
 		readLists();
@@ -378,7 +396,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 //				if(buffer1.size()<=(BUF_LEN-list.size()) && (buffer1.size()+generated)<maxReads && randy==null){
 //					//System.out.println("crisG:    j");
 //					//Then do a quicker bulk operation
-//					
+//
 //					for(Read a : buffer1){
 //						list.add(a);
 //						Read b=a.mate;
@@ -396,7 +414,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 //					}
 ////					list.addAll(buffer1); //This is actually slower due to an array clone operation.
 //					incrementGenerated(buffer1.size());
-//					
+//
 //					next=0;
 //					buffer1=null;
 //					buffer2=null;
@@ -414,10 +432,10 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 //							assert(a.numericID==b.numericID) : "\n"+a.numericID+", "+b.numericID+"\n"+a.toText(false)+"\n"+b.toText(false)+"\n";
 //							a.mate=b;
 //							b.mate=a;
-//							
+//
 //							assert(a.pairnum()==0);
 //							b.setPairnum(1);
-							assert(a.pairnum()==0 && b.pairnum()==1 && a.mate==b && b.mate==a && a.numericID==b.numericID) : 
+							assert(a.pairnum()==0 && b.pairnum()==1 && a.mate==b && b.mate==a && a.numericID==b.numericID) :
 								"There is something wrong with the read pairing.\n"+
 								a.pairnum()+", "+(b.pairnum())+", "+(a.mate==b)+", "+(b.mate==a)+", "+(a.numericID)+", "+(b.numericID);
 						}
@@ -506,7 +524,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		}
 	}
 	
-	private final int removeDiscarded(ArrayList<Read> buffer1, ArrayList<Read> buffer2){
+	private static final int removeDiscarded(ArrayList<Read> buffer1, ArrayList<Read> buffer2){
 		int removed=0;
 		if(buffer2==null){
 			for(int i=0; i<buffer1.size(); i++){
@@ -608,7 +626,10 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 				}
 			}
 		}
-		assert(threads==null || threads.length<2 || threads[1]==null || !threads[1].isAlive()) : ((ReadThread)threads[1]).generatedLocal;
+		
+		//This assertion should be impossible but somehow it fired.
+		//However, by the time the warning was issued, "isAlive" returned false anyway.
+//		assert(threads==null || threads.length<2 || threads[1]==null || !threads[1].isAlive()) : ((ReadThread)threads[1]).generatedLocal+", "+threads[1].isAlive()+", "+threads[1].getState();
 //		threads=null;
 //		System.out.println("crisG:    C");
 
@@ -631,7 +652,11 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		
 		@Override
 		public void run(){
-			readLists();
+			try {
+				readLists();
+			} catch (AssertionError e) {
+				KillSwitch.assertionKill(e);
+			}
 		}
 		
 		private final void readLists(){
@@ -653,6 +678,8 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 //					System.out.println("crisG:    F");
 					try {
 						list=producer.nextList();
+					} catch (OutOfMemoryError e){
+						KillSwitch.memKill(e);
 					} catch (Throwable e1) {
 						// TODO
 //						System.err.print('*');
@@ -740,7 +767,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 				long x=System.nanoTime();
 				long duration=x-lastTime;
 				lastTime=x;
-				Data.sysout.println(String.format("%.1f", duration*0.000000001));
+				Data.sysout.println(String.format(Locale.ROOT, "%.1f", duration*0.000000001));
 //				Data.sysout.println((long)(0.5+duration*0.000000001)+" ");
 			}else{
 				nextProgress+=PROGRESS_INCR;
@@ -762,12 +789,14 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		}
 	}
 	
+	@Override
 	public long basesIn(){return basesIn;}
+	@Override
 	public long readsIn(){return readsIn;}
 	
 	@Override
 	public boolean errorState(){
-		return errorState || 
+		return errorState ||
 			(producer1==null ? false : producer1.errorState()) || (producer2==null ? false : producer2.errorState());}
 	/** TODO */
 	private boolean errorState=false;
@@ -781,6 +810,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 	private ArrayBlockingQueue<ArrayList<Read>> p2q;
 	
 	
+	@Override
 	public Object[] producers(){return producer2==null ? new Object[] {producer1} : new Object[] {producer1, producer2};}
 
 	private Thread[] threads;

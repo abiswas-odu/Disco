@@ -1,15 +1,15 @@
 package jgi;
 
 import java.io.PrintStream;
-import java.util.Arrays;
 
-import stream.SamLine;
-
-import dna.Gene;
 import fileIO.FileFormat;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
+import shared.Shared;
 import shared.Timer;
+import shared.Tools;
+import stream.SamLine;
 
 /**
  * @author Brian Bushnell
@@ -19,7 +19,10 @@ import shared.Timer;
 public class SplitSam4Way {
 	
 	public static void main(String[] args){
-		new SplitSam4Way(args);
+		SplitSam4Way x=new SplitSam4Way(args);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	private void printOptions(){
@@ -29,13 +32,17 @@ public class SplitSam4Way {
 	}
 	
 	public SplitSam4Way(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
+		
 		if(args==null || args.length!=5){
 			printOptions();
-			System.exit(0);
+			System.exit(1);
 		}
-
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
 		long reads=0, bases=0;
@@ -47,7 +54,7 @@ public class SplitSam4Way {
 		String fchimeric=args[3];
 		String funmapped=args[4];
 		
-		TextFile tf=new TextFile(fin, true, false);
+		TextFile tf=new TextFile(fin, true);
 		TextStreamWriter plus=("null".equalsIgnoreCase(fplus) ? null : new TextStreamWriter(fplus, true, false, true, FileFormat.SAM));
 		TextStreamWriter minus=("null".equalsIgnoreCase(fminus) ? null : new TextStreamWriter(fminus, true, false, true, FileFormat.SAM));
 		TextStreamWriter chimeric=("null".equalsIgnoreCase(fchimeric) ? null : new TextStreamWriter(fchimeric, true, false, true, FileFormat.SAM));
@@ -78,10 +85,10 @@ public class SplitSam4Way {
 					if(chimeric!=null){chimeric.println(line);}
 					creads++;
 //					System.out.println("chimeric: "+sl.pairedOnSameChrom()+", "+(sl.strand()==sl.nextStrand())+", "+sl.strand()+", "+sl.nextStrand()+", "+new String(sl.rname())+", "+new String(sl.rnext()));
-				}else if((sl.firstFragment() ? sl.strand() : sl.nextStrand())==Gene.PLUS){
+				}else if((sl.firstFragment() ? sl.strand() : sl.nextStrand())==Shared.PLUS){
 					if(plus!=null){plus.println(line);}
 					preads++;
-				}else if((sl.firstFragment() ? sl.strand() : sl.nextStrand())==Gene.MINUS){
+				}else if((sl.firstFragment() ? sl.strand() : sl.nextStrand())==Shared.MINUS){
 					if(minus!=null){minus.println(line);}
 					mreads++;
 				}else{
@@ -94,27 +101,13 @@ public class SplitSam4Way {
 		if(minus!=null){minus.poisonAndWait();}
 		if(chimeric!=null){chimeric.poisonAndWait();}
 		if(unmapped!=null){unmapped.poisonAndWait();}
+		
 		t.stop();
-		
-		
-		double rpnano=reads/(double)(t.elapsed);
-		double bpnano=bases/(double)(t.elapsed);
-
-		String rpstring=(reads<100000 ? ""+reads : reads<100000000 ? (reads/1000)+"k" : (reads/1000000)+"m");
-		String bpstring=(bases<100000 ? ""+bases : bases<100000000 ? (bases/1000)+"k" : (bases/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, reads, bases, 8));
 		outstream.println("Plus Reads:         "+preads);
 		outstream.println("Minus Reads:        "+mreads);
 		outstream.println("Chimeric Reads:     "+creads);
 		outstream.println("Unmapped Reads:     "+ureads);
-		
-		
 	}
 	
 	private PrintStream outstream=System.err;

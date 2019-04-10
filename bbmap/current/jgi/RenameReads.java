@@ -3,26 +3,26 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import dna.Data;
-import dna.Parser;
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -33,38 +33,24 @@ public class RenameReads {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		RenameReads rr=new RenameReads(args);
-		rr.process(t);
-	}
-	
-	private void printOptions(){
-		System.err.println("See shellscript for usage information.");
-		System.exit(1);
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx1g -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2> prefix=<>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=auto \tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
+		RenameReads x=new RenameReads(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public RenameReads(String[] args){
-		if(args==null || args.length==0){
-			printOptions();
-			System.exit(0);
-		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		Parser parser=new Parser();
 		
 		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -75,11 +61,8 @@ public class RenameReads {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -109,7 +92,6 @@ public class RenameReads {
 				in1=b;
 			}else if(a.equals("prefix") || a.equals("p")){
 				prefix=b;
-				if(b!=null && !b.endsWith("_")){b="_"+b;}
 			}else if(a.equals("in2") || a.equals("input2")){
 				in2=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
@@ -140,6 +122,8 @@ public class RenameReads {
 				addPrefix=Tools.parseBoolean(b);
 			}else if(a.equals("prefixonly")){
 				prefixOnly=Tools.parseBoolean(b);
+			}else if(a.equals("underscore") || a.equals("addunderscore")){
+				addUnderscore=Tools.parseBoolean(b);
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
 				stream.FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
@@ -152,6 +136,8 @@ public class RenameReads {
 			
 			renameByMapping=FASTQ.TAG_CUSTOM;
 		}
+		
+		if(addUnderscore && prefix!=null && !prefix.endsWith("_")){prefix+="_";}
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -185,22 +171,12 @@ public class RenameReads {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
-//			out1="stdout";
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		if(!parser.setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -223,7 +199,7 @@ public class RenameReads {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
@@ -251,7 +227,7 @@ public class RenameReads {
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -264,7 +240,7 @@ public class RenameReads {
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
 		long x=0;
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 			for(Read r1 : reads){
 				final Read r2=r1.mate;
@@ -290,31 +266,31 @@ public class RenameReads {
 					
 				}else if(prefixOnly){
 					r1.id=prefix;
-					if(r1.mate!=null){
+					if(r2!=null){
 						r2.id=prefix;
 					}
 					x++;
 				}else if(addPrefix){
 					r1.id=prefix+r1.id;
-					if(r1.mate!=null){
+					if(r2!=null){
 						r2.id=prefix+r2.id;
 					}
 					x++;
 				}else{
 					r1.id=prefix+x;
-					if(r1.mate!=null){
+					if(r2!=null){
 						r1.id=r1.id+" 1:";
-						r1.mate.id=prefix+x+" 2:";
+						r2.id=prefix+x+" 2:";
 					}
 					x++;
 				}
 			}
 			if(ros!=null){ros.add(reads, ln.id);}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
@@ -352,6 +328,7 @@ public class RenameReads {
 	private long maxReads=-1;
 	public boolean errorState=false;
 
+	public boolean addUnderscore=true;
 	public boolean renameByMapping=false;
 	public boolean renameByInsert=false;
 	public boolean renameByTrim=false;

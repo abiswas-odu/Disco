@@ -43,7 +43,7 @@ public class LoadThread<X> extends Thread{
 			}else{
 				addRunningThread(x);
 			}
-			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
+			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 &&
 					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 					
 			return activeThreads[0];
@@ -70,7 +70,7 @@ public class LoadThread<X> extends Thread{
 			}
 			activeThreads[2]+=x; //Change number running
 			
-			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
+			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 &&
 					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 			
 			if(activeThreads[2]==0 || (activeThreads[2]<lim && activeThreads[1]>0)){activeThreads.notify();}
@@ -88,7 +88,7 @@ public class LoadThread<X> extends Thread{
 	public static final int countActiveThreads(){
 		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
-			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
+			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 &&
 					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 			return activeThreads[0];
 		}
@@ -98,7 +98,7 @@ public class LoadThread<X> extends Thread{
 		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
 			while(activeThreads[0]>0){
-				assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
+				assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 &&
 						activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 				try {
 					activeThreads.wait(8000);

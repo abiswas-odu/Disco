@@ -30,13 +30,13 @@ public class MakeTestScript {
 			strings=new String[] {
 //				printtime+time+" false",
 //				"memtime /house/homedirs/b/bushnell/bwa/bwa aln -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>temp_bwa.sai",
-//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam", 
+//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam",
 //				printtime+time,
 //				gradesam+"bwa_#S_r#Rx#L.sam #R",
 				
 				printtime+time+" false",
 				"/house/homedirs/b/bushnell/bwa/bwa aln -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sai",
-				"/house/homedirs/b/bushnell/bwa/bwa samse "+extra+" bwa_#S_r#Rx#L.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam", 
+				"/house/homedirs/b/bushnell/bwa/bwa samse "+extra+" bwa_#S_r#Rx#L.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam",
 				printtime+time,
 				gradesam+"bwa_#S_r#Rx#L.sam #R",
 			};
@@ -46,12 +46,12 @@ public class MakeTestScript {
 			strings=new String[] {
 //				printtime+time+" false",
 //				"memtime /house/homedirs/b/bushnell/bwa/bwa aln -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>temp_bwa.sai",
-//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam", 
+//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam",
 //				printtime+time,
 //				gradesam+"bwa_#S_r#Rx#L.sam #R",
 				
 				printtime+time+" false",
-				"/house/homedirs/b/bushnell/bwa74/bwa mem -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>bwamem_#S_r#Rx#L.sam", 
+				"/house/homedirs/b/bushnell/bwa74/bwa mem -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>bwamem_#S_r#Rx#L.sam",
 				printtime+time,
 				gradesam+"bwamem_#S_r#Rx#L.sam #R",
 			};
@@ -61,7 +61,7 @@ public class MakeTestScript {
 			strings=new String[] {
 //				printtime+time+" false",
 //				"memtime /house/homedirs/b/bushnell/bwa/bwa aln -t 32 "+extra+" reads_B1_#Rx#Lbp_#S.fastq 1>temp_bwa.sai",
-//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam", 
+//				"memtime /house/homedirs/b/bushnell/bwa/bwa samse "+extra+" temp_bwa.sai reads_B1_#Rx#Lbp_#S.fastq 1>bwa_#S_r#Rx#L.sam",
 //				printtime+time,
 //				gradesam+"bwa_#S_r#Rx#L.sam #R",
 				
@@ -109,7 +109,7 @@ public class MakeTestScript {
 //		strings=new String[] {
 //				"bowtie --best -y --chunkmbs 1024 --strata -m 1 -k 2 -v 3 -p 24 -t -q -S HG37" +
 //				" reads_B1_#Rx#Lbp_#S.fastq #S_bowtie.sam",
-//				
+//
 //				"java -ea -Xmx96m -cp /house/homedirs/b/bushnell/beta18/ align2.PrintTime bowtieTime.txt",
 //				gradesam+"#S_bowtie.sam #R",
 //				"java -ea -Xmx96m -cp /house/homedirs/b/bushnell/beta18/ align2.PrintTime bowtieTime.txt"
@@ -122,7 +122,7 @@ public class MakeTestScript {
 ////				"bfast postprocess -n 16 -a 3 -f hg19.fa -i $TMPDIR/#S.baf > #S.sam",
 ////				"bfast postprocess -n 16 -a 3 -m 20 -f hg19.fa -i $TMPDIR/#S.baf > #S_r#Rx#L.sam",
 //				"bfast postprocess -n 16 -M 20 -f hg19.fa -i $TMPDIR/#S.baf > #S_r#Rx#L.sam",
-//				
+//
 //				"java -ea -Xmx96m -cp /house/homedirs/b/bushnell/beta18/ align2.PrintTime bfastTime.txt",
 //				gradesam+"#S_r#Rx#L.sam #R",
 //				"java -ea -Xmx96m -cp /house/homedirs/b/bushnell/beta18/ align2.PrintTime bfastTime.txt"

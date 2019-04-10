@@ -1,22 +1,22 @@
 package jgi;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
 import align2.BandedAligner;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentCollectionReadInputStream;
-import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 
 /**
  * Calculates an all-to-all identity matrix.
@@ -28,19 +28,20 @@ public class IdentityMatrix {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		IdentityMatrix as=new IdentityMatrix(args);
-		as.process(t);
+		IdentityMatrix x=new IdentityMatrix(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public IdentityMatrix(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		FileFormat.PRINT_WARNING=false;
 		int maxEdits_=-1;
@@ -52,8 +53,6 @@ public class IdentityMatrix {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -85,14 +84,14 @@ public class IdentityMatrix {
 		maxEdits=maxEdits_==-1 ? BandedAligner.big : maxEdits_;
 		maxWidth=maxWidth_==-1 ? (int)(Tools.min(maxEdits, BandedAligner.big)*2L+1) : maxWidth_;
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, true, false, false);
+		ffout1=FileFormat.testOutput(out1, FileFormat.TXT, null, true, true, false, false);
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 	}
 	
 	void process(Timer t){
 		
 		allReads=load();
-		Shared.READ_BUFFER_LENGTH=4;
+		Shared.setBufferLen(4);
 		ConcurrentCollectionReadInputStream cris=new ConcurrentCollectionReadInputStream(allReads, null, -1);
 		cris.start(); //4567
 		
@@ -134,11 +133,11 @@ public class IdentityMatrix {
 				tsw.print(r.id);
 				if(percent){
 					for(float f : obj){
-						tsw.print(String.format("\t%.2f", f));
+						tsw.print(String.format(Locale.ROOT, "\t%.2f", f));
 					}
 				}else{
 					for(float f : obj){
-						tsw.print(String.format("\t%.4f", f));
+						tsw.print(String.format(Locale.ROOT, "\t%.4f", f));
 					}
 				}
 				tsw.print("\n");
@@ -149,10 +148,10 @@ public class IdentityMatrix {
 		
 		t.stop();
 		outstream.println("Total Time:                   \t"+t);
-		outstream.println("Reads Processed:    "+allReads.size()+" \t"+String.format("%.2fk alignments/sec", (allReads.size()*(long)(allReads.size())/(double)(t.elapsed))*1000000));
-		outstream.println("Min Similarity:     "+String.format("%.5f", minID));
-		outstream.println("Max Similarity:     "+String.format("%.5f", maxID));
-		outstream.println("Avg Similarity:     "+String.format("%.5f", avgID));
+		outstream.println("Reads Processed:    "+allReads.size()+" \t"+String.format(Locale.ROOT, "%.2fk alignments/sec", (allReads.size()*(long)(allReads.size())/(double)(t.elapsed))*1000000));
+		outstream.println("Min Similarity:     "+String.format(Locale.ROOT, "%.5f", minID));
+		outstream.println("Max Similarity:     "+String.format(Locale.ROOT, "%.5f", maxID));
+		outstream.println("Avg Similarity:     "+String.format(Locale.ROOT, "%.5f", avgID));
 	}
 	
 	private ArrayList<Read> load(){
@@ -179,7 +178,7 @@ public class IdentityMatrix {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -191,7 +190,7 @@ public class IdentityMatrix {
 					readsProcessed++;
 				}
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -236,7 +235,7 @@ public class IdentityMatrix {
 			double sum=0;
 			long compares=0;
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 
 				for(int idx=0; idx<reads.size(); idx++){
@@ -265,7 +264,7 @@ public class IdentityMatrix {
 					}
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -283,10 +282,6 @@ public class IdentityMatrix {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	

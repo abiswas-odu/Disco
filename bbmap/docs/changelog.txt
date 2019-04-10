@@ -1,5 +1,1544 @@
 BBTools changelog and todo list.
 
+V38.
+38.00
+Moved ByteBuilder to Structures.
+Added some formatting and comments to SuperLongList.
+JsonObject printing now has an inArray state that prevents newlines from arrays of JsonObjects.
+Improved JsonParser handling of booleans.
+Added a JsonParser validate command.
+Wrote TaxClient for internally doing tax lookups from the TaxServer.
+Added post mode to TaxClient and TaxServer, for URLs over 2000 characters.
+Moved StringNum to Structures.
+Accession loader now sorts files in ascending order of size and can load some before others.
+Fixed a flaw in the hash function for accession numbers that may have allowed collisions.
+TaxTree.parseNodeFromHeader will now try harder for headers with certain formatting.
+Fixed potential overflows by changing Integer.MAX_VALUE to Shared.MAX_ARRAY_LEN.
+SketchTool now has a custom, low-garbage loader instead of relying on ByteFile.
+RQCFilter2 now uses half as many threads for pigz as logical cores.
+Wrote BloomFilter and BloomFilterWrapper.
+Added BloomFilter support into BBMap and RQCFilter.
+Wrote a better available memory estimation function for BloomFilter.
+Accelerated BloomFilter lookup when minConsecutiveMatches>1.
+Fixed logging of BBSplit vs BBMap in RQCFilter2.
+Bloom filter creation from BBMap index now uses multiple threads per chunk.
+Fixed a null pointer in TextStringWriter.
+Fixed a static variable (ef) persisting in RQCFilter, which slowed human removal.
+38.01
+Added support for lowercase letters in accessions.
+gi2ncbi now supports streaming and some other options like shrinknames in server mode.
+Sketch can now return json format from a curl call.
+Sketch server no longer crashes from invalid symbols in sequence in local mode.
+SketchMaker now has a local cache of SketchHeaps per thread in per-taxa mode, allowing a 6x speedup by reducing synchronization and rework.
+RefSeq now uses a 250-species blacklist limit with sizemult=2 instead of 300.
+Wrote MergeSorted and mergesorted.sh to resume SortByName runs that crashed or were killed during merging.
+Removed DumpCount from SortByName and CrisContainer.  It was too confusing.  To shuffle large datasets, they can be merged round-robin.
+Fixed an error message when autodetecting quality encoding.
+Refseq sketch server is now double the normal resolution (sizemult=2).
+SendSketch defaults to sizemult=2 for RefSeq.
+Sketch server startup script now sets sizemult=2 for refseq.
+Added logscale peak calling.
+Added peaks file GC annotation.
+Fixed an array out of bounds in EntropyTracker.
+CallVariants now ignores duplicates by default (0x400 bit).
+StatsWrapper will now append to the gc output if there are multiple assemblies.
+Wrote AnalyzeAccession and analyzeaccession.sh to reduce the memory footprint of accessions in the tax server.
+Added entropy filter flag to RQCFilter2.
+BloomFilter can now act as a highpass filter.
+38.02
+BloomFilter can now do error correction, using the Tadpole algorithm.
+Added merge and unmerge to Tadpole and BloomFilter for dramatic error correction improvements.
+Improved BloomFilter error correction defaults and added smoothing.
+Improved BloomFilter's memory management and added a memfraction flag.
+Fixed tuc not working.
+Tadpole.BloomFilter ECC_ROLLBACK will now roll back merges also (but not ecco currently).
+Wrote Rollback object to simplify rollbacks during error correction.
+Spun BloomFilterCorrectorWrapper of from BloomFilterWrapper.
+Spun bbcms.sh off of bloomfilter.sh. 
+Fixed a bug in msa.sh handling of reverse-complements.
+Improved msa.sh to fully expand undefined bases, accept fasta files, and name the output such that it is clear whether an alignment was forward or reverse.
+msa.sh now allows a cutoff for min identity.
+Improved bbcms smoothing.
+bbcms now allows a minimum fraction of kmers above a certain count to be specified.
+bbcms now prints more statistics about the loaded bloom filter.
+38.03
+Fixed broken interleaving in bbcms output.
+Added seed flag to bbcms and bloomfilter.
+Added BBMerge vstrict and ustrict flags to bbcms.
+Added mergeOK and testmerge flags to BBMerge.
+Added BloomFilter support to BBMerge.
+BBMerge now automatically writes both mergable and unmergable pairs to out if ecco=t and mix is unset.
+testmerge flag now works with ecco.
+Fixed indentation for Tadpole/bbcms results.
+38.04
+bbcms and bloom filter now allow random seeds.
+Changed version printing to not repeat arguments.
+Eliminated redundant copies of mergeOK functions.
+Fixed bbcms testmerge flag.
+Fixed trim/qtrim flag in BBSplit help.
+Added relative error threshold for mergeOK.  TODO: Does not seem to help in my test; try on single cell data.
+Added variable smooth width to bbcms.
+Changed bbcms default bits to 4 after testing.
+Fixed bbcms extra flag.
+38.05
+Fixed interleaving detection in SortByName.
+Changed interleaving detection in FileFormat to audodetect more aggressively.
+Fixed a bug with RQCFilter2 interleaving settings carrying over from BBMerge to FilterByTaxa.
+38.06
+Changed KmerArray to collide all possible kmer extensions into the same cell.
+Wrote FillFast to grab all 4 possible kmer extensions with a single modulo operation.
+Simplified some of BBDuk pair-tracking and discarding logic.
+Added trimfailures bbduk flag.
+Fixed a division by zero bug in SortByName.mergeRecursive.
+Fixed an array-out-of-bounds in CallPeaks.
+Made dual-kmer ANI estimation from Sketch more accurate.
+Added loglog support to BBMerge and Seal.
+Added loglogout support to BBMerge, BBDuk, and Seal.
+RQCFilter2 status.log now tracks kmers.
+Removed RQCFilter and pointed rqcfilter.sh to rqcfilter2.sh.
+38.07
+Changed KmerTable increment functions to require an incr value.
+Added sortbuffer flag to Tadpole, but speed was barely improved on high-depth Clumpified data.
+Migrated coremask and fillfast to tadpole2, but they make it slower for some reason.
+Migrated shave and rinse improvements to Tadpole2; these can make those steps dramatically faster in metagenomes.
+Added BloomFilter serialization.
+Increased default k and minhits of Bloom filter in RQCFilter2 and added serialized filters.
+Reduced RandomReads default quality.
+Made gaussian insert size distribution default for RandomReads.
+Wrote FastaShredInputStream for faster Bloom filter loading with lower memory consumption.
+Fixed number of threads allocated to Bloom filter loading from index.
+38.08
+FilterByTaxa and RQCFilter no longer crash if a header cannot be parsed and the accession tables are not loaded.
+38.09
+bbcms default bits changed from 1 to 2.
+Improved bbcms tossjunk function.
+Added documentation to bbcms and Tadpole.
+Added fixextensions flag, and enabled it for CallVariants, BBDuk, Reformat, RQCFilter, BBNorm, BBMerge, BBMap, Tadpole, and bbcms.
+RQCFilter now extends reads prior to merging if there is enough memory.  This means the insert size histogram will take longer, but allow non-overlapping inserts.
+BBMap now tracks statistics correctly when Bloom filter is enabled.
+Fixed Children flag in TaxServer.
+Shave and rinse no longer checks owner for initial high kmers.
+Shave and rinse now ignores initial high kmers above the isJunction trigger for extension in some cases, for a large speedup in isolates (uses shaveFast flag).
+Changed RandomReads default insert size distribution to more closely match JGI fragment library targets.
+Multithreaded KmerCountArray/KmerCountArrayU ownership array allocation via OwnershipThread for a large speed increase in assembly.
+Added 2passresize flag to Tadpole but it didn't seem to speed things up.
+Added Constellation-like output option for CompareSketch.
+Major changes to Kmer table sizing - a premade resize schedule is now used.  Only for Kmer so far not UKmer.
+38.10
+Merged dev python changes.
+38.11
+Ported schedule to UKmer.
+Fixed a bytesPerKmer bug in KmerCountExact for k>31.
+Accelerated kmer lookups for k>31.
+Condensed code for shave/rinse, but no speed increase.
+Changed default exploredist from 100 to 300.
+38.12
+Stats now omits the first size bracket if it is less than minscaf.
+Fixed problems with extended stats in format 4-6.
+Fixed a bug in reporting amount of spikin removed in RQCFilter.
+Multithreaded kmer frequency histogram generation using kmer and ukmer packages.
+mutate.sh now outputs vcf files.
+Fixed processing of sam files with M, =, and X in cigar string.
+Fixed a bloom filter BBMap bug in counting reads.
+Updated some pipelines shell scripts.
+Started writing a new KCountArray class, but abandoned it as the current one looks as efficient as possible.
+38.13
+Fixed a casting exception in Shared.sort.
+Fixed missing column from mutate.sh vcf output.
+Addslash for RandomReads now works with the illuminanames flag.
+Fixed mutate.sh VCF files.
+Wrote Contig and Edge classes.
+Wrote ContigLengthComparator.
+Transitioned Tadpole from building Reads to building Contigs.
+Wrote ProcessContigThread.
+Tadpole now writes additional information about contig ends to headers.
+Tadpole now strictly uses F_BRANCH and B_BRANCH instead of just BRANCH (TODO: D_BRANCH).
+Tadpole output should now have canonical orientation, order, and names (apart from circular contigs).
+Tadpole1 now has a preliminary contig graph processing phase (in progress).
+Tadpole now supports preliminary dot output (not yet correct).
+Added appendln to some ByteBuilder methods.
+Added print(Contig) to bsw.
+38.14-38.15
+Integrated dev Python changes; merging Git branches.
+38.16
+Ported Tadpole1 ProcessContigThread to Tadpole2.
+Added perfile flag to CompareSketch, which allows multithreaded loading.
+Added prealloc flag to CompareSketch.
+Revised TaxServer to use Sketch index, and typically run 1 thread per sketch.
+Added outsketch flag to CompareSketch.
+Modified RandomGenome to be faster and more flexible, and added a shell script.
+38.17
+Added Sketch minLevelExtended flag.
+Fixed bbcms loglog using quality scores from the wrong read.
+Wrote MergeSketch and mergesketch.sh.
+Fixed a major bug in TaxTree.getNodeAtLevel and restarted all servers.
+Wrote KmerLimit and kmerlimit.sh.
+Wrote Shuffle2 and shuffle2.sh.
+Changed blacklist_nt_species_1000.sketch to blacklist_nt_species_500.sketch
+38.18
+Modified RQCFilter and BBMap to correctly track and report unmapped reads and bases when using the Bloom filter.
+Wrote RQCFilterStats for tracking relevant RQCFilter stats.  This is printed to filterStats2.txt.
+Added some columns to BBMap scafstats/refstats where a read is assigned to at most a single reference.
+All classes that used ThreadLocalRandom now call Shared.threadLocalRandom() to comply with Java 6.
+Wrote KmerLimit and kmerlimit.sh to restrict a randomly-ordered file to a specific number of unique kmers.
+Wrote KmerLimit2 and kmerlimit2.sh to restrict an arbitrarily-ordered file to a specific number of unique kmers via subsampling.
+Updated /pipelines/ scripts for fetching and sketching.
+38.19
+Updated RQCFilterData tar.
+Updated wrapper shellscripts to handle Cori error messages.
+Fixed a bug in tracking duplicate reads in RQCFilter.
+38.20
+Added logsum and powsum to stats.sh gc output format 5.
+Fixed a bug in tracking reads in RQCFilter.
+Fixed a basic to extended taxonomy translation routine in TaxTree.
+Added JSON (format 8) to stats.sh.
+Fixed(?) BBMap tracking of trimm/untrimmed bases for mapped and unmapped reads.
+Fixed bugs in RQCFilter tracking of trim/untrimmed mapped bases.
+38.21
+Wrote JsonLiteral and modified Stats to not put quotes around formatted floats.
+Added support for accession, gi, and header lookups to RenameGiToNcbi.
+--help or --version now exit with status 0 rather than 1.
+Updated some documentation.
+Added BBDuk trimpolyg flag.
+FlowCell MicroTiles now track more data and have more methods.
+Wrote PlotFlowCell and plotflowcell.sh, to look at the distribution of polyG in NovaSeq runs.
+Fixed a broken if-else in AccessionToTaxId that was causing TaxServer to start with prealloc false.
+Fixed a bug in verifying other mapped stats in RQCFilter2.
+38.22
+Added getters for sketch.Comparison and sketch.CompareBuffer, and made fields private.
+Fixed bug causing Sketch unique count to display incorrectly - bitsetbits had been changed from 2 to 1.  It should be 2; made static final.
+Fixed an array size bug in Tadpole caused by increasing the range of termination codes.
+Fixed a problem of Kmers being appended to ByteBuilders reverse-complemented.  This impacted Shaver2.
+Fixed a static variable (MASK_CORE) hangover from Tadpole1 into Tadpole2 with TadWrapper.
+Added more BBDuk polyG options.
+Added polyG options and tracking to RQCFilter.
+Fixed an incident where a new KmerComparator was created unnecessarily.
+Clumpify now correctly counts the number of reads when a temp file is streamed without being clumped.
+38.23
+Wrote hiseq.CycleTracker.
+Fixed a parse error in AnalyzeFlowCell.
+Added preliminary G-bubble-detection and elimination to AnalyzeFlowCell, but it is not clear if it is working correctly.
+Wrote hiseq.IlluminaHeaderParser.
+Revised A_Sample, A_SampleMT, and A_SampleByteFile with additional submethods to reduce the length of long methods.
+Removed JNI path flag from BBMerge, BBMap, and RQCFilter shell scripts.
+Fixed a bug in reading adaptersOut.fa from RQCFilter2.
+Changed the way path is appended to output files in RQCFilter2.
+Added poly-C flags to BBDuk.
+Wrote PolymerTracker.
+Added polymer count tracking to BBDuk and RQCFilter.
+Added clipfilter to Reformat.
+38.24
+Skipped this version.
+38.25
+Added maxcov flag to Tadpole.
+Seal now supports filenames without the ref= flag to allow wildcard expansion.
+Removed calcmem.sh perl dependency on Genepool, since Genepool is gone.
+Fixed a logging bug in RQCFilter.
+Added optical alias to RQCFilter.
+Modified mergesorted.sh.
+SortByName and MergeSorted buffer-resizing logic made safer.
+Fixed leftRatio calculation in Tadpole for printing in contig headers.
+Fixed an unwanted print statement in Tadpole dot generation.
+Fixed a crash in Clumpify when handling Ns.
+BBMap bloomserial now defaults to true.
+Deleted normandcorrectwrapper.sh.
+Updated removehuman, removehuman2, etc. to use Bloom filters and clarified that the scripts are for NERSC.
+Wrote PercentEncoding for translating URLs, and made it more efficient by removing String functions.
+38.26
+Improved Blacklist name translation.
+Data internmap is now faster and takes less memory.
+Made prok package for prok gene-calling.
+Moved LOGICAL_PROCESSORS to Shared to avoid an initialization order problem.
+Fixed a bug in FastaReadInputStream with buffer resizing logic.
+Disabled some assertions in BBIndex that do not appear to be valid with a long maxindel and many short contigs.
+Added nl() and tab() to ByteBuilder.
+Reduced memory prealloc request for kmer tables on high memory (>120G) nodes.
+Fixed CallVariants reporting of deletion count.
+Clarified CallVariants SamStreamer flag, and capped it at Shared.threads().
+Clarified callvariants2.sh purpose and function.
+Wrote AnalyzeGenes, CallGenes, and CompareGff.
+Added amino acid output to CallGenes.
+38.27
+Bugfixes and improvements to gene calling.
+Began adding RNA models to gene calling.
+Refactored gene-caller to allow more flexibility with models; pgm format changed.
+Adjusted default gene model.
+38.28
+Multithreaded AnalyzeGenes.
+Wrote FloatList.
+Fixed a bug in Tools.reverseInPlace for partial arrays.
+Added trimcircular flag to Tadpole to trim ends of loop-loop contigs, which are presumably circular.
+Finished tRNA and rRNA models and calling functions.
+38.28
+Fixed a bug in 3-column Sketch colors.
+38.29
+Calibration of gene models.
+Fixed a bug with chloroOutFile/fbtOutFile name in RQCFilter2.
+Sketch now allows integrated gene-calling for nucleotide to protein translation.
+Added minsize and maxsize to RepresentativeSet.
+38.30
+More calibration of gene models.
+Fixed some misassumptions in percent encoding.
+Modified GatherKapaStats to output raw data.
+Generated a minimal representation of RefSeq Microbial...  achieved 80% size reduction.
+Changed the way pileup calculates coverage from soft-clipped bases; they are now ignored.
+Changed the way samtools/sambamba exclusion flags are processed to be more flexible and faster.
+Pileup now uses samtools to parse the header and sambamba to parse the reads, since sambamba is slow at reading headers.
+Added key=value pair output to pileup.
+Wrote ScoreTracker to track scores of accepted and rejected ORFs when calling genes.
+38.31
+Added long kmer support to RNA calling in CallGenes.
+Added BBMerge flags maxmismatches and forcemerge.
+Added Tadpole flag filtermem.
+38.32
+Tadpole now refuses to run with no input files.
+BBMerge now supports filtermemory flag.
+Wrote KmerFilterSetMaker and kmerfilterset.sh to generate small covering sets of kmers for use with BBDuk.
+Added silent flags to suppress screen messages from BBDuk, Reformat, and KmerTableSet-related classes.
+Added reformat padding flags.
+38.33
+Shred now validates input files.
+Reformat now has options for padding sequences.
+****KmerFilterSet now accepts an initial kmer set.
+Wrote IntList3.
+Wrote HashArrayHybridFast.
+Changed HashArray bulk add contract.
+Back-ported HashArrayHybridFast changes to KmerNode2D.
+Seal now uses HashArrayHybrid; indexing Silva became >100x faster.
+Sketch now uses HashArrayHybrid; indexing speed increased somewhat.
+Added amino support to BBDuk.
+Added amino support to KmerCountExact.
+Added amino support to EntropyTracker.
+Modified entropy defaults for amino acid mode with Sketch(?) and BBDuk(?)
+Fixed tracking of PercentOfPairs for insert size statistics.
+CompareSketch now automatically sets the protein, fungi, or mito path on NERSC.
+Mutate.sh now works on amino acid sequences.
+Validated CompareSketch on raw reads in protein space; it works amazingly well.
+38.34
+Wrote MetagenomeDataWriter to produce some stats for Brian Foster.
+Modified PreParser and Shared to deal with determining the original command line.
+TODO: (Brian Foster) report base and read counts exactly, not rounded to the nearest million.
+Refactored and commented IntList classes.
+Added merge and ecco to CallGenes.
+Wrote MetadataWriter to allow unified reads in and out nomenclature for certain programs.
+Removed a constructor from PreParser.
+Fixed MetadataWriter for AssemblyStats.
+Added support for protein Sketch server.
+Fixed some printing errors in CallGenes.
+Added recode and retranslate to CallGenes.
+Increased SendSketch default sizemult for RefSeq and proteins to 2.2.
+38.35
+Added sketchonly flag to CompareSketch, allowing it to just sketch and write files but not actually run comparisons.
+Protein sketch server is now active.
+Added TaxTree.descendsFrom(child, parent).
+TaxTree now classifies species-attached no-rank archaeal nodes as strains in addition to bacteria.
+pigz --version is now recorded to determine whether -11 and -I flags are supported.
+Added sketch sixframes flag, for dealing with indels.  This works suprisingly well but bloats the genome size.  Probably the size should be divided by 6.
+Added prokprot sketch to RQCFilter.
+Sketch now ignores AA kmers spanning stop codons in sixframes mode.
+Fixed a flaw in rkmer generation following Ns, in many classes.
+Added Sketch toValue2 function to process dual kmers in an unbiased manner.  This yields more accurate ANI.
+Added comparison logic for tracking k1 and k2 matches independently.
+toValue2 now handles aminos as well.
+Changed default kmer lengths from 31,0 to 32,23, and 10,7 to 11,7.
+Simplified some parts of Sketch, like removing aniFromWkid flag.
+Changed an assertion in TaxTree to a warning, because the latest version of NCBI taxdump contains errors.
+Validation of K and hash version between sketches is now more robust.
+Fixed all instances of kmer bitmasks to work correctly with k=32; prior limit was k=31.
+Added 1-bit antialiasing to Sketch hashcodes.
+Bumped hash version to 2.
+Increased amino default kmer length to 12,8 to increase specificity.
+Fixed an assertion failure in comparesketch perfile mode.
+Increased size of prokprot blacklist.
+Added Sketch refhits flag, to indicate the number of references sharing kmers with keys hitting a reference.
+Remade prokprot blacklists at a higher taxonomic level to deal with high conservation.
+Fixed an assertion with regards to sketchonly mode in comparesketch.
+avgrefhits is now weakly factored into score.
+Modified some rqcfilter2 sketch flags such as minprob.
+38.36
+Increased Sketch minprob to 0.0008.  Q7 (80% accurate) areas will be used but Q6 (75%) will be ignored; before it was 0.0001 (Q6.1).  This slightly increases accuracy with raw reads.
+Trimrname now works on sam headers.
+Trimrname is now automatically set to the same as trd unless explicitly overriden with the trimrname flag.
+Added small RNA adapters to adapters.fa (thanks to Daniel N.)
+Sketch now reports the number of unique kmers indexed.
+BBTools can now read embl and gbk formats.
+Added support for subcohort taxonomic level.
+38.37
+Fixed a bug in BBDuk JSON readsOut reporting.
+BBSketch format 3 now prints taxID.
+Fixed broken qin flag (was being overriden by autodetection).
+Improved quality autodetection for out-of-range quality scores.
+FastqReadInputStream now correctly inherits interleaving from FileFormat rather than running internal tests.
+Added JsonParser.parseJsonObjectStatic.
+Added Blacklist.toBlacklist.
+Added SendSketch.toAddress, .setFromAddress, and .sendSketch (static).
+Simplified SendSketch parsing.
+TestFormat now automatically tries to detect organism with SendSketch.
+ReadStats bhist is now faster by formatting with ByteBuilder.
+Added TestFormat bhistlen flag to disable gigantic bhists.
+38.38
+Fixed a parsing error in SendSketch.
+Wrote docs/RestartingServers.txt
+Fixed CallGenes load failure whith under 9 threads.
+Added a 100k limit to SendSketch queries per instance, and added reference tars to the website.
+Increased buffer sizes of SendSketch.
+Reduced number of threads per session for Sketch servers.
+Added trackers for number of Sketches processed, bytes received, and bytes sent to Sketch server.
+38.39
+Fixed a bug in phist (required polysymbol to be set).
+Fixed a bug in BBDuk amino mode (failure to support k=12).
+Fixed a bug in bhist (no newlines!).
+Sketch and Tax servers now tracks single versus bulk queries.
+Converted several ReadStats histograms from TextStreamWriter to ByteStreamWriter.
+38.40
+Replaced some obsolete StringBuilder methods (mainly for read printing) with ByteBuilder.
+Deleted obsolete classes ReadStreamStringWriter and SortByMapping.
+Replaced many instances of StringBuilder with ByteBuilder.
+Moved some fields from Gene to Shared.
+Made Header class.
+Fixed a float-to-int rounding-down problem making BBMerge not strictly obey the maxmismatches flag.
+Redid RandomReads naming format to be pair-capable in sam format.
+Converted all known header-parsing functions to use the new format.
+Wrote SuperLongList.toString
+Added Reformat prioritizelength flag for subsampling variable-length reads.
+Fixed trailing whitespace in bhist.
+38.41
+Fixed a compile error.
+38.42
+Wrote SubSketch and subsketch.sh to pull partial sketches out of larger sketches (e.g. to shrink RefSeq).
+Added stats handler to TaxServer, with version and quantity tracking.
+Added bbversion field to sendsketch header.
+Fixed SendSketch address parsing.
+Added p and q suffixes to parseKMG.
+Added PacBio read length modelling to RandomReads.
+Fixed a CallVariants assertion with SamLine.RNAME_AS_BYTES.
+Fixed major bug in vcf line reading, misinterpreting variant types, preventing BBDuk from parsing vcf properly.
+Wrote SamStreamerMF, a multifile SamStreamer.
+Integrated SamStreamerMF into CallVariants.  Now, with 8 sam.gz files, CallVariants is about 5x as fast on a 32-core node.
+Fixed CallVariants vcf output MCOV reporting -1 when out= is set instead of vcf=.
+Fixed ihist not working in BBDuk.
+38.43
+Wrote var2.VarKey for hashing.  May not use it.
+Added indel processing to fixVars, and Read.containsVars().
+Fixed bugs in reading insertions from VCF files.
+TaxServer usage no longer displays stats (stats are on the /stats page).
+Added ref flag to CompareVCF.
+Added shist to FilterVCF (for vars passing filter).
+FilterVCF no longer requires a reference (in most cases) if the VCF has a correct header.
+CallVariants modified to reduce negative impact of strand bias and read bias on score, in cases that otherwise appear fine.
+Demuxbyname can now do 1 file per sequence header, but it does not close the streams as soon as a sequence is written.  This would be better as a custom program.
+Removed a mysterious automatic newline from Read.toSam(bb).
+Wrote CoverageArray3A, Atomic version.
+Added atomic flag to CallVariants, which increases speed by up to 300 percent.
+Increased speed of multithreaded coverage calculation even without atomic flag.
+Fixed stranded coverage default to false.
+Added CoverageArray.incrementRangeSynchronized.
+CallVariants trackstrand now correctly defaults to false, which disables the DP4 field.
+CalcTrueQuality should now ignore indels declared in a VCF.
+38.44
+Fixed a bug in Tools.parseKMG.
+Added qualhist to CallVariants.
+Added code in CallVariants to deal with recalibrated base quality.
+CallVariants no longer needs ref= prefix before fasta reference.
+FilterVCF can now split alleles.
+Modified mutate.sh to allow variable-length indels, and not put them too close together (to allow better grading).
+Major: Fixed BBDuk/Seal/Clumpify issue in failure to correctly reverse-complement some kmers.
+
+TODO: FilterVCF does not work with dels and ins flags.
+TODO: Consider scanning the index for only long kmers, at least optionally.  Or only indexing long kmers. 
+
+TODO: CallVariants stranded and 32bit should default to auto and be enabled based on memory.
+TODO: Investigate variant-calling after removing trash reads.
+TODO: CompareVCF should be able to process and produce var files, or else, CompareVar should be written.
+TODO: In strandBiasScore, correct for bias of all reads in addition to just mapped reads, when mcov is being tracked.
+TODO: CallVariants first base is capital, later bases may be lower case, for deletion ref calls.
+TODO: Bed output for pileup?
+TODO: Tool to split multiallelic variants.  Or, ignore multiallelic in comparevcf.
+TODO: size= flag does not work sometimes: comparesketch.sh in=mruber.fa.gz ref=protein blacklist=null index=f translate size=10000
+TODO: .fa files should cause a warning when processed in amino mode (rather than translate).
+
+TODO: Mhist seems to only get 0.5 for an indel instead of 1.
+TODO: Adapter-trimming grading.
+TODO: BBDuk auto adapters.
+TODO: Test CallVariants speed with ssmf and raw sam; possibly reduce concurrent files.
+TODO: Replace Integer.parseInt with Tools.parseIntKMG.
+TODO: BBMap ecco (for adapter trimming).
+TODO: RandomReads default insert sizes sould probably not have adapter sequences.
+TODO: RandomReads should add match string to reads.
+TO DELETE?: assemble toText methods, ErrorCorrect, countFastqSplit, 
+
+TODO: Slow speed of singlethreaded sketching.  Largely caused by entropy filtering.
+TODO: Consider 1-bit encoding for CallGenes, with 10-mers recording only AT vs GC or AC vs GT.
+TODO: Allow CallGenes to report gain over coding regions with a gff; or, write a new program to do that.
+TODO: Fix CompareGFF to be robust with multifastas.
+*TODO: SendSketch is not robust against size-0 sketches.  On the server side, they just get reported as Error rather than 0 hits.
+*TODO: 2 or 3 connection threads for SendSketch.
+*TODO: SendSketch/CompareSketch only load sketches singlethreaded per file in persequence mode.
+
+TODO: Convert ReadStats formatting fully to ByteBuilder.
+TODO: Link Seal and BBSketch, and improve Seal per-file ID assignment or per-TaxID.
+*TODO: Collision-free, reversible hashcodes can be implemented.  The reversibility requires masking the selection bits in each mask.  May require single-kmer mode, particularly if k>31.
+
+NOTE: Entropy is disabled in Sketch amino acid mode; might be worth checking the entropy of common amino kmers.
+
+TODO: There may be no value in indexing protein sketches, due to high conservation.
+TODO: e-value - track range.
+TODO: more efficient blacklists and test blacklist efficiency.
+TODO: It is possible to count the average number of ref sketches sharing hit kmers.  A lower average is more specific.
+
+TODO: Make sure sizemult flag works with servers. (checked, and it does)
+TODO: index=f did not work: comparesketch.sh in=c.fa.gz silva whitelist tree=auto index=f
+TODO: KmerCountExact can no longer ouput sketches correctly for the default dual kmer lengths.
+
+***TODO: BBNorm does not like R#.fq notation in 2-pass mode.
+TODO: Call adjacent tRNAs.
+TODO: Add sixframes flag to Sketch for instances of frameshifts, e.g. in raw PacBio data.
+***TODO: Make sure commonAncestor works correctly for no-rank nodes (if it is important).
+***TODO: Tag Sketch hash codes with the lowest bit to indicate whether they are from long or short kmers.  Then calculate genome fraction as in notebook.
+
+***TODO: Figure out better dual-kmer ANI estimate.  For example, if 24-mers and 31-mers have similar KID, this implies that the differences are not randomly distributed and therefore the ANI is an overestimate.
+*TODO: Sizemult does not work with sendsketch local flag.
+*TODO: Default query sketch size of ribo sketch server seems to be too low.
+***TODO: Figure out how to filter mito and chloro from RefSeq...
+
+TODO: tRNAs are often densely packed (30bp apart), but CallGenes will only call one of them.
+TODO: Amino Acid cardinality, and a handful of other BBDuk trivia...
+TODO: KmerfilterSet for amino?
+TODO: Check defaults for amino mode size, ANI, entropy, etc calculations in Sketch.
+
+TODO: HashArrayHybridFast could be ported to ukmer, but that would be a pain since HashArrayUHybrid is not currently used.
+****TODO: Initial kmer set does not appear to work correctly after the first pass...  or something.  Be sure to clear it and retain the whole thing.  It should get copied.
+
+TODO: Set operations of GFF files.
+TODO: Cut sequences from gff file (check if already exists).
+TODO: MakeKmerSet with a blacklist set (do kmer tables support set subtraction?)
+TODO: Rename MakeKmerSet.
+TODO: Better documentation for rqcfilter.sh for remote users.
+TODO: Modify removehuman and removecatdogmousehuman to use the rqcfilterdata flag.
+TODO: Require multi-hit in BBDuk (remove current set from table before picking new kmers?)
+TODO: Easy kmer set operations.
+TODO: Make 5S and tRNA datasets.
+TODO: Test long kmer sensitivity with various lengths; consider increasing to 16-mers.
+
+*****TODO: Test RNA-calling long kmer support.
+
+TODO: How to use rqcfilter.sh and removehuman.sh externally
+
+TODO: rRNA score need to be higher, possibly doubled, to compete with CDS.
+TODO: sketch.sh perfile, or comparesketch.sh ignore ata flag (just outsketch should be fine).
+
+TODO: maxcount is now a supported flag for kmercountexact, but it does not actually work.
+
+TODO: MDWalker breaks when there are reads with both N and D in cigar.
+
+TODO: retain longest isoform and all high-scoring isoforms, but not low-scoring ones.
+TODO: Try multiplicative model for start probs, not additive.
+TODO: Score operons via window, and add operon scores to orf scores.
+TODO: Once optimal path is chosen, refine it by adding and removing orfs.
+TODO: Apply minscore filter before and after choosing optimal path.
+
+TODO: Homopolymer density test.  This may affect ease of sequencing and assembly.
+TODO: Correlation between Tadpole and Spades stats.
+
+TODO:
+Vasanth:
+/global/projectb/sandbox/rnaseq/projects/Golovinomyces_orontii_MGH1_Metatranscriptome_1196471/multimap
+shifter --image=bryce911/bbtools bbmap.sh nodisk=t nzo=f ambig=all deterministic=t maxindel=100000 ref=/global/dna/projectdirs/RD/rnaseq_store/genomes/Golovinomyces_orontii_MGH1/Golor3_AssemblyScaffolds.fasta rpkm=CTWOX_counts.txt in=read1.fq.gz in2=read2.fq.gz machineout=t out=stdout.sam statsfile=CTWOX_counts.txt.summary | shifter --image=rmonti/samtools samtools view -Sb - | shifter --image=rmonti/samtools samtools sort - -o CTWOX_hits.bam
+
+TODO: Entropyout for BBDuk (Alex Copeland email).
+
+TODO: Percolate A_SampleMT changes to other A_Samples.
+TODO: Note that FilterByTile can be run at a very small tile size with perhaps 50 reads each to detect bubbles at high resolution.  This is more effective than trying to detect a high G rate in a large tile that extends out of the bubble.
+TODO: Verify that gton is working in FilterByTile.  It does seem to reduce homopolymers in some cases, but in other cases it increases the rate by selectively discarding non-G reads while not fixing the remaining reads...  perhaps?  The overall rate of homopolymers and Gs does not change much.  It may also be prudent to calc stdev from cycles rather than tile averages; it's currently way too small to be useful.
+
+TODO: Optical deduplication is pretty slow if there are a massive number of duplicates, though it seems to be linear with the size of the file.  Not a priority.
+
+TODO: minLevelExtended flag would be more useful if it could be used to identify hits where there is a higher identity to a different clade than to the same clade.
+TODO: Add an option to trim depth-1 contig ends in Tadpole (probably just for dead ends).
+TODO: Add fofn support to FileFormat.
+
+*TODO: Seems like last element of a sketch has count lower than it should by 1 or more.
+TODO: Look at Silva names of removed things.  Figure out how to deal with them.
+TODO: see how big a merged Silva sketch is.
+
+TODO: Report (from Donovan) of a site not reported when a pair maps perfectly to two locations with different insert sizes.
+TODO: Note: srd=2 seems to improve scores of metagenome assemblies despite removing fewer kmers.
+TODO: Currently impossible to set ScheduleMaker memRatio except through prefilterFraction flag.  There could be a default static memratio flag, in ScheduleMaker, for example.
+
+TODO: Custom memory settings for Oracle verses Open JDK.
+TODO: Consider not shaving on a case-by-case basis after looking at extensions (use the passed branchMult2 and minCountExtend fields).
+
+TODO: BBMerge extend (rsem) mode with 2-bit bloom filter, or maybe even 1-bit.
+TODO: bloom filter with k>31.
+
+TODO: RQCFilter2 produce a file similar to status.log but column-delimited.
+TODO: Modify RQCFilter2 to do entropy filtering in a discrete step.
+TODO: Update RQCFilter2 reproduce.sh to reflect what actually happens.
+
+TODO: Retain read names in bbfakereads.
+*TODO: Sanity check for paired reads being under 1mbp.
+TODO: Sketch kmer frequency histograms.
+TODO: Test consect.
+
+TODO: Refactor BBMerge?
+TODO: Tadpole reassemble is creating new ByteBuilders instead of re-using them.
+
+TODO: Write custom Fastq parser.
+TODO: Test reading kmers, then locking, then writing, to prepopulate cache.
+TODO: Consider allowing HashBuffers to deposit kmers per way, and only hash them if the deposit is too big.  Thus, each way would have 2 swappable LongLists and you'd need to sync on the way to swap them.
+TODO: Write a nonatomic Bloom filter.
+
+V37.
+37.01
+Fixed crash with Seal qhdist.
+37.02
+Added ReadComparatorRandom and shuffling support to SortByName.
+Compared trimming tile edges before removing duplicates.
+Added support for taxonomy headers in Silva or comma-delimited format.
+Added simple mode to PrintTaxonomy.
+Fixed a bug with stdout stream name detection.
+Added subsampling for CompareSketch/SendSketch.
+Improved distribution of sketch file sizes.
+Wrote MergeSam for concatenating sam files.
+Bam streaming from the bamscript is now done uncompressed.
+Added preliminary support for flex-size Sketches via LongList.
+Fixed an assertion error in Clumpify with consensus.
+Dedupe now uses pigz by default.
+Added output ordering to TexStreamWriter and CompareSketch.
+Changed the way names of uncultured organisms are parsed.
+Fixed a regex bug when setting tmpdir.
+Fixed a bug in RandomReads with a print statement.
+Added trimnonoverlapping flag to BBMerge to produce consensus sequence only.
+Clumpify should now automatically create extra groups when expected reads exceed 2 billion.
+Sketch now supports blacklists.
+37.03
+Bump.
+37.04
+Wrote SamFilter.
+Added sam positional filtering capabilities to SamStreamerWrapper and CallVariants.
+SamStreamer now optionally retains sam headers.
+Wrote Sketch guide.
+Added VCFLine filtering to SamFilter.
+Wrote FilterVCF and filtervcf.sh.
+Added max filters to variants (maxscore, etc).
+Added sam line mapq filters to SamFilter (SamStreamer and CallVariants).
+Removed some shellscript module loads for specific versions of samtools.
+Added quality-trimming to variant-calling.
+Reference alleles now always use uppercase letters.
+37.05
+TaxServer now prints initialization time and memory.
+Reduced Sketch memory usage for constuction in taxa mode with prefilter.
+Sketch shellscripts now load pigz if not loaded.
+ReadWrite.readObject now correctly uses the allowSubprocess flag; TaxTree now loads much faster.
+Changed a couple array allocations in Sketch to use safe allocation.
+Split SketchHeap genome size into genomeSizeKmers and genomeSizeBases, to be more clear.
+Fixed some issues with TaxFilter; it was not working properly with default taxlevel.
+Added taxa sorting to SortByName.
+Fixed a bug with PrintTaxonomy accession=auto flag.
+Taxa parsing now supports tid as well as ncbi in sequence headers.
+RenameGiToNcbi now allows custom prefixes for the taxid number; default is tid.
+RenameGiToNcbi now supports accessions.
+Taxa sorting changed a bit.  Promoting everything to direct descendants of the common ancestor did not work, so they are now promoted to the same level.
+Changed BBDuk.RQC_MAP to use Long values instead of Strings; it is now additive.
+Seal now uses the BBDuk RQC_MAP (for RQCFilter).
+Added spikein removal and mtst to RQCFilter.
+37.06
+Wrote ServerTools to house some functions from TaxServer.
+Shortened TaxServer functions by breaking off blocks into functions.
+Added comments to TaxServer.
+Added kill-old-instance flag to TaxServer.
+Added ability to print all sequence headers of empty Fasta sequences.
+37.07
+Sketch blacklist now supports comma-delimited lists of files.
+Refactored sketch code to unify location and parsing of shared fields such as k.
+Added capacity() method to SketchHeap.
+Implemented graduated sketch size via size=auto.
+Added a lower cutoff for hashcode values, to reduce blacklist size and increase speed.
+Codes are now checked against the heap prior to the blacklist, which is faster.
+BBDuk now supports entropy masking like BBMask, but uses less memory.
+CompareSketch now supports whitelisting.
+SketchHeap can now automatically apply the blacklist and whitelist.
+Fixed bloom filter crashing on unicode symbols in sequence.
+37.08
+Fixed a bug in FastaReadInputStream with long headers containing multiple greater-than symbols.
+37.09
+Added SketchObject keyFraction flag and changed default to 0.2.
+Wrote SketchIndex to contain Sketch indexing methods.
+Changed Blacklist ways to 1.
+Changed Bloom filters to by default keep duplicate kmers within reads, and rewrote that method to be more efficient.
+Bloom filter can now apply Sketch hash function to exclude kmers.
+Made some IntList allocation methods safer.
+Deprecated SortByTaxa (functionality moved to SortByName).
+Wrote BlacklistMaker and sketchblacklist.sh
+sketch.sh now sets -Xms.
+PrintTaxonomy now ignores the cellular organisms node.
+Added auto passes to BlacklistMaker.
+BlacklistMaker no longer requires a gi table.
+RenameGiToNcbi now handles lines that have already been renamed.
+Wrote ShrinkAccession.
+Accession loading will now default to trying a shrunk prefix, then revert to the normal filename.
+Removed calcmem.sh perl dependency outside of Genepool.
+Fixed a bug in sketch autosize.
+Changed sketch comparison sort order to use WKID.
+Sketch autosize now defaults to true.
+Added default blacklists.
+Wrote DisplayParams, which handles parsing of Sketch display parameters.
+Curl calls can now pass parameters to a sketch server.
+Tax server now returns an error message if no sketches are loaded.
+37.10
+Added utot to Reformat help.
+Sketch taxlevel now supports strings like species in addition to numbers.
+Disabled a print statement in CrisContainer.
+Removed some redundant static fields from SketchObject and CompareSketch to avoid duplication with DisplayOptions.
+Improved CompareSketch multithreading for small numbers of input sketches.
+37.11
+Changed the word reads to pairs in BBMap output header for pairing report.
+Moved KillSwitch from stream to shared.
+37.12
+Added Tools.contains(String a, String b, int start)
+Fixed an error in Clumpify allduplicates mode; the last in an odd-sized set of duplicates was not detected.
+Added Clumpify renamebycount mode.
+SendSketch no longer requires in= before filename.
+ShrinkAccession now discards lines with no TaxID.
+37.14
+Added chloro and mito removal to rqcfilter.
+Updated tax data and renamed Refseq Microbial records.
+Single-sketch mode sketches are now named after filename rather than sequence name.
+TaxServer now does gc() before killing the old server.
+Sketch Comparison genome size is now estimated from the sketch.
+37.15
+Sketch size now accepts kmg symbols.
+Added aliases for autosizefactor.
+printname0 has alias pn0 and defaults to false.
+Shared read buffer settings now use getters and setters.
+SendSketch and CompareSketch use a larger default read buffer length.
+Fixed an RQCFilter slowdown due to SendSketch changing read buffer length.
+Set RQCFilter final ziplevel to 9 from 8.
+Temporarily (?) set ScafMap.defaultScafMap from CallVariants, for ref-allele Var testing.
+37.16
+Fixed Seal clearing outu flag.
+Fixed RQCFilter misreporting number of input reads.
+Modified shellscripts to load samtools 1.4.
+37.17
+Added rqcfilter.sh to public distribution for Dockerization.
+Fixed clipping/trimming bug in CallVariants leading to incorrect variant calls.
+37.18
+Wrote standalone realigner using Realigner class.
+Wrote bbrealign.sh.
+Fixed a bug in sam output when loading rname as a String.
+Reads that would be fully quality-trimmed are no longer used for calling variations.
+Fixed a realigner bug in which length-1 reads had no cigar string.
+37.19
+Added zygosity histogram output to CallVariants.
+Wrote ProbShared for calculating the chance of two sequences sharing a kmer.
+37.20
+TaxServer URL parsing now correctly handles all reserved symbols encoded as percent codes, and many common non-reserved symbols.
+Added addunderscore flag to RenameReads.
+Added shrinknames flag to RenameGiToNcbi.
+RenameGiToNcbi now tests input files before loading taxonomy data.
+Changed sketch Comparison function to incorporate genomic kmer size.
+Changed removesmartbell to split reads by default rather than masking adapters.
+Sketch blacklist maker now correctly sets rcomp=f in amino mode.
+37.21
+Sketch blacklist maker yields oddly few keys in amino mode.
+Modified KmerCount7MTA to correctly observe the rcomp flag, in most cases.
+Modified KmerCount7MTA to support amino acids.
+Clumpify Parser.parse moved to end of block.
+Fixed a false warning for reads that were a multiple of fastareadlen.
+Added amino8, a reduced representation coding of amino acids.
+Improved sketch amino acid constants in postParse.
+Added amino and kmer length tags to sketch headers.  This will require server restarts.
+Fixed a bug causing sketch.sh to write the file twice in single-sketch mode.
+Increased small sketch sizing for amino acids.
+Sketch size is now based on genome size estimate rather than genomic kmers.
+Suppressed writing of length-0 sketches.
+Fixed overflow when running over 2 billion comparisons.
+Added bbversion.sh.
+Sketch servers will now return an error message if incompatible settings were used for SendSketch.
+Added BBMap deterministic mode.
+Added SendSketch local mode.
+SendSketch local mode no longer loads a blacklist.
+Restarted servers with support for new flags.
+37.22
+DisplayParams now supports a reads flag.
+samplerate and maxreads removed from SketchObject statics list.
+Servers now report and continue in the case then there is an error while trying to kill the old server.
+UseSizeEstimate flag now fully enables or disables size estimate for both scoring and sketch-sizing.
+Slightly increased sketch size for large genomes over 200Mbp.
+37.23
+Fixed module load samtools line in bs.sh to reflect the current version of samtools.
+Added minlen flag to SortByName (for use with nt/sketch).
+Added cohort to TaxTree.
+Improved organization of TaxTree extended level names and synonyms.
+Wrote a script for fetching and sketching nt.
+BBDuk now prints an error message when invalid settings of ktrim are used.
+BBTools now crash rather than hange when quality-score autodetection fails.
+Clumpify now additionally sorts by lane and tile, making optical duplicate detection much faster for huge clumps.
+Added soft-clip trimming to BBDuk.
+Added pipelines directory with scripts for fetching and processing NCBI files.
+37.24
+Added support for alapy compression.
+Added getters and setters for private static errorState fields.
+Sketch kmer length field made optional, only if k!=31.
+Added optional sketch HASH_VERSION field.
+Partially addressed overlapping paramter names in SketchObject/DisplayParams.
+Added clump.KmerComparator2, X, and Y for axial sorting.
+Added axial sort to clump.Clump.
+Added Clumpify sortx and sorty flags to facilitate testing of axial sorting.
+Added additional XY sorting flags.
+Improved XY sorting and made it default to true for all optical duplicate removal.
+Clumpify now additionally sorts by sequence by default, yielding a slight compression improvement.
+Updated RQCFilter with new Clumpify flags (spany adjacent).
+Split Clumpify spantiles into spanx and spany.
+Added adjacent flag to Clumpify for removal of only optical duplicates on adjacent tiles (tile-edge duplicates).
+SendSketch now allows KMG for number of reads.
+CalcTrueQuality now supports the CallVariants prefilter flag.
+Fixed a bug in BBDuk r2 entropy masking.
+Added BBDuk poly-A trimming.
+37.25
+Fixed a bug in tax server processing headers with spaces.
+Added IMG support to tax server.
+Finished revised img sketch support on a per-IMG-id basis.
+Adapted SketchBlacklist for IMG.
+Tested memory consumption of nt and Silva servers and reduced -Xmx flag.
+Added kapatags.L40.fasta and blacklist_img_species_300.sketch to resources.
+Fixed a bug in which BBDuk was not applying the minlength cutoff when no trimming was performed.
+Removed ecc.sh.
+37.26
+Fixed an inequality when checking read length in BBMap.
+Fixed error reporting number of sketches loaded in all-to-all mode.
+Replaced int[] with CompareBuffer object.
+Added Sketch completeness calculation.
+Added Sketch contamination calculation.
+Revised Sketch KID calculation to compensate for variable sketch sizes.
+37.27
+Added ANI calculation and ANI flag.
+Added new flags to SendSketch and doubleheaders.
+Contamination can now be calculated without an index.
+Changed the way contamination was calculated.
+Fixed an indexing bug related to autosize mode.
+37.28
+Added printscore flag.
+Wrote AtomicBitSet.
+Sketch now uses AtomicBitSet for contam tracking, fixing a cache-coherency bug.
+Wrote RawBitSet.
+Sketch now uses one RawBitSet per thread to avoid atomic communication.
+Rewrote Sketch threading; multithreading is now possible with an index.
+Moved Parser to shared.
+Moved a few data structures to structures.
+BBDuk now allows user-specified poly-A length.
+Added Parser parallelsort flag.
+Reduced default sketch records to 20.
+Updated BBSketch guide.
+37.29
+Fixed a bug in mutate.sh when giving indel and sub rates using the 0-1 scale.
+Wrote IntHashSet from LongHashSet and added increment.
+Wrote IntHashMap.
+Integrated IntHashMap into SketchIndex and made it the default path (can be disabled with intmap=f flag).
+Wrote IntHashMapBinary to avoid modulo operation when hashing.
+Added processIMG.sh to pipelines directory.
+Added some new assertions and messages to Clumpify's FetchThread loop to diagnose an odd crash.
+TaxServer query count now ignores usage queries.
+37.30
+Increased the default number of Clumpify groups by 50% (with 2 fetch threads), and made it scale with the number of fetch threads.
+Sketch comparison raw fields can now be printed.
+Wrote SketchResults object, for managing comparison printing methods.
+Fixed a bug in displaying Sketch hits to ref sketches with no TaxID.
+Fixed a name0 display bug.
+Added flowcell and sequence modes to SortByName.
+37.31
+Wrote SplitSam6Way.
+Removed obsolete tryAllExtensions option from TextFile/ByteFile.
+Added histbefore flag to BBDuk, and option to generate histograms after processing.
+Added fname metadata to Sketch header.
+Changed Sketch results query formatting to include more metadata.
+37.32
+Added parsing for comment.
+Clumpify with groups>1 now works with paired fasta files, though interleaved fasta files need interleaved to be explicitly set.
+Wrote MultiBitSet and improved AbstractBitSet.
+Refactored comparison formating into DisplayParams.
+TaxServer no longer dies when receiving an unexpected parameter.
+TaxServer no longer terminates when failing to kill an old instance.
+SendSketch now passes printRefDivisor and so forth.
+Added Unique, uContam, and noHit Sketch results columns.
+Added taxonomy-based Sketch results coloring.
+Added TaxTree.extendedToLevel for reverse lookup.
+37.33
+Added counters for tracking TaxServer statistics.
+Improved server help messages; added Sketch usage info.
+Added Tadpole extra flag and clarified the documentation.
+37.34
+Added some scripts to Pipelines.
+Wrote SummarizeSketchStats and summarizesketch.sh for making tables of multiple Sketch results files.
+Added optional hard-coded path flags for CompareSketch to use silva, img, nt, and refseq sketches.
+Verified that external queries are tracked properly, even though none have been recorded.
+SendSketch and CompareSketch default to colors=f if outputting to a file rather than stdout.
+Fixed issue of FungalRelease not writing an AGP file if contig output file was not specified.
+Fixed a bug when specifying a SendSketch address with a terminal slash.
+Updated DisplayParams to only send hk and hamino.
+Improved SendSketch handling of automatic blacklists.
+Added support for dual kmer lengths in Sketch.
+gSize calculation now supports dual kmers.
+ANI now supports dual kmers, but uses linear interpolation of an exponential function.  Seems to work, though.
+Fixed CompareSketch all-to-all including self for contamination detection.
+Accelerated dual-kmer sketching by choosing a random hashcode rather than the larger one.
+37.35
+Dual kmers are now supported in TaxServer's error message for incompatible sketches.
+Fixed a display bug in LoadReads.
+Added quality-score binning detection to fastq file memory use estimation.
+Added lowcomplexity flag to fastq file memory use estimation.
+37.36
+Clarified TaxServer error message for incompatible settings.
+Added deleteinput flag for Reformat and Clumpify.
+Updated BBSketchGuide.
+37.37
+Fixed a read orientation bug in CalcTrueQuality when using a VCF file.
+Simplified some calls to short and long match string conversion.
+Added a variant-calling script to /pipelines.
+Fixed a null pointer exception in Sketch when using sam files.
+Investigated recalibration of R2.  Turns out the graph just looks odd because of low-quality unmapped reads.
+BBDuk can now accept ref=phix or adapters or artifacts, and automatically locates the file in /resources.
+Read identity calculation was crashing with fixvariants (from a VCF file).
+Removed bbduk2.sh as deprecated; only BBDuk is maintained.
+37.38
+Adjusted Sketch hash function; cycleMask is now a constant.
+Made Sketch hashing variables private.
+Made Sketch hashCycles variable; speeds up shorter kmer lengths and makes k2 codes compatible with k codes of same length.
+SortByName now uses compression level 2 for temp files.
+RenameImg now also reports the number of files, sequences, bases, and TaxIDs used.
+IMG naming is now in the old NCBI style, e.g. tid|1234|img|56789
+IMG header parsing methods and lookup table moved from TaxServer and ImgRecord2 to TaxTree.
+IMG header parsing is now automatic.
+Updated some descriptions in commonMicrobes filter directory.
+RQCFilter now by default queries nt, RefSeq, and Silva when Sketching.
+Wrote TestFilesystem and testfilesystem.sh to monitor filesystem performance.
+SendSketch now automatically sets k and k2 for nt, silva, and refseq.
+Changed RefSeq and nt sketch servers and scripts to k=31,24 (needs restart).
+Modified KmerCount7MTA increment routine slightly; it can now store hashed kmers.
+gi2taxid now runs in silva mode without requiring a gi or accession file.
+Altered BlacklistMaker to fix an issue of redundant hash codes.
+Fixed DisplayParams clone method.
+Fixed order of parsing imghq and setting the default img file.
+Fixed a bug in taxa coloring using parent instead of current node.
+Added dark purple to Colors.
+Taxa coloring now underlines records with the same color but different taxa compared to above.
+Updated SketchGuide to explain underlining.
+Added a second genome repeat content estimation method.
+Genome repeat content now considers one copy of a repeat to be non-repeat.  For example, a genome with 1% duplicated would be considered 1% repeat instead of 2%.
+Added pipelines/assemblyPipeline.sh.
+Increased maximum samtools compression threads to 64.
+Clarified descriptions of outm and BBDuk kmer-matching modes.
+Revised Reformat trimrname handling to include all whitespace, and clarified description to include bam files.
+Restarted RefSeq and nt servers with k=31,24.
+CallVariants and FilterVCF can now enable/disable SNPs, insertions, deletions.
+ReadStats histogram lengths can now be adjusted with the maxhistlen flag.
+37.39
+CompareSketch now allows first parameter to be a file name without in=.
+Wrote LongHashMap and LongHeapMap.
+Refactored SketchHeap to support LongHashMap when minkeycount>1.
+SketchHeap can now be temporarily longer than the desired sketch length when minkeycount>1.
+37.40
+Added usage query tracking to TaxServer.
+Added correct sketch blacklists to public distribution.
+Fixed incorrect insert size with renamebyinsert flag in RandomReads when reads are longer than insert size.
+RQCFilter now resets Sketch statics prior to subsequent SendSketch runs.
+SketchObject minkKeyCount moved to DisplayParams.
+SketchObject minCount field replaced.
+DisplayParams.minCount renamed minHits.
+BlacklistMaker.minCount renamed to MinTaxCount.
+RQCFilter now uses minkeycount=2 for Silva.
+Changed SketchObject.size to targetSketchSize.
+TaxServer now makes a new SketchTool as needed when minKeyCount is different in local mode.
+Made some improvements to assemblyPipeline.sh.
+37.41
+Fixed a tiny bug in parsing Sketch single kmer lengths of under 31.
+37.42
+Updated BBSketch guide.
+37.43
+Changed default IMG path to the k=31,24 version.
+Renamed minID to minWKID.
+MutateGenome can now output a smaller genome fraction of the original genome.
+Fixed a missing newline in Sketch server help info.
+BBSketch now supports non-multiples-of-4 for k2.
+Revised assemblyPipeline.sh.
+Added assembleMito to /pipelines.
+Increased hashing speed by 4-8% by switching from 2D to 1D matrix.
+Increased Sketch max kmer length to 32.
+Enabled pn0 (printseqname) flag for query.
+Fixed CompareSketch ignoring read limit when loading input files; this was caused by parse order.
+37.44
+Reworded code description of maq to indicate it happens after trimming.
+Added mbq to BBDuk.
+Added Sketch ANI bisection, enabled by exactani flag.  But it made the results less accurate at low ANI than linear interpolation.
+Fixed a bug in which old 2D matrix was sometimes used instead of 1D matrix.
+Discovered current K=31,24 server sketches were generated with a bug; regenerating.
+Updated alapy compression support; speed flags are now enabled.
+Updated TaxonomyGuide.txt.
+Added testPlatformQuality.sh.
+Updated callInsertions.sh.
+Updated assemblyPipeline.sh.
+Made a MapPacBio assertion error more explicit, for debugging.
+TaxServer no longer logs usage queries.
+37.45
+Clumpify spanx was controlling both spanx and spany due to a parse error; fixed.
+Added full range of delimiters to demuxbyname and clarified shellscript help.
+Added demuxbyname column mode (e.g. column=2 to demux by the 2nd column).
+Demuxbyname default compression level changed to 1 to cope with slow compression speed.
+Improved CompareSketch parsing of flags shared by Parser and DisplayParams.
+Added 3-column Sketch results.
+Restarted servers with new format support.
+37.46
+Fixed a null pointer exception in Sketch format 3.
+37.47
+Sketch now supports minANI flag.
+Added Sketch spid field and allowed spid and imgID to be set from SketchMaker command line.
+37.48
+taxid, imgid, spid, name, name0, and fname can now all be set or overriden from the command line of Sketch, CompareSketch, and SendSketch.
+Fixed a bug in assigning spid to query sketches in the TaxServer.  Restarted servers again.
+37.49
+For clarity, taxname is now an alias of name for Sketch.
+Changed flags like useimgname to useImgAsName following feedback.
+Added invert flag to Reformat.
+Rewrote ReadStats addToIndelHistogram to increase speed and fix bugs.
+37.50
+Documented autosizefactor in sketch shellscripts.
+Updated BBSketchGuide.txt with information about sketch sizing.
+Wrote fetchSilva.sh.
+Improved commenting of many /pipelines/ scripts.
+Modified RenameIMG to handle dual IMG files.
+Fixed img name parsing when no taxID is present.
+Fixed a failure to increment in TaxTree.parseDelimitedNumber.
+Sketch Amino mode now autosets k2, and a message is suppressed.
+Fixed a bug with Sketch amino mode parsing (it is parsed in 3 places).
+Really deleted ecc.sh from public BBTools distribution.
+Started MakeContaminatedGenomes.
+37.51
+Sketch ref= flag can now accept # wildcard.
+BBDuk Poly-A trimming now occurs before entropy-masking.
+Documented BBDuk internal order of operations in BBDukGuide.
+Wrote MakeContaminatedGenomes and makecontaminatedgenomes.sh.
+Removed a couple references to nonexistent changelogs in shellscripts.
+Fixed a bug in ConcurrentReadInputStream.getReads (failure to call start).
+ImgID sketch results header now is padded by spaces.
+MDWalker can now handle cigar N symbol.
+37.52
+Fixed CompareSketch replacing original header filenames with sketch filenames.
+Fixed a bug in FilterByTile by forcing IntList initial size to at least 1.
+Added eoom (ExitOnOutOfMemoryException) shellscript support.
+Added shellscript parsing for degenerate terms like xmx= and ea.
+Added DisplayParams taxFilter field, and SketchResults autoremoval of nonpassing results.
+Added TaxTree.parseLevel and called it in many parsing routines.
+Made shellscript formating slightly more standardized.
+Added some error checking to SendSketch; it now uses a nonzero exit code when the connection fails.
+Updates shell scripts with references to guides.
+Sketch now supports taxonomic filtering.
+Delete an obsolete redundant guide.
+37.53
+Sketches now scale heap size with sizemult, and default heap size is doubled.
+Fixed Refseq server; it was using a whitelist.
+KillSwitch kill and print methods are now synchronized.
+Moved parse location of Sketch db names to Searcher.
+Searcher.refFiles is now a LinkedHashSet.
+Added Tools.isDigitOrSign and toString(Throwable).
+TaxServer now returns error messages from doubleheader parsing.
+TaxFilter now always adds specified nodes regardless of tax level, and stops promoting as soon as the target level is reached.
+Fixed some taxonomy server issues with tax filtering.
+Added IntHashSetList for creating concise sets.
+Added blacklists to Silva and RefSeq server invocations; they were missing.
+All shellscripts now load oracle-jdk/1.8_144_64bit on Genepool.
+Sketches now have a count array.
+Sketch reading and writing now supports the count array.
+Sketch spid parsing fixed.
+No more spurious warnings about missing blacklists when they are not being used.
+Accelerated Sketch writing by around 20% by debranching.
+37.54
+Changed TaxServer back to prior Java version because 8u144 is not installed on gpwebs.
+Changed default startSilvaServer.sh to old style since the silva keyword is conflated.
+Added Sketch minQual and minProb processing.
+RefSeq is now the default sketch server, since bigger references are more accurate.
+Added support for NCBI merged.dmp file in TaxTree (now mandatory).  This necessitates a coordinated push since the format changed.
+TaxServer no longer crashes when there are missing TaxNodes.
+taxpath now works better with printtaxonomy.sh.
+Sketch unique and nohit counts are now calculated correctly when printcontam is disabled.
+BBDuk now correctly removes reads that fail maxlen even when no trimming is performed.
+TaxServer now correctly tracks external query counts through a proxy (at NERSC).
+37.55
+TaxServer now reports average and most recent query time.
+Making a Sketch from a Heap moved from SketchTool to SketchHeap.
+Sketch construction now adds counts when available.
+SketchMaker now parses display params.
+Fixed an array out of bounds in LongHeapMap.
+PrintDepth is now working!
+Swapped minProb and minQual in SketchObject; parsing was bugged.
+Added #-symbol support for dual fastq files in Sketch.
+Added contains(key) to LongHeapSet and LongHeapMap.
+SendSketch now loads fastq files multithreaded.  This is up to 6x as fast though slightly less efficient.
+Reformat now can upsample via samplereadstarget/samplebasestarget.
+37.56
+SendSketch now does read validation in-thread and achieves up to 9x the speed of the singlethreaded version and better efficiency.
+CompareSketch had bufferlen cap removed when processing fastq.
+SketchMaker has a new fast path for onesketch of a single fastq file, and default bufferlen changed from 1 to 2 to better deal with short sequences.  For fastq, speed was quadrupled.
+SketchMaker no longer prints an error message if there were no output sketches; instead, there is a warning.
+Sketch now allows internal merging of paired reads.
+RQCFilter defaults to merging reads and using minprob=0.75.
+Added Sketch arbitrary metadata tags.
+Added Sketch depth2 (repeat-compensated depth).
+Regenerated nt and RefSeq reference sketches with coverage information and restarted the servers.
+Added Sketch volume column.
+Added IntHashSetList.toPackedArray.
+SketchIndex now returns SketchResults with taxHits instead of a raw ArrayList.
+contam2 now appears to work.
+SketchMaker now obeys read limit.
+Sketch results are now sortable by depth and volume.
+RQCFilter now uses some additional sketch flags like volume.
+37.57
+Changed default printOptions content.
+Wrote MakePolymers.
+Added period flag to MutateGenome.
+Tested: Homopolymer blacklisting up to k=9 does not obviously improve sketch depth accuracy.
+calcmem.sh now supports RQCMEM override flag (in megabytes).
+BBSketch now supports intersection and printing sketch intersections.
+Wrote Sketch.invertKey.  Note that this requires the reference.
+Fixed an issue of not including ref= with # flag in SketchSearcher loading.
+Fixed a bug stemming from a null return in SketchIndex when there are no matches.
+Fixed an infinite loop in Sketch comparebydepth and volume.
+Sketch score moved to a field to make sorting faster.
+Deleted BBMask_noSam.java
+37.58
+Added exception handlers for AssertionErrors in cris.
+Added nucleotide support to sketch files.
+Added Var.noPassDotGenotype.
+Wrote EntropyTracker.
+Modified BBDuk to use EntropyTracker.
+Modified BBMask to use EntropyTracker.
+Note that entropy calculation was slightly off prior to EntropyTracker.
+BBSketch now supports entropy filtering.
+BBMap now supports sambamba for bam input.
+37.59
+Increased memory for RefSeq sketches by 1g.
+Set default Sketch entropy filter to 0.66.
+Set default Sketch minprob to 0.0001, which is sufficient for 31bp at 74% (Q5.9).
+Added EntropyTracker fast, slow, and superslow modes.
+Added command-line flags for EntropyTracker speed, verify, and Sketch entropyK.
+out=/dev/null no longer prompts you to delete it in most cases.
+RQCFilter sketchminprob flag added, and default changed to 0.2 (95%; Q12.9).
+Fixed a bug in EntropyTracker ns calculation and added it to verify().
+RQCFilter now suppresses error messages when SendSketch fails due to connectivity issues.
+Fully commented EntropyTracker.
+Suppressed a race-condition-induced error message from closing the input stream early in Reformat and BBDuk.
+37.60
+Brought back UnicodeToAscii and changed it slightly.  Still does not work as intended, but may work in most cases.
+37.61
+Made some slight changes to EntropyTracker.
+Added ribomap flag to RQCFilter.
+Added default adapter sequences to RandomReads.
+Suppressed printing some unnecessary verbose stuff from CoveragePileup.
+Added kmersIn tracking to kmer counters.
+KmerCountExact now prints average depth.
+Added Tools.observedToActualCoverage().  This allows conversion of observed kmer counts to average kmer depth.
+BBMap now has printstats and printsettings flags to suppress verbose output.
+Revised observedToActualCoverage with a more precise estimate with a reverse curve-fit.
+Added observedToActualCoverage to BBNorm.
+Updated BBSketchGuide.txt with entropy, depth, and merging.
+37.62
+Average kmer quality is now tracked in Sketch and stored in the header.
+Fixed a place in SketchTool where genomeSequences was not being reset to 0 (should have no effect).
+Added synonyms for onesketch and so forth so that the prefix mode= is no longer required.
+CompareSketch can now use # notation for paired reads.
+Added unique2 and unique3 flags.
+Comparesketch now automatically generates an index if required by some columns.
+Wrote TaxFilter.reviseByBestEffort(file) to allow closest available ancestors as output.
+Added FilterByTaxa besteffort flag.
+Improved FilterByTaxa output formatting.
+TaxTree constructor became private.
+TaxTree gained a static sharedTree which is used by default.
+RQCFilter ribomap, chloromap, and mitomap automatically widen filter thresholds when nothing is found.
+RQCFilter disables chloromap when the organism is not a plant (Viridiplantae), unless no taxa is given.
+37.63
+Fixed a bug when using Sketch constructor to pass average kmer quality and restarted servers.
+Added anifromwkid flag to alternate between calculating ani from kid.
+Added minbases to filter results, ignoring small reference sequences.
+Added minsizeratio to filter results.  Intended mainly for all-to-all comparisons.
+Added Strain and Substrain to TaxTree.
+Added RepresentativeSet and representative.sh for condensing sets of genomes by all-to-all ANI.
+37.64
+Fixed a bug in determining which levels to print in PrintTaxonomy.
+37.65
+TaxServer now caps sketch load threads at 2 for local files.
+Added numChildren, minParentLevelExtended, and maxChildLevelExtended fields to TaxNode.
+Added printChildren and printRange to taxonomy server URL parsing.
+37.66
+Changed tax server error response codes from 200 to 400.
+Rewrote tax server URL parsing to be more flexible; /tax/ is no longer needed (though /sketch/ is).
+Broke down server timing reports by local, remote, and usage.
+Added TaxTree.getChildren() using a hashtable.
+Depth and merge flags now work in sketch server local mode.
+TaxServer has now enabled multithreaded local fastq sketch loading and capped the threads at 4 instead of 2 by default.
+TaxServer handlers are now multithreaded, fixing poor response time when loading data in local mode.
+RQCFilter now adds the original filename and organism name (if known) to sketch query headers.
+RQCFilter now reports which microbes were used in filtering.
+37.67
+Fixed a extended/normal level bug when widening TaxFilter.
+Updated CoveragePilup (pileup.sh) to give a more detailed summary, and import scaffold names from the reference sequences (default true) or reads (default false).
+Fixed crash when SamTools version string contains letters.
+RQCFilter now gathers chloro, ribo, mito references for mapping at the species level by default, rather than order.  This dramatically speeds up mapping, by 20x in some cases.
+Pileup now calculates kmer coverage.
+BBMap can now output coverage statistics with the cov flag even if there are no coverage files specified.
+Reformat can now calculate kmer statistics via the k flag.
+Reformat now ties loglog k to counting k.
+Setting loglogk now automatically enables loglog.
+Fixed order of the conditional last column (name0) in Sketch output.
+Sketch format 3 now prints qsize and rsize instead of size ratio.
+RepresentativeSet now expects potentially 5 columns, with qsize and rsize.
+Clarified an assertion error in Seal.
+Added taxonomic filtering to RepresentativeSet.
+RepresentativeSet now prints the size of genomes retained and discarded.
+Strain can now be assigned to children of subspecies.
+TaxServer now prints children for life node.
+JsonObject now ignores attempts to add null values, preventing TaxServer from crashing.
+Comparison.taxID() and imgID() now return -1 rather than 0 if the number is undefined.
+Tweaked RepresentativeSet sorting to favor larger genomes; yields a slightly smaller output.
+Added pJET and lambda to BBMap resources.
+remote_files now additionally lists cat, dog, mouse, and microbial references.
+Sketch format 3 now prints out query size in bases, to avoid including massive sets of E.coli all listed under the same taxID.
+Added DedupeProtein, via the amino flag in dedupe.sh.
+Fixed a bug in Dedupe in which sequences could subsume each other if both contained the other.  This mainly happened when they were the same length but differed by substitutions.
+37.68
+Added Clumpify allowNs flag.
+Clumpify can now process containments and affixes.
+clumpify.sh no longer prints out the java version.
+Clumpify now supports a dupesubrate flag.
+Clarified some steps in variantPipeline.sh.
+TaxFilter can now parse organism names if a tree is loaded.
+37.69
+Renamed kapatags.L40.fasta to kapatags.L40.fa and pJET1.2.fasta to pJET1.2.fa.
+Added kapa support to RQCFilter.
+Added pjet, lambda, mtst, and kapa keywords to BBDuk.
+Added pjet, lambda, mtst, kapa, adapters, artifacts, and phix keywords to Seal to mirror BBDuk.
+Moved breakReads from Reformat to Tools.
+Wrote PreParser to allow output stream redirection.
+Converted most classes to using PreParser.
+Removed MakeCoverageHistogram.
+Deprecated NormAndCorrectWrapper.
+Generally got rid of printOptions(); help is in shellscripts, not code.  This is handled in PreParser now.
+37.70
+Tightened project error and warning levels for compilation; modified a large amount of code to comply.
+Deleted a redundant copy of KillSwitch.
+Deleted redudant copies of safe array allocators.
+37.71
+Eliminated hyphen-stripping, java flag parsing, and null flag replacement from PreParser classes.
+outstreams are now always closed in main, except in rare cases like TaxServer.
+Added outstream to a few classes like BBMerge.
+Moved some TaxServer parsing to ServerTools.
+37.72
+TaxServer no longer allows external file access by default.
+TaxServer logs ip addresses of malformed queries.
+Rewrote ServerTools.sendAndRecieve to be more robust.
+Changed URLConnection to HttpURLConnection to allow error stream access.
+Fixed a bug not displaying help in RemoveHuman.
+calcmem.sh now supports SLURM_MEM_PER_NODE.  However this is only set when the --mem= flag is specified for job submission.
+Sketch metadata is now set in SketchMaker for per-taxa and per-sequence modes.
+Sketch results can now be filtered by optional metadata fields.
+37.73
+Re-added libbbtoolsjni.so, which had somehow been removed.
+Wrote DiskBench.java and diskbench.sh for comparing multithreaded I/O on local and networked disks.
+Added RQCFilter flags for Clumpify groups and tmpdir.
+37.74
+Sketch servers now log the first 3 lines of the body of malformed queries to help diagnose the problem.
+mouseCatDogHumanPath added to RQCFilter.
+Changed parse order of silva flag in TaxServer.
+Added RQCFilter dryrun flag.
+Split RQCFilter aggressive flag into aggressivehuman and aggressivemicrobe.
+Sketch servers no longer return error messages when query sketches are size 0.
+Fixed a parse bug allowing minkeycount to be 0 for sketch processing.
+Sketch k2 can now only be set via k.
+Sketch k2 can no longer be set to k.
+Enabled verbose output from SketchTool (for debugging).
+37.75
+Fixed AssemblyStats default outstream and printing Executing... message.
+37.76
+Added Shared.threadLocalRandom() to produce a ThreadLocalRandom when supported, and otherwise a Random.
+Converted some programs to use Shared.threadLocalRandom(), but not BBNorm since it uses .nextLong(long).
+DiskBench is now much faster in generating random text.
+TestFilesystem now supports multiple sequential files and is probably generating correct data.
+ReadWrite can now getRawOutputStream for /dev/null/* and will remove the * portion.  This is much faster than writing to /dev/shm/*
+Removed an invalid assertion from RepresentativeSet.
+37.77
+Wrote ExplodeTree and explodetree.sh, to create a directory structure mirroring the tax tree.
+Rearranged parse order in A_SampleByteFile and A_SampleD.
+Added some convenience methods to TaxTree and TaxNode.
+Wrote LongLongHashMap.
+Added sequence path lookup to TaxServer.
+LongHashMap and LongLongHashMap no longer include invalid entries in toArray().
+Wrote IntLongHashMap.
+Wrote TaxSize and taxsize.sh to generate the size of tax nodes.
+Added Silva header parsing to TaxServer.
+Added size lookup to TaxServer and created a RefSeq size file.
+ByteStreamWriter.print methods now return this, to allow chaining.
+Rewrote Read.validate() to be faster, simpler, and more modular.
+Read MIN_ and MAX_CALLED_QUALITY are now private, and generally replaced by a remapping array.
+Read validation no longer turns . - X to N by default.
+Fixed toSemicolon method in TaxTree.
+Increased TaxServer default memory to 52G in response to frequent GC during high query volume.
+ByteFile1 mode is no longer forced on Denovo or Cori.
+Added Parser.validateStdio() to ensure interleaving and file formats are specified when piping.  Currently only enabled for BBDuk, BBMap, and Reformat.
+Added header and more columns to RepresentativeSet.
+37.78
+Updated citation guidlines.
+Added validatebranchless flag and code path.
+Improved validatebranchless to use binary instead of boolean or.
+Removed invalid sequence cre_lox_lib_yadapt1 from reference collections.
+Changed JsonObject handling of null values to be compliant.
+Added JsonObject handling for floating-point types.
+Added Json output for Sketch results.
+37.79
+RenameGiToNcbi now accepts multiple input files.
+TaxServer now handles favicon.ico requests.
+Modified SortByName to better handle large numbers of temp files with long sequences, by reducing buffers and adding a mem mult.
+Redid JsonObject to remove name field.
+Wrote JsonParser.
+Added stopcov option to Pileup.
+Fixed a bug with reporting invalid bases in Read.
+Regenerated RefSeq and nt sketches from the latest versions.
+37.80
+Fixed hidden compile errors.
+37.81
+Fixed a Json display error for duplicate names.
+Added Json parsing and printing support for escape characters and exponent numbers.
+Added Json parsing and printing support for arrays.
+Fixed a bug in ReadWrite failing to strip path correctly.
+37.82
+Fixed BBMap producing X8 (insert size) tag for improper pairs (on different contigs).
+Added an early test for BBMap invalid input files.
+Added a triple switch to shellscripts for genepool/cori/denovo.
+37.83
+Merged a branch.
+37.84
+Bump.
+37.85
+Removed an obsolete module name from shellscripts.
+Fixed BBMap bug in which files with uppercase letters were erroneously not found.
+Modified TetramerFrequencies to comply with stricter compilation rules.
+37.86
+Modified TetramerFrequencies to make k a variable.
+Changed TetramerFrequencies printing to use ByteBuilder.
+Wrote TestFormat and testformat2.sh.
+Undefined amino acids are now assigned X instead of .
+Fixed a race condition in ByteFile2 via a defensive copy.
+37.87
+Fixed a ByteBuilder overflow bug in append(long).
+Changed TetramerFrequencies to use ByteBuilder.
+Fixed missing else in CalcTrueQuality parser.
+Added a new switch case to shellscripts to handle Shifter environment variables on Cori/Denovo.
+Wrote multithreaded version of TestFormat.
+Added merge and trim to TestFormat.
+Better error message for ByteStreamWriter to read-only file.
+TestFormat no longer crashes when trying to write to a read-only directory.
+37.88
+SummarizeSketch now supports colors.
+Wrote CallVariants.findUniqueSubs to help locate bad NovaSeq reads.
+Added variant-based read filtering to BBDuk.
+Read.countSubs now supports shortmatch.
+Fixed Read.countMatchSymbols().
+Fixed clearfilters flag not clearing SamFilter, only VarFilter.
+Var now parses depth, minusdepth, r1p, r2p, r1m, and r2m from VCF.
+Added AD field to primary fields of VCF output for ease of parsing.
+Wrote VcfLoader, a multithreaded VCF or var-format loader.
+37.89
+Wrote ByteBuilder.appendFast(double, int).
+Changed Var to perform calculations with doubles instead of floats.
+Fixed nondeterminisim in RevisedAlleleFraction calculation.  This was not due to the use of floats vs doubles so the doubles can be changed back.
+VCF/Var files are now written much faster, at around 55 MB/s up from 10 MB/s.
+ByteStreamWriter now supports multithreaded input.
+FileFormat now detects VCF and Var files.
+Added some information to Var header.
+Wrote VcfWriter class to write VCF/Var files multithreaded, at up to 630 MB/s.
+Wrote Tools.isDigit, isLetter, toUpperCase, etc.  Character.isDigit is slow.
+ByteBuilder now implements CharSequence, allowing it to be used with TextStreamWriter.
+Changed several instances of StringBuilder and String.Format to ByteBuilder.
+37.90
+Multithreaded TetramerFrequencies.
+Fixed some printing errors.
+Multithreaded var2.MergeSamples.
+37.91
+Multithreaded FilterVCF.  Poor speedup with vcfline.toVar, for reasons that are hard to diagnose.
+Fixed a bug in ScafMap.loadVcfHeader.
+Wrote Tools.parseDelimited.
+Var.fromVCF now optionally imports extended information.
+Added maxReads, minCov, and maxCov to VarFilter.
+Reordered VCF info fields for faster parsing.
+Added code to convince compiler some possible null pointer acceses were safe.
+Added ConcurrentReadInputStream.returnList(ListNum) with internal null check.
+Added an assertion to most paring statements expecting a non-null b.
+Fixed several other potential null accesses.
+Made AccessionToTaxid/RenameGiToNcbi somewhat faster; running multiple concurrent unpigz processes makes it slow.
+Fixed taxpath setting failure in RenameGiToNcbi and other programs.
+Added G.species name format support for TaxServer and taxonomy in general.
+PreParser now supports printexecuting flag for command-line suppression of repeating the parameters.
+Wrote SuperLongList.
+Column needed for percent of library in sketch output, something like depth * genome size.
+TestFormat2 now works better with negative numbers for quality and broken quality scores.
+TestFormat2 supports additional fields like length mode and stddev.
+37.92
+Bump for Jenkins.
+37.93
+RQCFilter now defaults to auto for taxTreeFile.
+Fixed BBSplit crashing when parsing flags without an = symbol.
+Fixed some missing accession numbers in TaxServer.
+TaxServer now timestamps queries and displays the number of NotFound queries.
+37.94
+Found and replaced some instances of z2=Xmx with z2=Xms in shells.
+Reimplemented ByteFile.pushBack(line) to sidestep a NERSC slowdown in multithreaded java reading.
+Fixed VcfLine.type().
+Wrote GffLine and vcf2gff.sh.
+Added CallVariants gff output.
+Fixed pairLength() and pairCount() swap.
+Fixed the way sambamba was being called.
+Re-tested bcftools 1.7 and BBMap 37.94.  CallVariants is 14x more efficient and 180x faster.
+*It is now difficult to replicate the memory/timing bug in 37.94 with CompareSketch bf1, but partially replicates with bf2.
+TaxTree now checks for the auto keyword just before tree load.
+Moved TaxNode size tracking from TaxServer to TaxTree.
+Wrote SummarizeContamReport and summarizecontam.sh.
+Fixed an off-by-one error in Var to GFF translation.
+Added match generation from cigar, bases, and reference with no MDTags.
+Fixed bug in MDWalker for substitutions immediately after deletions.
+37.95
+Reformat is now able to generate match strings from a reference instead of an MDTag.
+Default SamStreamer threads increased to 6, to deal with match string generation from sam 1.3.
+ref added as a flag for various programs to enable MD-free sam line processing.
+Fixed an assertion preventing # replacement for BBMap input.
+Fixed handling of assertion errors during fastq quality encoding autodetection during initialization, for paired files in which file 2 has corrupted quality scores.
+Program now prints a warning instead of terminating when quality format is specified but it seems wrong, in at least one case.
+Failed an attempt to accelerate FASTQ.quadToRead.
+37.96
+Wrote FindJiCJunctions and processhi-c.sh for identifying and trimming junctions.
+Added formatting functions in Tools to handle printing reads and bases processed.
+Fixed a crash bug in CallVariants realign mode.
+Fixed missing sample names in CallVariants multisample mode.
+Fastawrap now supports kmg extensions.
+Fixed assemblers trying to get stats from stdout.fa.
+Fuse now allows length limits of fused output.
+Wrote preliminary junction detection for CallVariants.
+Made new RiboKmers files from Silva 132, and made a script for replicating the creation process (in /pipelines/).
+Wrote var2.SoftClipper.
+37.97
+Added FilterByTile to RQCFilter.
+Fixed a Clumpify crash-hang with low memory.
+Made a Clumpify KmerSort superclass to reduce code redundancy between KmerSort versions.
+Changed an exception handler in FastaReadInputStream to handle null-pointer exceptions as well.
+Wrote RQCFilter2, with dependencies in a single path set by the rqcfilterdata flag.
+37.98
+Fixed a bug in RQCFilter2 mousecatdoghuman mode with read-only files.
+Added ksplit to BBDuk.
+37.99
+Improved error message when processing sam files with no MD tag in Reformat.
+Possibly fixed a crash-hang during OutOfMemory exception handling in ConcurrentGenericReadInputStream.
+Merged DNA and RNA artifact files for RQCFilter2; modified the primary artifact files, and removed redundancies.
+Adapters are no longer present in Illumina.artifacts, only in adapters.fa.
+Nextera linkers are no longer present in Illumina.artifacts.
+PolyA is now a flag.
+Created a second RQCFilterData - RQCFilterData_Local, identical but with unmasked sequence names.
+Added ploidy flag to CallPeaks documentation.
+Added polyA.fa.gz to resources.
+Modified resources/sequencing_artifacts.fa.gz to remove adapter sequences and Nextera linkers.
+Changed Read constructors to ensure amino acid flag is passed correctly.
+Fixed an array length overflow in ByteBuilder.
+
+TODO: Counting Cuckoo filter as Bloom filter replacement.
+TODO: SamToRoc is broken.
+TODO: Rob example of NM tag not counting deletions adjacent to soft-clipping.
+
+TODO: Put new RiboKmers on gdrive or something.
+TODO: Fasta input, when auto-split, misses sequences of exactly the split length.  Remove fasta auto-split.
+TODO: CallVariants line 861 and 883 assertion.
+TODO: Anomaly with soft-clipped reads at junctions for BBMap in local mode - analyze left-clipped reads.
+TODO: N rate reported by BBMap seems odd in local mode.
+
+TODO: Since move to floating-point trimming, Reformat does not speed up with bf2 when trimming.
+TODO: Move all packages with RQCFilter dep
+TODO: Change RQCFilter to use a config file for paths. 
+TODO: BBMap: Scaffold ends have suspiciously low coverage, with few reads mapping that extend past the ends.
+TODO: Local mode does not increase mapping rate.
+TODO: Clumpify pick pivot from both reads in a pair.
+TODO: Move all hard-coded references to a single umbrella director that can be tarred.
+*TODO: TaxServer Children does not work if there are no children.
+TODO: Column needed for percent of library in sketch output, something like depth * genome size.
+TODO: For some reason, java after 1.7 release 51 is slow in multithreaded reading gzipped files with pigz.  Submit a bug report.
+
+TODO: TestFormat overrepresented kmers?  Adapter sequence?  Probable organisms?
+
+TODO: ExplodeTree does not, strictly speaking, NEED to have a directory-making phase...
+
+TODO: Add variable for BBNorm RAM to cell ratio modifier.
+
+TODO: Better document server update and restart.
+******TODO: Stats N90/L90 is broken in some cases with huge genomes.
+TODO: Modify RepresentativeSet to allow Strings as keys, or somehow add numbers to sequence names.
+TODO: For mapping to ribo (and for filtering in general) try reducing BBMap's sites2 and test resulting speed.
+
+TODO: ab indicates failed connections when concurrently accessing help.
+TODO: Add taxa-level barriers to edges in RepresentativeSet.
+TODO: Document changes due to tax tree adjustments
+
+TODO: DBDate TaxServer field.
+TODO: Sketching nt is slow and has poor threading.  Reason is unclear but may relate to huge numbers of tiny sequences sharing taxIDs.
+
+TODO: File sketching for duplicate detection on filesystem.
+
+***TODO: Race condition causes spurious error message when reads= is set in some cases.  E.g. reformat.sh in=P1.fastq.gz out=stdout.fa reads=5.  But this cannot be replicated on Genepool.
+TODO: Sketch nucleotide encoding support?  Would require sorting after hashing...
+
+TODO: Allow sketch number field in output.  For this purpose sketch number would need to be deterministic.
+
+TODO: Try euk ribo blacklisting for depth accuracy.
+TODO: Some RefSeq TaxIDs such as M.Ruber are duplicated which messes up depth2.
+
+TODO: KmerCountExact and KCompress guides.
+TODO: Autosize becomes unnaturally small in conjunction with whitelist.
+TODO: Sketch should autodetect k from input sketches.
+TODO: Write a new program for per-file sketches.
+***TODO: Incorrect dual kmer ANI is probably due to short kmer not being rcomp'ed.
+
+TODO: Figure out how to parse amino in only 1 place, and add amino8 DisplayParams support.
+
+TODO: For some reason DemuxByName is slow with compressed output files.  They seem to be written serially.
+TODO: Circular realigner.
+TODO: Move more scripts to pipelines.
+TODO: Explanation on BBMap stats output.
+TODO: Multiple input file support for Reformat.
+
+TODO: CompareSketch should try to parse the name of input fasta sequences, and include it by default in the Query header. *Actually it does - maybe this is only for IMG?
+TODO: Sketch minID setting instead of/in addition to current minWKID setting.  Needs server reboot and new distro, and DisplayParams changes.
+TODO: Add BBMap gff output for spliced genes?  Or maybe from a sam file makes more sense.
+
+
+TODO: Move targetSketchSize to displayParams.
+
+TODO: Dedupe ignores minoverlap for merging.
+
+TODO: Shuffle is being slow and using a lot of memory.
+
+TODO: Clumpify consensus should warn/quit when used with paired reads or deduplication.
+
+TODO: Investigate "rescued" counts.  R1 seems abnormally high with NovaSeq data.
+
+TODO: Relaunch sketch servers with support for hk and hamino in doubleheader.
+TODO: RQCFilter filterbytile.
+
+TODO: BBMap trd default for sam output
+TODO: Chongle request
+TODO: IMG/NR servers
+TODO: BBMap samtools in container
+
+TODO: More informative TaxServer message when file is not present in URL.
+TODO: Classify tax nodes under species as subspecies when possible.
+
+TODO: Modify consect to print list of errors fixed/not fixed.
+
+*TODO: BBMask should remove fully-masked sequences, and trim sequences after masking (on the right side, at least) to eliminate masked ends.
+TODO: Modify Clump.removeDuplicates_inner to make a consensus of duplicates.
+TODO: Add CallVariants SNP output format (?)
+
 V36.
 36.00
 BBDuk now prints the exact number of reads removed.
@@ -350,7 +1889,7 @@ Wrote SamStreamer, which doubles the speed of reading sam files.
 Wrote SamLineStreamer for streaming SamLines rather than Reads.
 CallVariants now calculates coverage.
 Added SamLineStreamer support to Pileup, which doubles the speed.
-Added SamStreamer support to CalcTrueQuality, whiich increases the speed moderately.
+Added SamStreamer support to CalcTrueQuality, which increases the speed moderately.
 Added SamLine.PARSE_OPTIONAL_MD_ONLY flag to accelerate parsing of sam lines.
 SamLineStreamer and SamReadStreamer are now subclasses of SamStreamer.
 36.56
@@ -374,7 +1913,6 @@ Moved Shuffle to sort package.
 Added ReadQualityComparator.
 Added setAscending to some read comparators.
 SortByName can now sort ascending or descending, by name, length, or quality.
-Added qap matrix to CalcTrueQuality.
 Rewrote the calctruequality.sh usage information.
 Added qap matrix to CalcTrueQuality.  Works pretty well for 1-pass.
 Moved quality score quantization to Quantizer.
@@ -402,7 +1940,7 @@ Wrote VarFilter for variant filtering.
 Accelerated variant calling and filtering.
 Made coverage a mandatory column for variants.
 Ploidy and pairingRate are now required header lines for variant files.
-Modified Clumpify to support sam headers.  However, it's unusable because Clumpify needs the obj field.
+Modified Clumpify to support sam headers.  However, it is unusable because Clumpify needs the obj field.
 Added positional sorting and sam support to SortByName.  May not correspond to sam recommendations for pairs.  Needs to alter sam header to indicate sorted.
 ScafMap and CallVariants can now load a fasta reference.
 VarMap variant filtering is now multithreaded.
@@ -523,6 +2061,128 @@ Changed VCF QUAL column to 2 decimal places.
 Fixed a parse error for allduplicates in Clumpify.
 36.83
 Fixed a bug in inter-tile distance calculation in Clumpify.
+36.84
+Fixed Reformat failure to correctly generate insert size histogram from sam files.
+36.85
+Fixed N contribution to error rate in qhist; it was underestimated by 50%.
+Clumpify now supports twin files.
+Added Histogram to the names of some histogram-statistics methods.
+Fixed a bug in weighted-average calculation by KmerCountMulti.
+Reduced contribution of paired score to overall variant score.
+Reduced effect of paired score near contig ends.
+Multisample VCF info field is now the sum of samples rather than the best sample.
+Added bgzip support.
+Added variant score histogram output to CallVariants.
+Fixed variant sorting issue for insertions after subs.
+Fixed a bug in clipTipIndels() related to variant realignment.
+Added homopolymer score calculation for indels.
+Wrote VCFFile.
+Added VCFLine compare and hashing.
+Added VCFLine String caching.
+Wrote CompareVCF and comparevcf.sh.
+36.86
+Fixed a bug in Var initialization from vcf; alleles were not being canonicalized.
+Added kill flag to TaxServer.
+Fixed CalcTrueQuality crash with multiple sam files.
+FlowCell now retains total read count when written to disk.
+Added average read length tracking to CallVariants.
+Added insertion-length allele-frequency adjustment.  Substantially improves insertion calling.
+Fixed some issues with RandomReads adding /1 to read headers that interfere with SamToRoc parsing.
+Added contig end dist field in variant files.
+Fixed a bug in ScafMap initialization from CompareVCF.
+36.87
+Fixed a Sketch bug adding a leading colon to sequence names.
+Removed an assertion preventing sketch loading without delta compression.
+Long insertions now reduce nearby SNPs that would be implied by misalignment.
+Fixed major bug in Sketch with very small genomes.
+36.88
+TaxTree now automatically parses headers for name and accession, but only if they contain pipe symbols (rather than replacing with underscore), since underscores may be present in accessions.
+Adjusted insertion-induced substitution revised frequency reduction down by 50%, as roughly half occur on either side.
+Added SketchMaker taxlevel, tossjunk, and accession flags.
+Accession processing now outputs a list of accession symbols.
+Added ftl, ftr, ftr2 flags to RQCFilter.
+Added support of - symbols in accession strings.
+Tested maskmiddle for Sketch; does not change sensitivity.
+Fixed CompareSketch output formatting.
+Added support for uppercase taxa level names.
+Wrote Query class for pulling data from TaxServer.
+Fixed vcf score at a constant 2 decimal places.
+Fixed windows-style slashes in taxpath argument.
+Added accession file input support to SketchMaker and various taxonomy classes.
+36.89
+Fixed negative coverage in VCF output when coverage overflows.
+Added suggested resolution to warning when coverage overflows.
+Changed Clumpify spantiles default to false.
+36.90
+Added Tadpole mincontig=auto, which sets mincontig at max(124, 2*k).
+Added Tadpole trimends=auto flag.
+Fixed VCF sorting, again.
+Fixed some VCF header bugs.
+Reduced native var format precision to 4 decimals maximum.
+VCF lines are now right-trimmed to a canonical representation from text.
+Changed TaxTree to use the full taxonomic tree.
+36.92
+Added Sketch support to TaxServer.
+36.93
+Add Locale.ROOT to String formatting.
+Fixed module being printed in bamscript output.
+BBMap no longer prints information about ambig mode when just indexing.
+Parallel sorting is no longer used when threads are set to 1.
+BBDuk now automatically turns on findBestMatch in rename mode.
+HashBuffer can now support HashArray2D and HashArrayHybrid.
+Improved taxonomy name parsing.
+SendSketch now sends multiple sketches in a single transaction rather than opening a new connection each time.
+36.94
+Revised CompareSketch to use indexed sketches.
+Regenerated nt sketches and restarted TaxServer with better parsing of names.
+36.95
+Fixed typo tar -xvzf typo in documentation.
+Wrote ProcessGC for printing gc content by interval.
+Added BBMap nfilter.
+36.96
+Version bump.
+36.97
+Minor changes to AccessionToTaxid.
+Changed default location of taxonomy files to a symlinked directory.
+Updated taxonomy files.
+36.98
+Fixed a crash in read header parsing for flowcell coordinates.
+Fixed some VCF header lines (FORMAT should have been FILTER).
+Added RAF (revised allele frequency) and SB (strand bias) columns to VCF.
+36.99
+Clumpify now assigns short kmers to short reads or reads with too many Ns to have a legit kmer.  Should reduce the issue of large clumps.
+Reversed clump order to keep low-quality reads at the end rather than beginning of the file.
+Added 1-based offset option for PlotGC.
+Removed binary mode from Sketches.
+Documented some BBMap flags.
+Added amino acid support to Sketch.
+
+TODO: Examine impact of duplicates for both de novo genome assembly and for single cell applications
+
+TODO: More verbose output from FilterByTaxa in RQCFilter pipeline.
+TODO: Call peaks from raw count, not unique kmers.
+
+TODO: Test garbage collectors for throughput.
+TODO: Bisect seems to not work when highest K is best...
+
+TODO: Add taxpath to everything in tax.
+
+TODO: minscore2 minallelefrequency2, etc.  For "fail" but retain.
+TODO: S-curves for variant scores rather than linear curves.
+TODO: "Warning: Zero reads processed.".  Possibly, tiles don't get widened with stored flowcells?
+*TODO: ins homopolymer score always 1...
+TODO: Tadpole extender
+
+
+TODO:
+*Some variants in groups are still overall fail.
+hiseq clump
+miseq clump
+test assembly w/dedupe
+server for sketch
+compare how sketches work vs BLAST
+Write monthly plan
+
 
 *TODO: Add CallVariants assertion for ref allele = alt allele.
 TODO: CompareSketch quit early in fast mode.
@@ -537,10 +2197,8 @@ TODO: add the date/version of the tax dump file you're using to the doc page
 TODO: Generate match strings from cigar strings with no MD tag when ref is present.
 TODO: Parse multi-allelic VCF lines.
 TODO: Consider tracking insert size when calling variants.
-TODO: Print paired read percent in header.
 
 
-TODO: Clumpify deduplication option.
 TODO: Do quick allele-splitting on clumps where one allele is less than 90% identity to consensus, for compression.
 
 

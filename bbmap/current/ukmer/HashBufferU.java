@@ -1,8 +1,11 @@
 package ukmer;
 
-import stream.ByteBuilder;
+import java.util.concurrent.atomic.AtomicLong;
+
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -258,32 +261,37 @@ public class HashBufferU extends AbstractKmerTableU {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount){
 		for(AbstractKmerTableU table : tables){
-			table.dumpKmersAsText(tsw, k, mincount);
+			table.dumpKmersAsText(tsw, k, mincount, maxcount);
 		}
 		return true;
 	}
 	
 	@Override
-	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		for(AbstractKmerTableU table : tables){
-			table.dumpKmersAsBytes(bsw, k, mincount);
+			table.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);
 		}
 		return true;
 	}
 	
 	@Override
 	@Deprecated
-	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		throw new RuntimeException("Unsupported.");
 	}
 	
 	@Override
+	@Deprecated
 	public void fillHistogram(long[] ca, int max){
-		for(AbstractKmerTableU table : tables){
-			table.fillHistogram(ca, max);
-		}
+		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Override
+	@Deprecated
+	public void fillHistogram(SuperLongList sll){
+		throw new RuntimeException("Unsupported.");
 	}
 	
 	@Override
@@ -315,6 +323,6 @@ public class HashBufferU extends AbstractKmerTableU {
 	private final KmerBufferU[] buffers;
 	private final Kmer kmer;
 	
-	private final static int SIZEMASK=15;
+	private static final int SIZEMASK=15;
 
 }

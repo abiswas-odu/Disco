@@ -3,9 +3,10 @@ package ukmer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ByteBuilder;
 import fileIO.TextStreamWriter;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -239,14 +240,14 @@ public abstract class KmerNodeU extends AbstractKmerTableU {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount) {
-		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount));
+	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount) {
+		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount, maxcount));
 		return true;
 	}
 	
-	protected abstract StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount);
+	protected abstract StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount, int maxcount);
 	
-	protected abstract ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount);
+	protected abstract ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount, int maxcount);
 	
 	@Override
 	public final void fillHistogram(long[] ca, int max){
@@ -255,6 +256,15 @@ public abstract class KmerNodeU extends AbstractKmerTableU {
 		ca[Tools.min(value, max)]++;
 		if(left!=null){left.fillHistogram(ca, max);}
 		if(right!=null){right.fillHistogram(ca, max);}
+	}
+	
+	@Override
+	public final void fillHistogram(SuperLongList sll){
+		final int value=value();
+		if(value<1){return;}
+		sll.add(value);
+		if(left!=null){left.fillHistogram(sll);}
+		if(right!=null){right.fillHistogram(sll);}
 	}
 	
 	@Override
@@ -269,6 +279,7 @@ public abstract class KmerNodeU extends AbstractKmerTableU {
 		if(right!=null){right.countGC(gcCounts, max);}
 	}
 	
+	@Override
 	public String toString(){return Arrays.toString(pivot);}
 
 	abstract boolean TWOD();
@@ -386,10 +397,6 @@ public abstract class KmerNodeU extends AbstractKmerTableU {
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	long xor() {
-		return Kmer.xor(pivot);
-	}
 	
 	final long[] pivot;
 	int owner=-1;

@@ -5,9 +5,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Locale;
 import java.util.zip.ZipOutputStream;
 
-import dna.Parser;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Timer;
 import shared.Tools;
@@ -24,38 +26,38 @@ public class CopyFile {
 	
 	public static void main(String[] args){
 
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+
 		String in=null, out=null;
 		boolean overwrite=true;
 		boolean append=false;
 
 		for(int i=0; i<args.length; i++){
+			final String arg=args[i];
+			final String[] split=arg.split("=");
+			String a=split[0].toLowerCase();
+			String b=split.length>1 ? split[1] : null;
 
-			if(true){
-				final String arg=args[i];
-				final String[] split=arg.split("=");
-				String a=split[0].toLowerCase();
-				String b=split.length>1 ? split[1] : null;
-				if("null".equalsIgnoreCase(b)){b=null;}
-
-				if(Parser.isJavaFlag(arg)){
-					//jvm argument; do nothing
-				}else if(Parser.parseCommonStatic(arg, a, b)){
-					//do nothing
-				}else if(Parser.parseZip(arg, a, b)){
-					//do nothing
-				}else if(a.equals("in")){
-					in=b;
-				}else if(a.equals("out")){
-					out=b;
-				}else if(a.equals("append") || a.equals("app")){
-					append=ReadStats.append=Tools.parseBoolean(b);
-				}else if(a.equals("overwrite") || a.equals("ow")){
-					overwrite=Tools.parseBoolean(b);
-				}else if(in==null && i==0 && !args[i].contains("=")){
-					in=args[i];
-				}else if(out==null && i==1 && !args[i].contains("=")){
-					out=args[i];
-				}
+			if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(a.equals("in")){
+				in=b;
+			}else if(a.equals("out")){
+				out=b;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
+			}else if(a.equals("overwrite") || a.equals("ow")){
+				overwrite=Tools.parseBoolean(b);
+			}else if(in==null && i==0 && !args[i].contains("=")){
+				in=args[i];
+			}else if(out==null && i==1 && !args[i].contains("=")){
+				out=args[i];
 			}
 		}
 		assert(in!=null && out!=null);
@@ -65,7 +67,7 @@ public class CopyFile {
 		t.stop();
 		double mbps1=bytes*1000d/t.elapsed;
 		System.err.println("Time:  \t"+t);
-		System.err.println(String.format("Speed: \t%.2f MB/s", mbps1));
+		System.err.println(String.format(Locale.ROOT, "Speed: \t%.2f MB/s", mbps1));
 	}
 	
 	
@@ -106,7 +108,7 @@ public class CopyFile {
 		}catch(FileNotFoundException e){
 			throw new RuntimeException(e);
 		}catch(IOException e){
-			throw new RuntimeException(e);   
+			throw new RuntimeException(e);
 		}
 	}
 	

@@ -3,10 +3,17 @@ package clump;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
+import assemble.AbstractRemoveThread;
+import dna.AminoAcid;
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import jgi.BBMerge;
 import kmer.KmerTableSet;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
@@ -17,13 +24,6 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import assemble.AbstractRemoveThread;
-import dna.AminoAcid;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import jgi.BBMerge;
 
 /**
  * Reduces reads to their feature kmer.
@@ -44,10 +44,13 @@ public class KmerReduce {
 	public static void main(String[] args){
 		final boolean pigz=ReadWrite.USE_PIGZ, unpigz=ReadWrite.USE_UNPIGZ;
 		Timer t=new Timer();
-		KmerReduce kr=new KmerReduce(args);
-		kr.process(t);
+		KmerReduce x=new KmerReduce(args);
+		x.process(t);
 		ReadWrite.USE_PIGZ=pigz;
 		ReadWrite.USE_UNPIGZ=unpigz;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -104,7 +107,7 @@ public class KmerReduce {
 		AbstractRemoveThread.process(Shared.threads(), cutoff, Integer.MAX_VALUE, set, true);
 		
 		return set;
-	}  
+	}
 
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
@@ -116,20 +119,14 @@ public class KmerReduce {
 	 */
 	public KmerReduce(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether it was explicitly set.
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -137,8 +134,6 @@ public class KmerReduce {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -161,7 +156,7 @@ public class KmerReduce {
 				//do nothing
 			}else if(a.equals("correct") || a.equals("ecc")){
 				//do nothing
-			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){  
+			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){
 				//do nothing
 			}else if(a.equals("seed")){
 				KmerComparator.defaultSeed=Long.parseLong(b);
@@ -181,8 +176,6 @@ public class KmerReduce {
 			
 			overwrite=ReadStats.overwrite=parser.overwrite;
 			append=ReadStats.append=parser.append;
-
-			setInterleaved=parser.setInterleaved;
 			
 			in1=parser.in1;
 			in2=parser.in2;
@@ -204,10 +197,8 @@ public class KmerReduce {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
+		
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -264,20 +255,10 @@ public class KmerReduce {
 		
 		t.stop();
 		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(errorState){
+			Clumpify.sharedErrorState=true;
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
@@ -330,7 +311,7 @@ public class KmerReduce {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				ArrayList<Read> out=new ArrayList<Read>(reads.size());
 				for(Read r : reads){
 					if(ecco && r.mate!=null){
@@ -340,12 +321,12 @@ public class KmerReduce {
 					readsProcessedT++;
 					basesProcessedT+=r.length();
 					if(kmer>=0){
-						Read temp=new Read(toBytes(kmer), null, r.numericID, header);
+						Read temp=new Read(toBytes(kmer), null, header, r.numericID);
 						out.add(temp);
 					}
 				}
 				if(ros!=null){ros.add(out, ln.id);}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -367,11 +348,6 @@ public class KmerReduce {
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
 	
 	public byte[] toBytes(final long kmer){
 		byte[] dest=new byte[k];
@@ -411,7 +387,7 @@ public class KmerReduce {
 	protected long basesProcessed=0;
 	
 	private long maxReads=-1;
-	private boolean ecco=false;
+	protected boolean ecco=false;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Final Fields         ----------------*/

@@ -16,7 +16,7 @@ public class ConvertSamToAln {
 	}
 	
 	public static final void convert(String fname){
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		
 		
 		

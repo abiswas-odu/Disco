@@ -1,21 +1,26 @@
 #!/bin/bash
-#pileup in=<infile> out=<outfile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified December 5, 2016
+Last modified November 8, 2018
 
-Description:  Calculates per-scaffold coverage information from an unsorted sam or bam file.
+Description:  Calculates per-scaffold or per-base coverage information from an unsorted sam or bam file.
+Supports SAM/BAM format for reads and FASTA for reference.
+Sorting is not needed, so output may be streamed directly from a mapping program.
+Requires a minimum of 1 bit per reference base plus 100 bytes per scaffold (even if no reference is specified).
+If per-base coverage is needed (including for stdev and median), at least 4 bytes per base is needed.
 
 Usage:        pileup.sh in=<input> out=<output>
-
 
 Input Parameters:
 in=<file>           The input sam file; this is the only required parameter.
 ref=<file>          Scans a reference fasta for per-scaffold GC counts, not otherwise needed.
 fastaorf=<file>     An optional fasta file with ORF header information in PRODIGAL's output format.  Must also specify 'outorf'.
 unpigz=t            Decompress with pigz for faster decompression.
+addfromref=t        Allow ref scaffolds not present in sam header to be added from the reference.
+addfromreads=f      Allow ref scaffolds not present in sam header to be added from the reads.
+                    Note that in this case the ref scaffold lengths will be inaccurate.
 
 Output Parameters:
 out=<file>          (covstats) Per-scaffold coverage info.
@@ -43,10 +48,13 @@ covminscaf=0        (minscaf) Don't print coverage for scaffolds shorter than th
 covwindow=0         Calculate how many bases are in windows of this size with
                     low average coverage.  Produces an extra stats column.
 covwindowavg=5      Average coverage below this will be classified as low.
+k=0                 If positive, calculate kmer coverage statstics for this kmer length.
+keyvalue=f          Output statistics to screen as key=value pairs.
 
 Processing Parameters:
 strandedcov=f       Track coverage for plus and minus strand independently.
 startcov=f          Only track start positions of reads.
+stopcov=f           Only track stop positions of reads.
 secondary=t         Use secondary alignments, if present.
 softclip=f          Include soft-clipped bases in coverage.
 minmapq=0           (minq) Ignore alignments with mapq below this.
@@ -56,13 +64,10 @@ arrays=auto         Set to t/f to manually force the use of coverage arrays.  Ar
 bitsets=auto        Set to t/f to manually force the use of coverage bitsets.
 32bit=f             Set to true if you need per-base coverage over 64k; does not affect per-scaffold coverage precision.
                     This option will double RAM usage (when calculating per-base coverage).
-delcoverage=t       (delcov) Count bases covered by deletions as covered.
+delcoverage=t       (delcov) Count bases covered by deletions or introns as covered.
                     True is faster than false.
+dupecoverage=t      (dupes) Include reads flagged as duplicates in coverage.
 samstreamer=t       (ss) Load reads multithreaded to increase speed.
-
-Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
 
 Output format (tab-delimited):
 ID, Avg_fold, Length, Ref_GC, Covered_percent, Covered_bases, Plus_reads, Minus_reads, Read_GC, Median_fold, Std_Dev
@@ -79,22 +84,21 @@ Read_GC:           Average GC ratio of reads mapped to this scaffold
 Median_fold:       Median fold coverage of this scaffold (only if arrays are used)
 Std_Dev:           Standard deviation of coverage (only if arrays are used)
 
-Notes:
+Java Parameters:
 
-Only supports SAM format for reads and FASTA for reference (though either may be gzipped).
-Sorting is not needed, so output may be streamed directly from a mapping program.
-Requires approximately 1 bit per reference base plus 100 bytes per scaffold (even if no reference is specified).
-This script will attempt to autodetect and correctly specify the -Xmx parameter to use all memory on the target node.
-If this fails with a message including 'Error: Could not create the Java Virtual Machine.', then...
-Please decrease the -Xmx parameter.  It should be set to around 85% of the available memory.
-For example, -Xmx20g needs around 23 GB of virtual (and physical) memory when qsubbed.
-If the program fails with a message including 'java.lang.OutOfMemoryError:', then...
--Xmx needs to be increased, which probably also means it needs to be qsubbed with a higher memory allocation.
+-Xmx               This will set Java's memory usage, overriding 
+                   autodetection. -Xmx20g will 
+                   specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  
+                   The max is typically 85% of physical memory.
+-eoom              This flag will cause the process to exit if an out-of-memory
+                   exception occurs.  Requires Java 8u92+.
+-da                Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -111,6 +115,7 @@ CP="$DIR""current/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -131,13 +136,31 @@ calcXmx () {
 calcXmx "$@"
 
 pileup() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
-	local CMD="java $EA $z -cp $CP jgi.CoveragePileup $@"
+	local CMD="java $EA $EOOM $z -cp $CP jgi.CoveragePileup $@"
 	echo $CMD >&2
 	eval $CMD
 }

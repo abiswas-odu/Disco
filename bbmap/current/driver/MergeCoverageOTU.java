@@ -3,10 +3,9 @@ package driver;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 
-import jgi.CovStatsLine;
-
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import jgi.CovStatsLine;
 
 /**
  * @author Brian Bushnell

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import shared.Shared;
 import shared.Tools;
 import structures.ListNum;
 
@@ -27,7 +26,7 @@ public class DualCris extends ConcurrentReadInputStream {
 		ArrayList<Read> reads=ln.list;
 		
 		boolean foundR1=false, foundR2=false;
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(Read r1 : reads){
 				Read r2=r1.mate;
 				if(r1.pairnum()==0){foundR1=true;}
@@ -51,7 +50,7 @@ public class DualCris extends ConcurrentReadInputStream {
 		ReadWrite.closeStreams(cris);
 	}
 
-	public static DualCris getReadInputStream(long maxReads, boolean keepSamHeader, 
+	public static DualCris getReadInputStream(long maxReads, boolean keepSamHeader,
 			FileFormat ff1, FileFormat ff2, String qf1, String qf2){
 		ConcurrentReadInputStream cris1=(ff1==null ? null : ConcurrentReadInputStream.getReadInputStream(maxReads, keepSamHeader, ff1, null, qf1, null));
 		ConcurrentReadInputStream cris2=(ff2==null ? null : ConcurrentReadInputStream.getReadInputStream(maxReads, keepSamHeader, ff2, null, qf2, null));

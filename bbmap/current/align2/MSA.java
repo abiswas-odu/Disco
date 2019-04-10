@@ -2,14 +2,12 @@ package align2;
 
 import java.util.Arrays;
 
-import stream.Read;
-import stream.SiteScore;
-
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 import shared.Shared;
 import shared.Tools;
+import stream.Read;
+import stream.SiteScore;
 
 /**
  * @author Brian Bushnell
@@ -69,12 +67,12 @@ public abstract class MSA {
 		maxColumns=maxColumns_;
 	}
 	
-	/** return new int[] {rows, maxC, maxS, max}; 
+	/** return new int[] {rows, maxC, maxS, max};
 	 * Will not fill areas that cannot match minScore */
 	public abstract int[] fillLimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore, int[] gaps);
 	
 	
-	/** return new int[] {rows, maxC, maxS, max}; 
+	/** return new int[] {rows, maxC, maxS, max};
 	 * Will not fill areas that cannot match minScore */
 	public abstract int[] fillUnlimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int[] gaps);
 	
@@ -92,11 +90,11 @@ public abstract class MSA {
 	public abstract byte[] traceback2(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int row, int col, int state);
 	
 	/** @return {score, bestRefStart, bestRefStop} */
-	public abstract int[] score(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc, 
+	public abstract int[] score(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc,
 			final int maxRow, final int maxCol, final int maxState, boolean gapped);
 	
 	/** @return {score, bestRefStart, bestRefStop}, or {score, bestRefStart, bestRefStop, padLeft, padRight} if more padding is needed */
-	public abstract int[] score2(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc, 
+	public abstract int[] score2(final byte[] read, final byte[] ref, final int refStartLoc, final int refEndLoc,
 			final int maxRow, final int maxCol, final int maxState);
 	
 	
@@ -216,7 +214,7 @@ public abstract class MSA {
 	
 	/** Assumes match string is in long format */
 	public final boolean toLocalAlignment(Read r, SiteScore ss, byte[] basesM, int minToClip, float matchPointsMult){
-		final byte[] match=r.match, bases=(r.strand()==Gene.PLUS ? r.bases : basesM);
+		final byte[] match=r.match, bases=(r.strand()==Shared.PLUS ? r.bases : basesM);
 		if(match==null || match.length<1){return false;}
 		
 		assert(match==ss.match);
@@ -448,7 +446,7 @@ public abstract class MSA {
 			}
 		}
 		
-		assert(ss==null || ((ss.start==r.start) && (ss.stop==r.stop) && (ss.strand==r.strand()) && (ss.chrom==r.chrom) && (ss.match==r.match))) : 
+		assert(ss==null || ((ss.start==r.start) && (ss.stop==r.stop) && (ss.strand==r.strand()) && (ss.chrom==r.chrom) && (ss.match==r.match))) :
 			"\nr="+r+"\nr2="+r.mate+"\nss=\n"+ss+"\n"+(ss==null ? "ss is null" : ((ss.start==r.start)+", "+(ss.stop==r.stop)+", "+
 			(ss.strand==r.strand())+", "+(ss.chrom==r.chrom)+", "+(ss.match==r.match)));
 		
@@ -570,7 +568,7 @@ public abstract class MSA {
 //		long currentScore;
 //		for(int i=0; i<match.length; i++){
 //			c=match[i];
-//			if(Character.isDigit(c)){
+//			if(Tools.isDigit(c)){
 //				current=(current*10)+(c-'0');
 //			}else{
 //				if(mode==c){
@@ -596,7 +594,7 @@ public abstract class MSA {
 //				}
 //			}
 //		}
-//		if(current>0 || !Character.isDigit(c)){
+//		if(current>0 || !Tools.isDigit(c)){
 //			current=Tools.max(current, 1);
 //			if(mode=='m'){
 //				msdicn[0]+=current;
@@ -623,7 +621,7 @@ public abstract class MSA {
 	
 	public abstract int maxImperfectScore(byte[] baseScores);
 	
-	public final static String toString(int[] a){
+	public static final String toString(int[] a){
 		
 		int width=7;
 		
@@ -658,7 +656,7 @@ public abstract class MSA {
 		System.out.println();
 	}
 	
-	public final static String toTimePacked(int[] a, int TIMEMASK, int lim){
+	public static final String toTimePacked(int[] a, int TIMEMASK, int lim){
 		int width=6;
 		lim=Tools.min(lim, a.length);
 		
@@ -675,7 +673,7 @@ public abstract class MSA {
 		return sb.toString();
 	}
 	
-	public final static String toScorePacked(int[] a, int SCOREOFFSET, int lim){
+	public static final String toScorePacked(int[] a, int SCOREOFFSET, int lim){
 		int width=6;
 		lim=Tools.min(lim, a.length);
 
@@ -703,7 +701,7 @@ public abstract class MSA {
 		return sb.toString();
 	}
 	
-	public final static String toString(byte[] a){
+	public static final String toString(byte[] a){
 		
 		int width=6;
 		
@@ -719,7 +717,7 @@ public abstract class MSA {
 		return sb.toString();
 	}
 	
-	public final static String toString(byte[] ref, int startLoc, int stopLoc){
+	public static final String toString(byte[] ref, int startLoc, int stopLoc){
 		StringBuilder sb=new StringBuilder(stopLoc-startLoc+1);
 		for(int i=startLoc; i<=stopLoc; i++){sb.append((char)ref[i]);}
 		return sb.toString();

@@ -5,14 +5,15 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import dna.AminoAcid;
 import jgi.BBMerge;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import stream.ByteBuilder;
 import stream.ConcurrentReadInputStream;
-import stream.KillSwitch;
 import stream.Read;
+import structures.ByteBuilder;
 import structures.IntList;
 import structures.ListNum;
 import structures.LongList;
@@ -22,8 +23,6 @@ import ukmer.HashForestU;
 import ukmer.Kmer;
 import ukmer.KmerNodeU;
 import ukmer.KmerTableSetU;
-import dna.AminoAcid;
-import dna.Parser;
 
 
 /**
@@ -39,13 +38,6 @@ public class Tadpole2 extends Tadpole {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
-		}
-		
 		Timer t=new Timer(), t2=new Timer();
 		t.start();
 		t2.start();
@@ -100,19 +92,20 @@ public class Tadpole2 extends Tadpole {
 	
 	@Override
 	long shave(boolean shave, boolean rinse){
-		final Shaver2 shaver=new Shaver2(tables, THREADS);
 		long sum=0;
 
 		for(int i=0; i<maxShaveDepth; i++){
 			int a=1, b=maxShaveDepth, c=i+1;
 			//				if(i>3){Shaver2.verbose2=true;}
 			outstream.println("\nShave("+a+", "+b+", "+c+")");
-			long removed=shaver.shave(a, b, c, Tools.max(minContigLen, shaveDiscardLen), shaveExploreDist, shave, rinse);
+			final Shaver shaver=Shaver.makeShaver(tables, THREADS, a, b, c, minCountExtend, branchMult2, Tools.max(minContigLen, shaveDiscardLen), shaveExploreDist, shave, rinse);
+			long removed=shaver.shave(a, b);
+			
 			sum+=removed;
 			if(removed<100 || i>2){break;}
 		}
 
-		System.err.println();
+		outstream.println();
 		return sum;
 	}
 	
@@ -127,20 +120,20 @@ public class Tadpole2 extends Tadpole {
 	/*--------------------------------------------------------------*/
 	
 	public final int getCount(Kmer kmer){return tables.getCount(kmer);}
-	private final boolean claim(Kmer kmer, int id){return tables.claim(kmer, id);}
-	private final boolean doubleClaim(ByteBuilder bb, int id/*, long rid*/, Kmer kmer){return tables.doubleClaim(bb, id/*, rid*/, kmer);}
-	private final boolean claim(ByteBuilder bb, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(bb, id/*, rid*/, earlyExit, kmer);}
-	private final boolean claim(byte[] array, int len, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(array, len, id/*, rid*/, earlyExit, kmer);}
-	private final int findOwner(Kmer kmer){return tables.findOwner(kmer);}
-	private final int findOwner(ByteBuilder bb, int id, Kmer kmer){return tables.findOwner(bb, id, kmer);}
-	private final int findOwner(byte[] array, int len, int id, Kmer kmer){return tables.findOwner(array, len, id, kmer);}
-	private final void release(Kmer kmer, int id){tables.release(kmer, id);}
-	private final void release(ByteBuilder bb, int id, Kmer kmer){tables.release(bb, id, kmer);}
-	private final void release(byte[] array, int len, int id, Kmer kmer){tables.release(array, len, id, kmer);}
-	private final int fillRightCounts(Kmer kmer, int[] counts){return tables.fillRightCounts(kmer, counts);}
-	private final int fillLeftCounts(Kmer kmer, int[] counts){return tables.fillLeftCounts(kmer, counts);}
-	private final StringBuilder toText(Kmer kmer){return AbstractKmerTableU.toText(kmer);}
-	private final StringBuilder toText(long[] key, int k){return AbstractKmerTableU.toText(key, k);}
+	final boolean claim(Kmer kmer, int id){return tables.claim(kmer, id);}
+	final boolean doubleClaim(ByteBuilder bb, int id/*, long rid*/, Kmer kmer){return tables.doubleClaim(bb, id/*, rid*/, kmer);}
+	final boolean claim(ByteBuilder bb, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(bb, id/*, rid*/, earlyExit, kmer);}
+	final boolean claim(byte[] array, int len, int id, /*long rid, */boolean earlyExit, Kmer kmer){return tables.claim(array, len, id/*, rid*/, earlyExit, kmer);}
+	final int findOwner(Kmer kmer){return tables.findOwner(kmer);}
+	final int findOwner(ByteBuilder bb, int id, Kmer kmer){return tables.findOwner(bb, id, kmer);}
+	final int findOwner(byte[] array, int len, int id, Kmer kmer){return tables.findOwner(array, len, id, kmer);}
+	final void release(Kmer kmer, int id){tables.release(kmer, id);}
+	final void release(ByteBuilder bb, int id, Kmer kmer){tables.release(bb, id, kmer);}
+	final void release(byte[] array, int len, int id, Kmer kmer){tables.release(array, len, id, kmer);}
+	final int fillRightCounts(Kmer kmer, int[] counts){return tables.fillRightCounts(kmer, counts);}
+	final int fillLeftCounts(Kmer kmer, int[] counts){return tables.fillLeftCounts(kmer, counts);}
+	final static StringBuilder toText(Kmer kmer){return AbstractKmerTableU.toText(kmer);}
+	final static StringBuilder toText(long[] key, int k){return AbstractKmerTableU.toText(key, k);}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
@@ -156,7 +149,7 @@ public class Tadpole2 extends Tadpole {
 	}
 	
 	/**
-	 * Builds contigs. 
+	 * Builds contigs.
 	 */
 	private class BuildThread extends AbstractBuildThread{
 		
@@ -169,12 +162,12 @@ public class Tadpole2 extends Tadpole {
 			if(crisa==null || crisa.length==0){
 				//Build from kmers
 				
-				if(id==0){System.err.print("Seeding with min count = ");}
+				if(id==0){outstream.print("Seeding with min count = ");}
 				String comma="";
 				for(int i=contigPasses-1; i>0; i--){
 					minCountSeedCurrent=(int)Tools.min(Integer.MAX_VALUE, Tools.max(minCountSeed+i, (long)Math.floor((minCountSeed)*Math.pow(contigPassMult, i)*0.92-0.25) ));
 					if(id==0){
-						System.err.print(comma+minCountSeedCurrent);
+						outstream.print(comma+minCountSeedCurrent);
 						comma=", ";
 					}
 					while(processNextTable(nextTable[i])){}
@@ -182,7 +175,7 @@ public class Tadpole2 extends Tadpole {
 				}
 				//Final pass
 				minCountSeedCurrent=minCountSeed;
-				if(id==0){System.err.println(comma+minCountSeedCurrent);}
+				if(id==0){outstream.println(comma+minCountSeedCurrent);}
 				while(processNextTable(nextTable[0])){}
 				while(processNextVictims(nextVictims[0])){}
 			}else{
@@ -203,9 +196,9 @@ public class Tadpole2 extends Tadpole {
 			if(tnum>=tables.ways){return false;}
 			final HashArrayU1D table=tables.getTable(tnum);
 			final int max=table.arrayLength();
-			if(verbose && id==0){System.err.println("Processing table "+tnum+", size "+table.size()+", length "+max);}
+			if(verbose && id==0){outstream.println("Processing table "+tnum+", size "+table.size()+", length "+max);}
 			for(int cell=0; cell<max; cell++){
-				if(verbose && id==0){System.err.println("Processing cell "+cell);}
+				if(verbose && id==0){outstream.println("Processing cell "+cell);}
 				int x=processCell(table, cell, myKmer);
 			}
 			return true;
@@ -216,7 +209,7 @@ public class Tadpole2 extends Tadpole {
 			if(tnum>=tables.ways){return false;}
 			final HashArrayU1D table=tables.getTable(tnum);
 			final HashForestU forest=table.victims();
-			if(verbose && id==0){System.err.println("Processing forest "+tnum+", size "+forest.size());}
+			if(verbose && id==0){outstream.println("Processing forest "+tnum+", size "+forest.size());}
 			final int max=forest.arrayLength();
 			for(int cell=0; cell<max; cell++){
 				KmerNodeU kn=forest.getNode(cell);
@@ -228,7 +221,7 @@ public class Tadpole2 extends Tadpole {
 		private int processCell(HashArrayU1D table, int cell, Kmer kmer){
 			int count=table.readCellValue(cell);
 			if(count<minCountSeedCurrent){
-				if(verbose){System.err.println("For cell "+cell+", count="+count);}
+				if(verbose){outstream.println("For cell "+cell+", count="+count);}
 				return 0;
 			}
 			
@@ -282,20 +275,16 @@ public class Tadpole2 extends Tadpole {
 		}
 		
 		private int processKmer(Kmer kmer){
-			
-			byte[] contig=makeContig(builderT, kmer, true);
+			Contig contig=makeContig(builderT, kmer, true);
 			if(contig!=null){
-				float coverage=tables.calcCoverage(contig, contig.length, kmer);
-				if(coverage<minCoverage){return 0;}
-				if(verbose){System.err.println("Added "+contig.length);}
-				final long num=contigNum.incrementAndGet();
-				Read r=new Read(contig, -1, -1, -1, "*", null, num, 0);
-				float gc=r.gc();
-				r.id="contig_"+num+",length="+contig.length+",cov="+String.format("%.1f", coverage)+",gc="+String.format("%.3f", gc);
-				contigs.add(r);
-				return contig.length;
+				float coverage=tables.calcCoverage(contig, kmer);
+				if(coverage<minCoverage || coverage>maxCoverage){return 0;}
+				if(verbose){outstream.println("Added "+contig.length());}
+				contig.id=(int)contigNum.incrementAndGet();
+				contigs.add(contig);
+				return contig.length();
 			}else{
-				if(verbose){System.err.println("Created null contig.");}
+				if(verbose){outstream.println("Created null contig.");}
 			}
 			return 0;
 		}
@@ -306,7 +295,7 @@ public class Tadpole2 extends Tadpole {
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
 			//While there are more reads lists...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
@@ -317,15 +306,16 @@ public class Tadpole2 extends Tadpole {
 				}
 				
 				//Fetch a new read list
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 		}
-		
+
+		//TODO: This appears to do read extension but is very confusing.
 		private void processReadPair(Read r1, Read r2){
-			if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
+			if(verbose){outstream.println("Considering read "+r1.id+" "+new String(r1.bases));}
 			
 			readsInT++;
 			basesInT+=r1.length();
@@ -344,17 +334,16 @@ public class Tadpole2 extends Tadpole {
 			}
 			
 			if(ecco && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){BBMerge.findOverlapStrict(r1, r2, true);}
-
 			if(r1!=null){
 				if(r1.discarded()){
 					lowqBasesT+=r1.length();
 					lowqReadsT++;
 				}else{
-					byte[] contig=makeContig(r1.bases, builderT, r1.numericID, myKmer);
-					if(contig!=null){
-						if(verbose){System.err.println("Added "+contig.length);}
+					byte[] bases=makeContig(r1.bases, builderT, r1.numericID, myKmer);
+					if(bases!=null){
+						if(verbose){outstream.println("Added "+bases.length);}
 						final long num=contigNum.incrementAndGet();
-						Read temp=new Read(contig, -1, -1, -1, "contig_"+num+"_length_"+contig.length, null, num, 0);
+						Contig temp=new Contig(bases, "contig_"+num+"_length_"+bases.length, (int)num);
 						contigs.add(temp);
 					}
 				}
@@ -364,11 +353,11 @@ public class Tadpole2 extends Tadpole {
 					lowqBasesT+=r2.length();
 					lowqReadsT++;
 				}else{
-					byte[] contig=makeContig(r2.bases, builderT, r1.numericID, myKmer);
-					if(contig!=null){
-						if(verbose){System.err.println("Added "+contig.length);}
+					byte[] bases=makeContig(r2.bases, builderT, r2.numericID, myKmer);
+					if(bases!=null){
+						if(verbose){outstream.println("Added "+bases.length);}
 						final long num=contigNum.incrementAndGet();
-						Read temp=new Read(contig, -1, -1, -1, "contig_"+num+"_length_"+contig.length, null, num, 0);
+						Contig temp=new Contig(bases, "contig_"+num+"_length_"+bases.length, (int)num);
 						contigs.add(temp);
 					}
 				}
@@ -376,7 +365,7 @@ public class Tadpole2 extends Tadpole {
 		}
 		
 		/** From kmers */
-		private byte[] makeContig(final ByteBuilder bb, Kmer kmer, boolean alreadyClaimed){
+		private Contig makeContig(final ByteBuilder bb, Kmer kmer, boolean alreadyClaimed){
 			bb.setLength(0);
 			bb.appendKmer(kmer);
 			if(verbose){outstream.println("Filled bb: "+bb);}
@@ -386,15 +375,16 @@ public class Tadpole2 extends Tadpole {
 			if(initialLength<kbig){return null;}
 			
 			boolean success=(alreadyClaimed || !useOwnership ? true : claim(kmer, id));
-			if(verbose){System.err.println("Thread "+id+" checking owner after setting: "+findOwner(bb, id, kmer));}
+			if(verbose){outstream.println("Thread "+id+" checking owner after setting: "+findOwner(bb, id, kmer));}
 			if(!success){
 				assert(bb.length()==kbig);
 //				release(bb, id); //no need to release
 				return null;
 			}
-			if(verbose  /*|| true*/){System.err.println("Thread "+id+" building contig; initial length "+bb.length());}
-			if(verbose){System.err.println("Extending to right.");}
-			
+			if(verbose  /*|| true*/){outstream.println("Thread "+id+" building contig; initial length "+bb.length());}
+			if(verbose){outstream.println("Extending to right.");}
+			final int rightStatus, leftStatus;
+			float leftRatio=0, rightRatio=0;
 			{
 				final int status=extendToRight(bb, leftCounts, rightCounts, id, kmer);
 				
@@ -412,7 +402,7 @@ public class Tadpole2 extends Tadpole {
 						if(status==BAD_OWNER){
 							release(kmer, id);
 							return null;
-						}else if(status==BRANCH){
+						}else if(isBranchCode(status)){
 							release(kmer, id);
 							return null;
 						}else{
@@ -422,13 +412,16 @@ public class Tadpole2 extends Tadpole {
 						if(status==BAD_OWNER){
 							release(bb, id, kmer);
 							return null;
-						}else if(status==BRANCH){
-							//do nothing
+						}else if(status==F_BRANCH || status==D_BRANCH){
+							rightRatio=calcRatio(rightCounts);
+						}else if(status==B_BRANCH){
+							rightRatio=calcRatio(leftCounts);
 						}else{
 							throw new RuntimeException("Bad return value: "+status);
 						}
 					}
 				}
+				rightStatus=status;
 			}
 			
 //			success=extendToRight(bb, leftCounts, rightCounts, id, kmer);
@@ -437,7 +430,7 @@ public class Tadpole2 extends Tadpole {
 //				return null;
 //			}
 			bb.reverseComplementInPlace();
-			if(verbose  /*|| true*/){System.err.println("Extending rcomp to right; current length "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Extending rcomp to right; current length "+bb.length());}
 			
 			{
 				final int status=extendToRight(bb, leftCounts, rightCounts, id, kmer);
@@ -456,54 +449,65 @@ public class Tadpole2 extends Tadpole {
 					if(status==BAD_OWNER){
 						release(bb, id, kmer);
 						return null;
-					}else if(status==BRANCH){
-						//do nothing
+					}else if(status==F_BRANCH || status==D_BRANCH){
+						leftRatio=calcRatio(rightCounts);
+					}else if(status==B_BRANCH){
+						leftRatio=calcRatio(leftCounts);
 					}else{
 						throw new RuntimeException("Bad return value: "+status);
 					}
 				}
+				leftStatus=status;
 			}
 //			success=extendToRight(bb, leftCounts, rightCounts, id, kmer);
 //			if(!success){
 //				release(bb, id, kmer);
 //				return null;
 //			}
-			if(verbose  /*|| true*/){System.err.println("Final length for thread "+id+": "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Final length for thread "+id+": "+bb.length());}
 			//				if(useOwnership && THREADS==1){assert(claim(bases, bases.length, id, rid));}
 			success=(useOwnership ? doubleClaim(bb, id, kmer) : true);
-			if(verbose  /*|| true*/){System.err.println("Success for thread "+id+": "+success);}
+			if(verbose  /*|| true*/){outstream.println("Success for thread "+id+": "+success);}
 			
 			if(trimEnds>0){bb.trimByAmount(trimEnds, trimEnds);}
+			else if(trimCircular && leftStatus==LOOP && rightStatus==LOOP){bb.trimByAmount(0, kbig-1);}
 			if(bb.length()>=initialLength+minExtension && bb.length()>=minContigLen){
 				if(success){
 					bb.reverseComplementInPlace();
-					return bb.toBytes();
+					byte[] bases=bb.toBytes();
+					Contig c=new Contig(bases);
+					c.leftCode=leftStatus;
+					c.rightCode=rightStatus;
+					c.rightRatio=rightRatio;
+					c.leftRatio=leftRatio;
+					if(!c.canonical()){c.rcomp();}
+					return c;
 				}else{
 					//					assert(false) : bb.length()+", "+id;
 					release(bb, id, kmer);
 					return null;
 				}
 			}
-			if(verbose  /*|| true*/){System.err.println("Contig was too short for "+id+": "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Contig was too short for "+id+": "+bb.length());}
 			return null;
 		}
 		
 		/** From a seed */
 		private byte[] makeContig(final byte[] bases, final ByteBuilder bb, long rid, final Kmer kmer){
 			if(bases==null || bases.length<kbig){return null;}
-//			if(verbose  /*|| true*/){System.err.println("Thread "+id+" checking owner: "+findOwner(bases, bases.length, id));}
+//			if(verbose  /*|| true*/){outstream.println("Thread "+id+" checking owner: "+findOwner(bases, bases.length, id));}
 			int owner=useOwnership ? findOwner(bases, bases.length, id, kmer) : -1;
 			if(owner>=id){return null;}
 			boolean success=(useOwnership ? claim(bases, bases.length, id, true, kmer) : true);
-			if(verbose  /*|| true*/){System.err.println("Thread "+id+" checking owner after setting: "+findOwner(bases, bases.length, id, kmer));}
+			if(verbose  /*|| true*/){outstream.println("Thread "+id+" checking owner after setting: "+findOwner(bases, bases.length, id, kmer));}
 			if(!success){
 				release(bases, bases.length, id, kmer);
 				return null;
 			}
-			if(verbose  /*|| true*/){System.err.println("Thread "+id+" building contig; initial length "+bases.length);}
+			if(verbose  /*|| true*/){outstream.println("Thread "+id+" building contig; initial length "+bases.length);}
 			bb.setLength(0);
 			bb.append(bases);
-			if(verbose){System.err.println("Extending to right.");}
+			if(verbose){outstream.println("Extending to right.");}
 			{
 				final int status=extendToRight(bb, leftCounts, rightCounts, id, kmer);
 				
@@ -518,7 +522,7 @@ public class Tadpole2 extends Tadpole {
 					if(status==BAD_OWNER){
 						release(bb.array, bb.length(), id, kmer);
 						return null;
-					}else if(status==BRANCH){
+					}else if(isBranchCode(status)){
 						//do nothing
 					}else{
 						throw new RuntimeException("Bad return value: "+status);
@@ -531,7 +535,7 @@ public class Tadpole2 extends Tadpole {
 //				return null;
 //			}
 			bb.reverseComplementInPlace();
-			if(verbose  /*|| true*/){System.err.println("Extending rcomp to right; current length "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Extending rcomp to right; current length "+bb.length());}
 			{
 				final int status=extendToRight(bb, leftCounts, rightCounts, id, kmer);
 				
@@ -546,7 +550,7 @@ public class Tadpole2 extends Tadpole {
 					if(status==BAD_OWNER){
 						release(bb.array, bb.length(), id, kmer);
 						return null;
-					}else if(status==BRANCH){
+					}else if(isBranchCode(status)){
 						//do nothing
 					}else{
 						throw new RuntimeException("Bad return value: "+status);
@@ -558,10 +562,10 @@ public class Tadpole2 extends Tadpole {
 //				release(bb.array, bb.length(), id, kmer);
 //				return null;
 //			}
-			if(verbose  /*|| true*/){System.err.println("Final length for thread "+id+": "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Final length for thread "+id+": "+bb.length());}
 			//				if(useOwnership && THREADS==1){assert(claim(bases, bases.length, id, rid));}
 			success=(useOwnership ? doubleClaim(bb, id, kmer) : true);
-			if(verbose  /*|| true*/){System.err.println("Success for thread "+id+": "+success);}
+			if(verbose  /*|| true*/){outstream.println("Success for thread "+id+": "+success);}
 			if(bb.length()>=bases.length+minExtension && bb.length()>=minContigLen){
 				if(success){
 					bb.reverseComplementInPlace();
@@ -572,7 +576,7 @@ public class Tadpole2 extends Tadpole {
 					return null;
 				}
 			}
-			if(verbose  /*|| true*/){System.err.println("Contig was too short for "+id+": "+bb.length());}
+			if(verbose  /*|| true*/){outstream.println("Contig was too short for "+id+": "+bb.length());}
 			return null;
 		}
 		
@@ -581,6 +585,177 @@ public class Tadpole2 extends Tadpole {
 		private final Kmer myKmer=new Kmer(kbig);
 		private final Kmer myKmer2=new Kmer(kbig);
 		
+	}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Contig Processing      ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	ProcessContigThread makeProcessContigThread(ArrayList<Contig> contigs, AtomicInteger next){
+		return new ProcessContigThread(contigs, next);
+	}
+	
+	@Override
+	public void initializeContigs(ArrayList<Contig> contigs){
+		tables.clearOwnership();
+		tables.initializeOwnership();
+		final Kmer kmer=new Kmer(kbig);
+		{
+			int cnum=0;
+			for(Contig c : contigs){
+				c.id=cnum;
+				if(c.leftBranch()){
+					c.leftKmer(kmer);
+					tables.claim(kmer, cnum);
+				}
+				if(c.rightBranch()){
+					c.rightKmer(kmer);
+					tables.claim(kmer, cnum);
+				}
+				cnum++;
+			}
+		}
+	}
+
+	class ProcessContigThread extends AbstractProcessContigThread {
+
+		ProcessContigThread(ArrayList<Contig> contigs_, AtomicInteger next_){
+			super(contigs_, next_);
+			kmerA=new Kmer(kbig);
+			kmerB=new Kmer(kbig);
+			kmerC=new Kmer(kbig);
+			lastExitCondition=BAD_SEED;
+		}
+
+		@Override
+		public void processContigLeft(Contig c, int[] leftCounts, int[] rightCounts, int[] extraCounts){
+			if(c.leftCode!=F_BRANCH){return;}
+
+			final Kmer kmer0=c.leftKmer(kmerA);
+			final Kmer kmer=kmerB;
+			assert(tables.getCount(kmer0)>0);
+			assert(tables.findOwner(kmer0)==c.id) : tables.findOwner(kmer0)+", "+c.id;
+
+			int leftMaxPos=fillLeftCounts(kmer0, leftCounts);
+			int leftMax=leftCounts[leftMaxPos];
+			int leftSecondPos=Tools.secondHighestPosition(leftCounts);
+			int leftSecond=leftCounts[leftSecondPos];
+			
+			for(int x=0; x<leftCounts.length; x++){
+				int count=leftCounts[x];
+				int target=-1;
+				if(count>0 && isJunction(leftMax, count)){
+					kmer.setFrom(kmer0);
+					kmer.addLeftNumeric(x);
+					assert(tables.getCount(kmer)==count) : count+", "+tables.getCount(kmer);
+					target=exploreRight(kmer, extraCounts, rightCounts);
+					if(verbose){
+						outstream.println(c.id+"L_F: x="+x+", cnt="+count+", dest="+target
+								+", "+codeStrings[lastExitCondition]+", len="+lastLength+", orient="+lastOrientation);
+					}
+				}
+				if(target>=0){
+					if(c.leftEdges==null){c.leftEdges=new Edge[4];}
+					c.leftEdges[x]=new Edge(c.id, target, lastLength, lastOrientation);
+					edgesMadeT++;
+				}
+			}
+		}
+
+		@Override
+		public void processContigRight(Contig c, int[] leftCounts, int[] rightCounts, int[] extraCounts){
+			if(c.rightCode!=F_BRANCH){return;}//TODO: D_BRANCH is unhandled
+
+			final Kmer kmer0=c.rightKmer(kmerA);
+			final Kmer kmer=kmerB;
+
+			int rightMaxPos=fillRightCounts(kmer0, rightCounts);
+			int rightMax=rightCounts[rightMaxPos];
+			int rightSecondPos=Tools.secondHighestPosition(rightCounts);
+			int rightSecond=rightCounts[rightSecondPos];
+
+			for(int x=0; x<rightCounts.length; x++){
+				int count=rightCounts[x];
+				int target=-1;
+				if(count>0 && isJunction(rightMax, count)){
+					kmer.setFrom(kmer0);
+					kmer.addRightNumeric(x);
+					assert(tables.getCount(kmer)==count) : count+", "+tables.getCount(kmer);
+					target=exploreRight(kmer, leftCounts, extraCounts);
+					if(verbose){
+						outstream.println(c.id+"R_F: x="+x+", cnt="+count+", dest="+target+", "+codeStrings[lastExitCondition]+", len="+lastLength+", orient="+lastOrientation);
+					}
+				}
+				if(target>=0){
+					if(c.rightEdges==null){c.rightEdges=new Edge[4];}
+					c.rightEdges[x]=new Edge(c.id, target, lastLength, lastOrientation);
+				}
+			}
+		}
+
+		private int exploreRight(Kmer kmer, int[] leftCounts, int[] rightCounts){
+			final Kmer temp=kmerC;
+			int length=1;
+			int owner=-1;
+			lastTarget=-1;
+			for(; length<500; length++){
+				owner=tables.findOwner(kmer);
+				if(owner>=0){break;}
+
+				final int leftMaxPos=fillLeftCounts(kmer, leftCounts);
+				final int leftMax=leftCounts[leftMaxPos];
+				final int leftSecondPos=Tools.secondHighestPosition(leftCounts);
+				final int leftSecond=leftCounts[leftSecondPos];
+				if(isJunction(leftMax, leftSecond)){
+					lastExitCondition=B_BRANCH;
+					lastLength=length;
+					return -1;
+				}
+				
+				final int rightMaxPos=fillRightCounts(kmer, rightCounts);
+				final int rightMax=rightCounts[rightMaxPos];
+				final int rightSecondPos=Tools.secondHighestPosition(rightCounts);
+				final int rightSecond=rightCounts[rightSecondPos];
+
+//				outstream.println("* "+Arrays.toString(leftCounts)+", "+Arrays.toString(rightCounts)+", "+rightMaxPos);
+				
+				if(rightMax<minCountExtend){
+//					assert(false) : Arrays.toString(rightCounts);
+					lastExitCondition=DEAD_END;
+					lastLength=length;
+					return -1;
+				}else if(isJunction(rightMax, rightSecond)){
+					lastExitCondition=F_BRANCH;
+					lastLength=length;
+					return -1;
+				}
+				long x=rightMaxPos;
+				kmer.addRightNumeric(x);
+			}
+			lastLength=length;
+			lastTarget=owner;
+			if(owner>=0){
+				lastExitCondition=SUCCESS;
+				Contig dest=contigs.get(owner);
+				dest.leftKmer(temp);
+				if(temp.equals(kmer)){
+					lastOrientation=temp.sameOrientation(kmer) ? 0 : 1;
+				}else{
+					dest.rightKmer(temp);
+					if(temp.equals(kmer)){
+						lastOrientation=temp.sameOrientation(kmer) ? 2 : 3;
+					}
+				}
+			}else{
+				lastExitCondition=TOO_LONG;
+			}
+			return owner;
+		}
+
+		final Kmer kmerA, kmerB, kmerC;
+
 	}
 	
 	
@@ -606,6 +781,7 @@ public class Tadpole2 extends Tadpole {
 		return extendRead(r, bb, leftCounts, rightCounts, distance, getLocalKmer());
 	}
 
+	@Override
 	public int extendRead(Read r, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int distance, final Kmer kmer){
 		final int initialLen=r.length();
 		if(initialLen<kbig){return 0;}
@@ -708,7 +884,7 @@ public class Tadpole2 extends Tadpole {
 		/* Now the trailing kmer has been initialized. */
 		
 		if(verbose){
-			System.err.println("extendToRight kmer="+kmer+", bb="+bb);
+			outstream.println("extendToRight kmer="+kmer+", bb="+bb);
 		}
 		
 		HashArrayU1D table=tables.getTable(kmer);
@@ -753,7 +929,15 @@ public class Tadpole2 extends Tadpole {
 		}
 		
 		if(rightMax<minCountExtend){return DEAD_END;}
-		if(isJunction(rightMax, rightSecond, leftMax, leftSecond)){return BRANCH;}
+		if(isJunction(rightMax, rightSecond)){//Returning here is fine because nothing can be added
+			if(verbose){outstream.println("B: Breaking because isJunction("+rightMax+", "+rightSecond+", "+leftMax+", "+leftSecond+")");}
+			return isJunction(leftMax, leftSecond) ? D_BRANCH : F_BRANCH;
+		}
+		if(isJunction(leftMax, leftSecond)){//Returning here is necessary, but this should mean the the length is exactly K
+			assert(bb.length()==kbig) : bb.length()+", "+kbig+", "+leftMax+", "+leftSecond;
+			if(verbose){outstream.println("B: Breaking because isJunction("+rightMax+", "+rightSecond+", "+leftMax+", "+leftSecond+")");}
+			return B_BRANCH;
+		}
 		
 		if(useOwnership){
 			owner=table.setOwner(kmer, id);
@@ -806,15 +990,19 @@ public class Tadpole2 extends Tadpole {
 				outstream.println("rightSecond="+rightSecond);
 			}
 			
-			if(isJunction(rightMax, rightSecond, leftMax, leftSecond)){
-				if(verbose){outstream.println("B: Breaking because isJunction("+rightMax+", "+rightSecond+", "+leftMax+", "+leftSecond+")");}
-				return BRANCH;
-			}
-			
-			if(leftCounts!=null && leftMaxPos!=evicted){
-				if(verbose){outstream.println("B: Breaking because of hidden branch: leftMaxPos!=evicted ("+leftMaxPos+"!="+evicted+")" +
+			final boolean fbranch=isJunction(rightMax, rightSecond);
+			final boolean bbranch=isJunction(leftMax, leftSecond);
+			final boolean hbranch=(leftCounts!=null && leftMaxPos!=evicted && branchMult1>0);
+			if(bbranch){
+				if(verbose){outstream.println("B: Breaking - isJunction("+rightMax+", "+rightSecond+", "+leftMax+", "+leftSecond+"); "
+						+ "("+fbranch+", "+bbranch+", "+hbranch+")");}
+				return fbranch ? D_BRANCH : B_BRANCH;
+			}else if(hbranch){
+				if(verbose){outstream.println("B: Breaking - isJunction("+rightMax+", "+rightSecond+", "
+						+ ""+leftMax+", "+leftSecond+"); ("+fbranch+", "+bbranch+", "+hbranch+")");}
+				if(verbose){outstream.println("Hidden branch: leftMaxPos!=evicted ("+leftMaxPos+"!="+evicted+")" +
 						"\nleftMaxPos="+leftMaxPos+", leftMax="+leftMax+", leftSecondPos="+leftSecondPos+", leftSecond="+leftSecond);}
-				return BRANCH;
+				return fbranch ? D_BRANCH : B_BRANCH;
 			}
 			
 			bb.append(b);
@@ -836,7 +1024,11 @@ public class Tadpole2 extends Tadpole {
 				if(verbose){outstream.println("B. Owner is now "+id+" for kmer "+kmer);}
 			}
 			
-			if(rightMax<minCountExtend){
+			if(fbranch){
+				if(verbose){outstream.println("B: Breaking - isJunction("+rightMax+", "+rightSecond+", "+leftMax+", "+leftSecond+"); "
+						+ "("+fbranch+", "+bbranch+", "+hbranch+")");}
+				return F_BRANCH;
+			}else if(rightMax<minCountExtend){
 				if(verbose){outstream.println("B: Breaking because highest right was too low:"+rightMax);}
 				return DEAD_END;
 			}
@@ -984,7 +1176,7 @@ public class Tadpole2 extends Tadpole {
 				break;
 			}
 		}
-		if(verbose || verbose2){System.err.println("Extended by "+(bb.length()-initialLength));}
+		if(verbose || verbose2){outstream.println("Extended by "+(bb.length()-initialLength));}
 		return bb.length()-initialLength;
 	}
 	
@@ -1052,7 +1244,7 @@ public class Tadpole2 extends Tadpole {
 		kmer.clearFast();
 		assert(kmer.len==0) : kmer.len+", "+kmer;
 		
-//		System.err.println("\n"+new String(r.bases)+":");
+//		outstream.println("\n"+new String(r.bases)+":");
 		
 		final int limit=Tools.max(1, Math.round((bases.length-kbig+1)*fraction));
 		int valid=0, invalid=0;
@@ -1061,7 +1253,7 @@ public class Tadpole2 extends Tadpole {
 				kmer.addRight(bases[i]);
 				if(kmer.len>=kbig){
 					int depth=getCount(kmer);
-//					System.err.println("depth="+depth+", kmer="+kmer);
+//					outstream.println("depth="+depth+", kmer="+kmer);
 					if(depth>tooLow){valid++;}
 					else{
 						invalid++;
@@ -1084,7 +1276,7 @@ public class Tadpole2 extends Tadpole {
 	@Override
 	public int errorCorrect(Read r){
 		initializeThreadLocals();
-		int corrected=errorCorrect(r, localLeftCounts.get(), localRightCounts.get(), localIntList.get(), localIntList2.get(), 
+		int corrected=errorCorrect(r, localLeftCounts.get(), localRightCounts.get(), localIntList.get(), localIntList2.get(),
 				localByteBuilder.get(), localByteBuilder2.get(), localTracker.get(), localBitSet.get(), getLocalKmer(), getLocalKmer2());
 		return corrected;
 	}
@@ -1140,17 +1332,7 @@ public class Tadpole2 extends Tadpole {
 		int possibleErrors=countErrors(counts, quals);
 		if(possibleErrors<0){return 0;}
 		final float expectedErrors=r.expectedErrors(true, r.length());
-		
-		final byte[] bases0, quals0;
-		final IntList counts0;
-		if(ECC_ROLLBACK){
-			bases0=bases.clone();
-			quals0=(quals==null ? null : quals.clone());
-			counts0=counts.copy();
-		}else{
-			bases0=quals0=null;
-			counts0=null;
-		}
+		final Rollback roll=ECC_ROLLBACK ? new Rollback(r, counts) : null;
 		
 		int correctedPincer=0;
 		int correctedTail=0;
@@ -1191,32 +1373,31 @@ public class Tadpole2 extends Tadpole {
 			}
 			
 //			boolean printed=false;
+			IntList counts0=roll.counts0;
 			for(int i=0; !tracker.rollback && i<counts.size; i++){
 				int a=Tools.max(0, counts0.get(i));
 				int b=Tools.max(0, counts.get(i));
 //				assert(b+1>=a) : "Z: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts;
 				if(b<a-1 && !isSimilar(a, b)){
 //					assert(false) : "Y: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts;
-					if(verbose){System.err.println("Y: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts);}
+					if(verbose){outstream.println("Y: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts);}
 					tracker.rollback=true;
 				}
 //				else if(b<a-1 && !printed){
 //					assert(false);
-//					if(verbose){System.err.println("X: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts);}
+//					if(verbose){outstream.println("X: RID="+r.numericID+"; "+a+"->"+b+"\n"+counts0+"\n"+counts);}
 //					printed=true;
 //				}
 			}
 			
 			if(tracker.rollback){
-				System.arraycopy(bases0, 0, r.bases, 0, bases0.length);
-				if(quals0!=null){System.arraycopy(quals0, 0, r.quality, 0, quals0.length);}
-				System.arraycopy(counts0.array, 0, counts.array, 0, counts0.size);
+				roll.rollback(r, counts);
 				tracker.clearCorrected();
 				return 0;
 			}
 		}
 		
-		if(MARK_BAD_BASES>0 && (!MARK_ERROR_READS_ONLY || countErrors(counts, quals)>0 || 
+		if(MARK_BAD_BASES>0 && (!MARK_ERROR_READS_ONLY || countErrors(counts, quals)>0 ||
 				r.expectedErrors(false, r.length())>3)){
 			int marked=markBadBases(bases, quals, counts, bs, MARK_BAD_BASES, MARK_DELTA_ONLY, MARK_QUALITY);
 			tracker.marked=marked;
@@ -1225,7 +1406,7 @@ public class Tadpole2 extends Tadpole {
 		return tracker.corrected();
 	}
 
-	public int errorCorrectPincer(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
+	public int errorCorrectPincer(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer,
 			final IntList counts, final ByteBuilder bb, final ErrorTracker tracker, final int errorExtension, final Kmer kmer){
 		
 		int detected=0;
@@ -1244,18 +1425,18 @@ public class Tadpole2 extends Tadpole {
 			final byte qb=(quals==null ? 20 : quals[a+kbig]);
 			if(isError(aCount, bCount, qb) && isError(dCount, cCount, qb) && isSimilar(aCount, dCount)){
 				if(verbose){
-					System.err.println("Found error: "+aCount+", "+bCount+", "+cCount+", "+dCount);
+					outstream.println("Found error: "+aCount+", "+bCount+", "+cCount+", "+dCount);
 				}
 				//Looks like a 1bp substitution; attempt to correct.
 				detected++;
 				int ret=correctSingleBasePincer(a, d, bases, quals, leftBuffer, rightBuffer, counts, bb, errorExtension, kmer);
 				corrected+=ret;
 				if(verbose){
-					System.err.println("Corrected error.");
+					outstream.println("Corrected error.");
 				}
 			}else{
 				if(verbose){
-					System.err.println("Not an error: "+aCount+", "+bCount+", "+cCount+", "+dCount+
+					outstream.println("Not an error: "+aCount+", "+bCount+", "+cCount+", "+dCount+
 							";  "+isError(aCount, bCount, qb)+", "+isError(dCount, cCount, qb)+", "+isSimilar(aCount, dCount));
 				}
 			}
@@ -1264,7 +1445,7 @@ public class Tadpole2 extends Tadpole {
 //		if(detected==0 && counts.get(0)>2 && counts.get(counts.size-1)>2){
 //			assert(!verbose);
 //			verbose=true;
-//			System.err.println("\n"+counts);
+//			outstream.println("\n"+counts);
 //			errorCorrectPincer(bases, quals, leftBuffer, rightBuffer, kmers, counts, bb, tracker);
 //			assert(false);
 //		}
@@ -1277,7 +1458,7 @@ public class Tadpole2 extends Tadpole {
 		return corrected;
 	}
 
-	public int errorCorrectTail(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
+	public int errorCorrectTail(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer,
 			final IntList counts, final ByteBuilder bb, final ErrorTracker tracker, final int startPos, final int errorExtension, final Kmer kmer){
 		if(bases.length<kbig+2+errorExtension+deadZone){return 0;}
 		int detected=0;
@@ -1292,18 +1473,18 @@ public class Tadpole2 extends Tadpole {
 			final byte qb=(quals==null ? 20 : quals[a+kbig]);
 			if(isError(aCount, bCount, qb) && isSimilar(aCount, a-errorExtension, a-1, counts) && isError(aCount, a+2, a+kbig, counts)){
 				if(verbose){
-					System.err.println("Found error: "+aCount+", "+bCount);
+					outstream.println("Found error: "+aCount+", "+bCount);
 				}
 				//Assume like a 1bp substitution; attempt to correct.
 				detected++;
 				int ret=correctSingleBaseRight(a, bases, quals, leftBuffer, rightBuffer, counts, bb, errorExtension, kmer);
 				corrected+=ret;
 				if(verbose){
-					System.err.println("Corrected error.");
+					outstream.println("Corrected error.");
 				}
 			}else{
 				if(verbose){
-					System.err.println("Not an error: "+aCount+", "+bCount+
+					outstream.println("Not an error: "+aCount+", "+bCount+
 							";  "+isError(aCount, bCount, qb)+", "+isSimilar(aCount, a-errorExtension, a-1, counts)+", "+isError(aCount, a+2, a+kbig, counts));
 				}
 			}
@@ -1312,7 +1493,7 @@ public class Tadpole2 extends Tadpole {
 //		if(detected==0 && counts.get(0)>2 && counts.get(counts.size-1)>2){
 //			assert(!verbose);
 //			verbose=true;
-//			System.err.println("\n"+counts);
+//			outstream.println("\n"+counts);
 //			errorCorrectPincer(bases, quals, leftBuffer, rightBuffer, kmers, counts, bb, tracker);
 //			assert(false);
 //		}
@@ -1326,7 +1507,7 @@ public class Tadpole2 extends Tadpole {
 	}
 	
 	@Override
-	public int reassemble_inner(final ByteBuilder bb, final byte[] quals, final int[] rightCounts, final IntList counts, 
+	public int reassemble_inner(final ByteBuilder bb, final byte[] quals, final int[] rightCounts, final IntList counts,
 			final int errorExtension, final Kmer kmer, final Kmer regenKmer){
 		final int length=bb.length();
 		if(length<kbig+1+deadZone){return 0;}
@@ -1347,7 +1528,7 @@ public class Tadpole2 extends Tadpole {
 			kmer.addRight(bases[a]);
 			
 			if(verbose){
-				System.err.println("kmer.len(): "+kmer.len()+" vs "+kbig+"; a="+a);
+				outstream.println("kmer.len(): "+kmer.len()+" vs "+kbig+"; a="+a);
 			}
 			
 			if(kmer.len()>=kbig){
@@ -1361,15 +1542,15 @@ public class Tadpole2 extends Tadpole {
 				final byte qb=(quals==null ? 20 : quals[b]);
 
 				if(verbose){
-					System.err.println("ca="+ca+", cb="+cb+"; aCount="+aCount+", bCount="+bCount);
-					System.err.println(isError(aCount, bCount, qb)+", "+isSimilar(aCount, ca-errorExtension, ca-1, counts)+
+					outstream.println("ca="+ca+", cb="+cb+"; aCount="+aCount+", bCount="+bCount);
+					outstream.println(isError(aCount, bCount, qb)+", "+isSimilar(aCount, ca-errorExtension, ca-1, counts)+
 							", "+isError(aCount, ca+2, ca+kbig, counts));
 				}
 				
 //				if(isError(aCount, bCount) && isSimilar(aCount, ca-errorExtension, ca-1, counts) && isError(aCount, ca+2, ca+kbig, counts)){
 				if(isSubstitution(ca, errorExtension, qb, counts)){
 					if(verbose){
-						System.err.println("***Found error: "+aCount+", "+bCount);
+						outstream.println("***Found error: "+aCount+", "+bCount);
 					}
 					//Assume like a 1bp substitution; attempt to correct.
 
@@ -1390,20 +1571,20 @@ public class Tadpole2 extends Tadpole {
 							bases[b]=AminoAcid.numberToBase[rightMaxPos];
 							corrected++;
 							tables.regenerateCounts(bases, counts, ca, regenKmer);
-							if(verbose){System.err.println("Corrected error: "+num+"->"+rightMaxPos+". New counts:\n"+counts);}
+							if(verbose){outstream.println("Corrected error: "+num+"->"+rightMaxPos+". New counts:\n"+counts);}
 						}
 						
-//						else if(rightSecond>=minCountExtend && isJunction(rightMax, rightSecond) && isSimilar(aCount, rightSecond) 
+//						else if(rightSecond>=minCountExtend && isJunction(rightMax, rightSecond) && isSimilar(aCount, rightSecond)
 //								&& !isSimilar(aCount, rightMax)){//This branch may not be very safe.
 //							bases2[b]=AminoAcid.numberToBase[rightSecondPos];
 //							corrected++;
-//							if(verbose){System.err.println("Corrected error.");}
+//							if(verbose){outstream.println("Corrected error.");}
 //						}
 					}
 					
 				}else{
 					if(verbose){
-						System.err.println("Not an error: "+aCount+", "+bCount+
+						outstream.println("Not an error: "+aCount+", "+bCount+
 								";  "+isError(aCount, bCount, qb)+", "+isSimilar(aCount, a-errorExtension, a-1, counts)+", "+isError(aCount, a+2, a+kbig, counts));
 					}
 				}
@@ -1413,7 +1594,7 @@ public class Tadpole2 extends Tadpole {
 		return corrected;
 	}
 	
-	private int correctSingleBasePincer(final int a, final int d, final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
+	private int correctSingleBasePincer(final int a, final int d, final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer,
 			final IntList counts, final ByteBuilder bb, final int errorExtension, final Kmer kmer0){
 		final byte leftReplacement, rightReplacement;
 		final int loc=a+kbig;
@@ -1451,7 +1632,7 @@ public class Tadpole2 extends Tadpole {
 		return 1;
 	}
 	
-	private int correctSingleBaseRight(final int a, final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
+	private int correctSingleBaseRight(final int a, final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer,
 			final IntList counts, final ByteBuilder bb, final int errorExtension0, final Kmer kmer0){
 		final byte leftReplacement;
 		final int loc=a+kbig;
@@ -1495,21 +1676,24 @@ public class Tadpole2 extends Tadpole {
 	/*----------------  Inherited Abstract Methods  ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	@Override
 	final void makeKhist(){
-		tables.makeKhist(outHist, histColumns, histMax, histHeader, histZeros, true, smoothHist, gcHist, 1);
+		tables.makeKhist(outHist, histColumns, histMax, histHeader, histZeros, true, smoothHist, gcHist, false, 0.01, 1, 1);
 	}
+	@Override
 	final void dumpKmersAsText(){
-		tables.dumpKmersAsBytes_MT(outKmers, minToDump, true);
+		tables.dumpKmersAsBytes_MT(outKmers, minToDump, maxToDump, true, null);
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	final KmerTableSetU tables(){return tables;}
+	@Override
+	public final KmerTableSetU tables(){return tables;}
 	public final KmerTableSetU tables;
 	
 	/** Normal kmer length */
-	private final int ksmall;
+	final int ksmall;
 	
 }

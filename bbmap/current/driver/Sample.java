@@ -21,7 +21,7 @@ public class Sample {
 	public static void main(String[] args){
 
 		String fnameIn=args[0];
-		String fnameOut=args[1]; 
+		String fnameOut=args[1];
 		
 		BufferedReader br=getReader(fnameIn);
 		PrintWriter pw=getWriter(fnameOut);

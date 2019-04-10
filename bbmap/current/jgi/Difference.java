@@ -11,8 +11,8 @@ public class Difference {
 	
 	public static void main(String[] args){
 
-		TextFile tf1=new TextFile(args[0], false, false);
-		TextFile tf2=new TextFile(args[1], false, false);
+		TextFile tf1=new TextFile(args[0], false);
+		TextFile tf2=new TextFile(args[1], false);
 
 		String s1=tf1.readLine(false);
 		String s2=tf2.readLine(false);

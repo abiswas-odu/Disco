@@ -4,11 +4,17 @@ import java.util.Arrays;
 import java.util.Random;
 
 import fileIO.TextStreamWriter;
-import stream.ByteBuilder;
+import shared.PreParser;
+import structures.ByteBuilder;
 
 public class MakeAdjacencyList {
 	
 	public static void main(String[] args){
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+		}
+		
 		parse(args);
 		int[][] matrix=genMatrix();
 		writeMatrix(matrix);
@@ -21,8 +27,6 @@ public class MakeAdjacencyList {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(a.equals("out") || a.equals("out1")){
 				out=b;

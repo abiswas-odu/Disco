@@ -5,7 +5,7 @@ import java.util.ArrayList;
 public class GenericTextFile extends TextFile {
 
 	public GenericTextFile(String name) {
-		super(name, false, false);
+		super(name, false);
 	}
 	
 	
@@ -24,6 +24,7 @@ public class GenericTextFile extends TextFile {
 		
 	}
 	
+	@Override
 	public String nextLine(){
 		String line=readLine();
 		while(line!=null && false){

@@ -1,18 +1,16 @@
 #!/bin/bash
-#stats in=<infile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified September 6, 2016
+Last modified December 19, 2018
 
 Description:  Generates basic assembly statistics such as scaffold count, 
-              N50, L50, GC content, gap percent, etc.  For multiple files,
-              please use statswrapper.sh.  Works with fasta and fastq only
-              (gzipped is fine).
+N50, L50, GC content, gap percent, etc.  For multiple files, please use
+statswrapper.sh.  Works with fasta and fastq only (gzipped is fine).
+Please read bbmap/docs/guides/StatsGuide.txt for more information.
 
 Usage:        stats.sh in=<file>
-
 
 Parameters:
 in=file         Specify the input fasta file, or stdin.
@@ -25,14 +23,29 @@ k=13            Estimate memory usage of BBMap with this kmer length.
 minscaf=0       Ignore scaffolds shorter than this.
 phs=f           (printheaderstats) Set to true to print total size of headers.
 n90=t           (printn90) Print the N/L90 metrics.
-extended=f      Print additional metrics such as N/L90 and log sum.
-logoffset=1000  Minimum length for calculating log sum.
-logbase=2       Log base for calculating log sum.
+extended=f      Print additional metrics such as L90, logsum, and score.
 pdl=f           (printduplicatelines) Set to true to print lines in the 
                 scaffold size table where the counts did not change.
 n_=t            This flag will prefix the terms 'contigs' and 'scaffolds'
                 with 'n_' in formats 3-6.
 addname=f       Adds a column for input file name, for formats 3-6.
+
+Logsum and Powsum:
+logoffset=1000  Minimum length for calculating log sum.
+logbase=2       Log base for calculating log sum.
+logpower=1      Raise the log to a power to increase the weight 
+                of longer scaffolds for log sum.
+powsum=0.25     Use this power of the length to increase weight
+                of longer scaffolds for power sum.
+
+Assembly Score Metric:
+score=f         Print assembly score.
+aligned=0.0     Set the fraction of aligned reads (0-1).
+assemblyscoreminlen=2000   Minimum length of scaffolds to include in
+                           assembly score calculation.
+assemblyscoremaxlen=50000  Maximum length of scaffolds to get bonus points
+                           for being long.
+
 
 format=<0-7>    Format of the stats information; default 1.
 	format=0 prints no assembly stats.
@@ -43,18 +56,21 @@ format=<0-7>    Format of the stats information; default 1.
 	format=5 is like 3 but with contig data only.
 	format=6 is like 3 but the header starts with a #.
 	format=7 is like 1 but only prints contig info.
+	format=8 is like 3 but in JSON.
 
-gcformat=<0-4>  Select GC output format; default 1.
+gcformat=<0-5>  Select GC output format; default 1.
 	gcformat=0:	(no base content info printed)
 	gcformat=1:	name	length	A	C	G	T	N	GC
 	gcformat=2:	name	GC
 	gcformat=4:	name	length	GC
+	gcformat=5:	name	length	GC	logsum	powsum
 	Note that in gcformat 1, A+C+G+T=1 even when N is nonzero.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -70,6 +86,7 @@ CP="$DIR""current/"
 
 z="-Xmx120m"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -84,12 +101,26 @@ calcXmx () {
 calcXmx "$@"
 
 stats() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z -cp $CP jgi.AssemblyStats2 $@"
+	
+	local CMD="java $EA $EOOM $z -cp $CP jgi.AssemblyStats2 $@"
 #	echo $CMD >&2
 	eval $CMD
 }

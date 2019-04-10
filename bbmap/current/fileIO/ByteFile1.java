@@ -4,19 +4,21 @@ import java.io.InputStream;
 import java.util.Arrays;
 
 import dna.Data;
+import shared.KillSwitch;
+import shared.Shared;
 import shared.Timer;
-import stream.KillSwitch;
+import shared.Tools;
 
 
 /**
  * @author Brian Bushnell
  *
  */
-public class ByteFile1 extends ByteFile {
+public final class ByteFile1 extends ByteFile {
 	
 	
-	public static void main(String[] args) throws IOException{
-		ByteFile1 tf=new ByteFile1(args.length>0 ? args[0] : "stdin", false, true);
+	public static void main(String[] args){
+		ByteFile1 tf=new ByteFile1(args.length>0 ? args[0] : "stdin", true);
 		long first=0, last=100;
 		boolean speedtest=false;
 		if(args.length>1){
@@ -37,6 +39,23 @@ public class ByteFile1 extends ByteFile {
 		tf.close();
 		tf.reset();
 		tf.close();
+		
+//		tf.reset();
+//		byte[] b=tf.nextLine();
+//		System.err.println(new String(b));
+//		tf.pushBack(b);
+//		b=tf.nextLine();
+//		System.err.println(new String(b));
+//		tf.bstart+=2;
+//		tf.pushBack(b);
+//		b=tf.nextLine();
+//		System.err.println(new String(b));
+//		b=tf.nextLine();
+//		System.err.println(new String(b));
+//		b=tf.nextLine();
+//		System.err.println(new String(b));
+//		b=tf.nextLine();
+//		System.err.println(new String(b));
 	}
 	
 	private static void speedtest(ByteFile1 tf, long first, long last, boolean reprint){
@@ -68,38 +87,28 @@ public class ByteFile1 extends ByteFile {
 		t.stop();
 		
 		if(!reprint){
-			double rpnano=lines/(double)(t.elapsed);
-			double bpnano=bytes/(double)(t.elapsed);
-
-			String rpstring=(lines<100000 ? ""+lines : lines<100000000 ? (lines/1000)+"k" : (lines/1000000)+"m");
-			String bpstring=(bytes<100000 ? ""+bytes : bytes<100000000 ? (bytes/1000)+"k" : (bytes/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			System.err.println("Time:                         \t"+t);
-			System.err.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk lines/sec", rpnano*1000000));
-			System.err.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bytes/sec", bpnano*1000));
+			System.err.println(Tools.timeLinesBytesProcessed(t, lines, bytes, 8));
 		}
 	}
 	
-//	public ByteFile1(String name){this(name, false);}
-	
-	public ByteFile1(String fname, boolean tryAllExtensions, boolean allowSubprocess_){
-		this(FileFormat.testInput(fname, FileFormat.TEXT, null, allowSubprocess_, false), tryAllExtensions);
+	public ByteFile1(String fname, boolean allowSubprocess_){
+		this(FileFormat.testInput(fname, FileFormat.TEXT, null, allowSubprocess_, false));
 	}
 	
-	public ByteFile1(FileFormat ff, boolean tryAllExtensions){
-		super(ff, tryAllExtensions);
-		if(verbose){System.err.println("ByteFile1("+ff+", "+tryAllExtensions+")");}
+	public ByteFile1(FileFormat ff){
+		super(ff);
+		if(verbose){System.err.println("ByteFile1("+ff+")");}
 		is=open();
 	}
 	
+	@Override
 	public final void reset(){
 		close();
 		is=open();
+		superReset();
 	}
 	
+	@Override
 	public synchronized final boolean close(){
 		if(verbose){System.err.println("Closing "+this.getClass().getName()+" for "+name()+"; open="+open+"; errorState="+errorState);}
 		if(!open){return errorState;}
@@ -110,19 +119,18 @@ public class ByteFile1 extends ByteFile {
 		
 		is=null;
 		lineNum=-1;
-		pushBack=null;
+//		pushBack=null;
 		if(verbose){System.err.println("Closed "+this.getClass().getName()+" for "+name()+"; open="+open+"; errorState="+errorState);}
 		return errorState;
 	}
 	
 	@Override
-	public byte[] nextLine(){
-		
-		if(pushBack!=null){
-			byte[] temp=pushBack;
-			pushBack=null;
-			return temp;
-		}
+	public final byte[] nextLine(){
+//		if(pushBack!=null){//This was making the massive post-Meltdown-patch performance problem more common
+//			byte[] temp=pushBack;
+//			pushBack=null;
+//			return temp;
+//		}
 		
 		if(verbose){System.err.println("Reading line "+this.getClass().getName()+" for "+name()+"; open="+open+"; errorState="+errorState);}
 		
@@ -162,14 +170,22 @@ public class ByteFile1 extends ByteFile {
 //			System.out.println("E: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos+", returning='"+printNL(blankLine)+"'");
 			return blankLine;
 		}
+		
 		byte[] line=KillSwitch.copyOfRange(buffer, bstart, limit);
+//		byte[] line=Arrays.copyOfRange(buffer, bstart, limit);
+//		byte[] line=new String(buffer, bstart, limit-bstart).getBytes();
+//		byte[] line=new byte[limit-bstart];
+//		byte[] line=dummy;
+		
 		assert(line.length>0) : bstart+", "+nlpos+", "+limit;
 		bstart=nlpos+1;
 //		System.out.println("F: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos+", returning='"+printNL(line)+"'");
 		return line;
 	}
 	
-	private final String printNL(byte[] b){
+	final byte[] dummy=new byte[100];
+	
+	private static final String printNL(byte[] b){
 		StringBuilder sb=new StringBuilder();
 		for(int i=0; i<b.length; i++){
 			char c=(char)b[i];
@@ -212,6 +228,12 @@ public class ByteFile1 extends ByteFile {
 			}
 			bstop=extra;
 //			System.err.println();
+
+//			{//for debugging only
+//				buffer=new byte[bufferlen];
+//				bstop=0;
+//				bstart=0;
+//			}
 		}else{
 			bstop=0;
 		}
@@ -221,13 +243,30 @@ public class ByteFile1 extends ByteFile {
 		int r=-1;
 		while(len==bstop){//hit end of input without encountering a newline
 			if(bstop==buffer.length){
+//				assert(false) : len+", "+bstop;
 				buffer=KillSwitch.copyOf(buffer, buffer.length*2);
 			}
 			try {
 				r=is.read(buffer, bstop, buffer.length-bstop);
-			} catch (IOException e) {
-				e.printStackTrace();
-				System.err.println("open="+open);
+//				byte[] x=new byte[buffer.length-bstop];
+//				r=is.read(x);
+//				if(r>0){
+//					for(int i=0, j=bstop; i<r; i++, j++){
+//						buffer[j]=x[i];
+//					}
+//				}
+			} catch (IOException e) {//java.io.IOException: Stream Closed
+				//TODO: This should be avoided rather than caught.  It happens when a stream is shut down with e.g. "reads=100".
+				if(!Shared.anomaly){
+					e.printStackTrace();
+					System.err.println("open="+open);
+				}
+			} catch (NullPointerException e) {//Can be thrown by java.util.zip.Inflater.ensureOpen(Inflater.java:389)
+				//TODO: This should be avoided rather than caught.  It happens when a stream is shut down with e.g. "reads=100".
+				if(!Shared.anomaly){
+					e.printStackTrace();
+					System.err.println("open="+open);
+				}
 			}
 			if(r>0){
 				bstop=bstop+r;
@@ -251,32 +290,69 @@ public class ByteFile1 extends ByteFile {
 		
 		return len;
 	}
+
+	@Override
+	public void pushBack(byte[] line) {
+		if(bstart>line.length){
+			bstart--;
+			buffer[bstart]='\n';
+			for(int i=0, j=bstart-line.length; i<line.length; i++, j++){
+				buffer[j]=line[i];
+			}
+			bstart=bstart-line.length;
+			return;
+		}
+		
+		int bLen=bstop-bstart;
+		int newLen=bLen+line.length+1;
+		int rShift=line.length+1-bstart;
+		assert(rShift>0) : bstop+", "+bstart+", "+line.length;
+		while(newLen>buffer.length){
+			//This could get big if pushback is used often,
+			//unless special steps are taken to prevent it, like leaving extra space for pushbacks.
+			buffer=Arrays.copyOf(buffer, buffer.length*2);
+		}
+		
+		Tools.shiftRight(buffer, rShift);
+		
+		for(int i=0; i<line.length; i++){
+			buffer[i]=line[i];
+		}
+		buffer[line.length]='\n';
+		bstart=0;
+		bstop=newLen;
+	}
 	
 	private final synchronized InputStream open(){
 		if(open){
 			throw new RuntimeException("Attempt to open already-opened TextFile "+name());
 		}
 		open=true;
-		is=ReadWrite.getInputStream(name(), false, allowSubprocess());
+		is=ReadWrite.getInputStream(name(), BUFFERED, allowSubprocess());
 		bstart=-1;
 		bstop=-1;
 		return is;
 	}
 	
+	@Override
 	public boolean isOpen(){return open;}
 	
+	@Override
 	public final InputStream is(){return is;}
 	
+	@Override
 	public final long lineNum(){return lineNum;}
 	
 	private boolean open=false;
-	private byte[] buffer=/*new byte[109];*/new byte[16384];
+	private byte[] buffer=new byte[bufferlen];
 	private static final byte[] blankLine=new byte[0];
 	private int bstart=0, bstop=0;
 	public InputStream is;
 	public long lineNum=-1;
 	
 	public static boolean verbose=false;
+	public static boolean BUFFERED=false;
+	public static int bufferlen=16384;
 
 	private boolean errorState=false;
 	

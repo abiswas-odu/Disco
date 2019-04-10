@@ -84,9 +84,28 @@ bbduk.sh in=pairs.fq out=pass_pairs.fq outm=fail_pairs.fq outs=pass_singletons.f
 In this case, pairs in which neither read matches the reference will go to pass_pairs.fq.  Pairs in which either read or both match the reference will go to fail_pairs.fq.  And if one read matches the reference but the other one does not, the read not matching the reference will go to pass_singletons.fq (in addition to fail_pairs.fq).
 
 
-Preprocessing Steps and Order:
+Preprocessing steps and order:
 
-To preprocess raw sequence data with BBDuk, I recommend a specific order; please see PreprocessingGuide for details.
+To preprocess raw sequence data with BBDuk, I recommend a specific order; please see PreprocessingGuide for details, or /pipelines/variantPipeline.sh and assemblyPipeline.sh for examples.
+
+
+BBDuk internal order of operations:
+
+BBDuk supports all operations in a single pass, other than the mutually-exclusive kmer-based operation (kfilter, kmask, ktrim=r, ktrim=l).  After every trimming phase the length is checked and the reads are discarded as soon as they drop below min length, ignoring subsequent stages.
+This order of operations seems optimal for most situations.  However, if you need a different order of operations, you can do so via multiple passes.
+
+0) histograms and cardinality estimation are done on raw reads
+1) header filtering (chastity, location, barcode, etc)
+2) quality recalibration
+3) GC filter
+4) ftl/ftr/ftm
+5) ktrim/kmask/kfilter
+6) trim by overlap
+7) poly-A trim
+8) entropy mask
+9) qtrim and trim soft-clipping
+10) maq and maxNs
+11) entropy filter
 
 
 *Usage Examples*

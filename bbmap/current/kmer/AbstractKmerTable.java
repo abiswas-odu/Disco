@@ -1,15 +1,17 @@
 package kmer;
 
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 
-import stream.ByteBuilder;
-import stream.KillSwitch;
 import dna.AminoAcid;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -22,15 +24,24 @@ public abstract class AbstractKmerTable {
 	/*----------------       Abstract Methods       ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Returns count */
-	public abstract int increment(long kmer);
+//	/** Returns count */
+//	public final int increment(long kmer){return increment(kmer, 1);}
 	
-	/** Returns number of entries created */
-	public abstract int incrementAndReturnNumCreated(final long kmer);
+	/** Returns count */
+	public abstract int increment(final long kmer, final int incr);
+	
+//	/** Returns number of entries created */
+//	public final int incrementAndReturnNumCreated(final long kmer){return incrementAndReturnNumCreated(kmer, 1);}
+	
+	/** Returns number of entries created.  Incr must be positive. */
+	public abstract int incrementAndReturnNumCreated(final long kmer, final int incr);
 
 	public abstract int set(long kmer, int value);
+
+//	public abstract int set(long kmer, int[] vals);
 	
-	public abstract int set(long kmer, int[] vals);
+	/** This is for IntList3 support with HashArrayHybridFast */
+	public abstract int set(long kmer, int[] vals, int vlen);
 	
 	/** Returns number of kmers added */
 	public abstract int setIfNotPresent(long kmer, int value);
@@ -88,11 +99,12 @@ public abstract class AbstractKmerTable {
 	public abstract int arrayLength();
 	public abstract boolean canRebalance();
 
-	public abstract boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount);
-	public abstract boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount);
-	public abstract boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount);
+	public abstract boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount);
+	public abstract boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining);
+	public abstract boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining);
 
 	public abstract void fillHistogram(long[] ca, int max);
+	public abstract void fillHistogram(SuperLongList sll);
 	public abstract void countGC(long[] gcCounts, int max);
 	
 	public static final int gc(long kmer){
@@ -129,67 +141,27 @@ public abstract class AbstractKmerTable {
 	/*---------------       Allocation Methods      ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	final AtomicIntegerArray allocAtomicInt(int len){
-		AtomicIntegerArray ret=null;
-		try {
-			ret=new AtomicIntegerArray(len);
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-//				Shared.printMemory();
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static AtomicIntegerArray allocAtomicInt(int len){
+		return KillSwitch.allocAtomicInt(len);
 	}
 	
-	final long[] allocLong1D(int len){
-		long[] ret=null;
-		try {
-			ret=new long[len];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-//				Shared.printMemory();
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static long[] allocLong1D(int len){
+		return KillSwitch.allocLong1D(len);
 	}
 	
-	final int[] allocInt1D(int len){
-		int[] ret=null;
-		try {
-			ret=new int[len];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-//				Shared.printMemory();
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static long[][] allocLong2D(int mult, int len){
+		return KillSwitch.allocLong2D(mult, len);
 	}
 	
-	final int[][] allocInt2D(int len){
-		int[][] ret=null;
-		try {
-			ret=new int[len][];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-//				Shared.printMemory();
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static int[] allocInt1D(int len){
+		return KillSwitch.allocInt1D(len);
 	}
 	
-	final KmerNode[] allocKmerNodeArray(int len){
+	final static int[][] allocInt2D(int len){
+		return KillSwitch.allocInt2D(len);
+	}
+	
+	final static KmerNode[] allocKmerNodeArray(int len){
 		KmerNode[] ret=null;
 		try {
 			ret=new KmerNode[len];
@@ -229,10 +201,13 @@ public abstract class AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	public static final StringBuilder toText(long kmer, int k){
+		byte[] lookup=(Shared.AMINO_IN ? AminoAcid.numberToAcid : AminoAcid.numberToBase);
+		int bits=(Shared.AMINO_IN ? 5 : 2);
+		int mask=(Shared.AMINO_IN ? 31 : 3);
 		StringBuilder sb=new StringBuilder(k);
 		for(int i=k-1; i>=0; i--){
-			int x=(int)((kmer>>(2*i))&3);
-			sb.append((char)AminoAcid.numberToBase[x]);
+			int x=(int)((kmer>>(bits*i))&mask);
+			sb.append((char)lookup[x]);
 		}
 		return sb;
 	}
@@ -258,18 +233,21 @@ public abstract class AbstractKmerTable {
 	}
 	
 	static final StringBuilder toText(long kmer, int count, int k, StringBuilder sb){
+		byte[] lookup=(Shared.AMINO_IN ? AminoAcid.numberToAcid : AminoAcid.numberToBase);
+		int bits=(Shared.AMINO_IN ? 5 : 2);
+		int mask=(Shared.AMINO_IN ? 31 : 3);
 		if(FASTA_DUMP){
 			sb.append('>');
 			sb.append(count);
 			sb.append('\n');
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				sb.append((char)AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				sb.append((char)lookup[x]);
 			}
 		}else{
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				sb.append((char)AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				sb.append((char)lookup[x]);
 			}
 			sb.append('\t');
 			sb.append(count);
@@ -278,6 +256,9 @@ public abstract class AbstractKmerTable {
 	}
 	
 	static final StringBuilder toText(long kmer, int[] values, int k, StringBuilder sb){
+		byte[] lookup=(Shared.AMINO_IN ? AminoAcid.numberToAcid : AminoAcid.numberToBase);
+		int bits=(Shared.AMINO_IN ? 5 : 2);
+		int mask=(Shared.AMINO_IN ? 31 : 3);
 		if(FASTA_DUMP){
 			sb.append('>');
 			for(int i=0; i<values.length; i++){
@@ -288,13 +269,13 @@ public abstract class AbstractKmerTable {
 			}
 			sb.append('\n');
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				sb.append((char)AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				sb.append((char)lookup[x]);
 			}
 		}else{
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				sb.append((char)AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				sb.append((char)lookup[x]);
 			}
 			sb.append('\t');
 			for(int i=0; i<values.length; i++){
@@ -308,30 +289,37 @@ public abstract class AbstractKmerTable {
 	}
 	
 	public static final ByteBuilder toBytes(long kmer, int count, int k, ByteBuilder bb){
+		byte[] lookup=(Shared.AMINO_IN ? AminoAcid.numberToAcid : AminoAcid.numberToBase);
+		int bits=(Shared.AMINO_IN ? 5 : 2);
+		int mask=(Shared.AMINO_IN ? 31 : 3);
 		if(FASTA_DUMP){
 			bb.append('>');
 			bb.append(count);
-			bb.append('\n');
+			bb.nl();
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				bb.append(AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				bb.append(lookup[x]);
 			}
+//			assert(false) : kmer+"->\n"+bb+"\n"+AminoAcid.kmerToStringAA(kmer, k);
 		}else if(NUMERIC_DUMP){
 			bb.append(Long.toHexString(kmer));
-			bb.append('\t');
+			bb.tab();
 			bb.append(count);
 		}else{
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				bb.append(AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				bb.append(lookup[x]);
 			}
-			bb.append('\t');
+			bb.tab();
 			bb.append(count);
 		}
 		return bb;
 	}
 	
 	public static final ByteBuilder toBytes(long kmer, int[] values, int k, ByteBuilder bb){
+		byte[] lookup=(Shared.AMINO_IN ? AminoAcid.numberToAcid : AminoAcid.numberToBase);
+		int bits=(Shared.AMINO_IN ? 5 : 2);
+		int mask=(Shared.AMINO_IN ? 31 : 3);
 		if(FASTA_DUMP){
 			bb.append('>');
 			for(int i=0; i<values.length; i++){
@@ -340,14 +328,14 @@ public abstract class AbstractKmerTable {
 				if(i>0){bb.append(',');}
 				bb.append(x);
 			}
-			bb.append('\n');
+			bb.nl();
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				bb.append(AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				bb.append(lookup[x]);
 			}
 		}else if(NUMERIC_DUMP){
 			bb.append(Long.toHexString(kmer));
-			bb.append('\t');
+			bb.tab();
 			for(int i=0; i<values.length; i++){
 				int x=values[i];
 				if(x==-1){break;}
@@ -356,10 +344,10 @@ public abstract class AbstractKmerTable {
 			}
 		}else{
 			for(int i=k-1; i>=0; i--){
-				int x=(int)((kmer>>(2*i))&3);
-				bb.append(AminoAcid.numberToBase[x]);
+				int x=(int)((kmer>>(bits*i))&mask);
+				bb.append(lookup[x]);
 			}
-			bb.append('\t');
+			bb.tab();
 			for(int i=0; i<values.length; i++){
 				int x=values[i];
 				if(x==-1){break;}
@@ -379,7 +367,7 @@ public abstract class AbstractKmerTable {
 	static void appendKmerText(long kmer, int count, int k, ByteBuilder bb){
 		bb.setLength(0);
 		toBytes(kmer, count, k, bb);
-		bb.append('\n');
+		bb.nl();
 	}
 	
 	
@@ -392,19 +380,20 @@ public abstract class AbstractKmerTable {
 	 * This allocates the data structures in multiple threads.  Unfortunately, it does not lead to any speedup, at least for ARRAY type.
 	 * @param ways
 	 * @param tableType
-	 * @param initialSize
-	 * @param growable
-	 * @return
+	 * @param schedule
+	 * @param mask
+	 * @return The preallocated table
 	 */
-	public static final AbstractKmerTable[] preallocate(int ways, int tableType, int initialSize, boolean growable){
+	public static final AbstractKmerTable[] preallocate(int ways, int tableType, int[] schedule, long mask){
 
 		final AbstractKmerTable[] tables=new AbstractKmerTable[ways];
 		
 		{
-			final int t=Tools.max(1, Tools.min(Shared.threads(), 2, ways));
+			shared.Timer tm=new shared.Timer();
+			final int t=Tools.max(1, Tools.min(Shared.threads(), 2, ways)); //More than 2 still improves allocation time, but only slightly; ~25% faster at t=4.
 			final AllocThread[] allocators=new AllocThread[t];
 			for(int i=0; i<t; i++){
-				allocators[i]=new AllocThread(tableType, initialSize, i, t, growable, tables);
+				allocators[i]=new AllocThread(tableType, schedule, i, t, mask, tables);
 			}
 			for(AllocThread at : allocators){at.start();}
 			for(AllocThread at : allocators){
@@ -417,6 +406,8 @@ public abstract class AbstractKmerTable {
 					}
 				}
 			}
+			tm.stop();
+			if(AbstractKmerTableSet.DISPLAY_PROGRESS){System.err.println(tm);}
 		}
 		
 		synchronized(tables){
@@ -437,17 +428,21 @@ public abstract class AbstractKmerTable {
 	
 	private static class AllocThread extends Thread{
 		
-		AllocThread(int type_, int initialSize_, int mod_, int div_, boolean growable_, AbstractKmerTable[] tables_){
+		AllocThread(int type_, int[] schedule_, int mod_, int div_,
+				long mask_, AbstractKmerTable[] tables_){
 			type=type_;
-			size=initialSize_;
+			schedule=schedule_;
+			size=schedule[0];
 			mod=mod_;
 			div=div_;
-			growable=growable_;
+			mask=mask_;
+			growable=schedule.length>1;
 			tables=tables_;
 		}
 		
 		@Override
 		public void run(){
+			//Initialize tables
 			for(int i=mod; i<tables.length; i+=div){
 //				System.err.println("T"+i+" allocating "+i);
 				final AbstractKmerTable akt;
@@ -456,7 +451,8 @@ public abstract class AbstractKmerTable {
 				}else if(type==TABLE){
 					akt=new KmerTable(size, growable);
 				}else if(type==ARRAY1D){
-					akt=new HashArray1D(size, growable);
+					akt=new HashArray1D(schedule, mask);
+//					akt=new HashArray1D(size, -1, mask, growable);//TODO: Set maxSize
 				}else if(type==NODE1D){
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 //					akt=new KmerNode2(-1, 0);
@@ -465,12 +461,17 @@ public abstract class AbstractKmerTable {
 				}else if(type==TABLE2D){
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 				}else if(type==ARRAY2D){
-					akt=new HashArray2D(size, growable);
+					akt=new HashArray2D(schedule, mask);
+//					akt=new HashArray2D(size, -1, mask, growable);//TODO: Set maxSize
 				}else if(type==NODE2D){
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 //					akt=new KmerNode(-1, 0);
 				}else if(type==ARRAYH){
-					akt=new HashArrayHybrid(size, growable);
+					akt=new HashArrayHybrid(schedule, mask);
+//					akt=new HashArrayHybrid(size, -1, mask, growable);//TODO: Set maxSize
+				}else if(type==ARRAYHF){
+					akt=new HashArrayHybridFast(schedule, mask);
+//					akt=new HashArrayHybrid(size, -1, mask, growable);//TODO: Set maxSize
 				}else{
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 				}
@@ -482,9 +483,11 @@ public abstract class AbstractKmerTable {
 		}
 		
 		private final int type;
+		private final int[] schedule;
 		private final int size;
 		private final int mod;
 		private final int div;
+		private final long mask;
 		private final boolean growable;
 		final AbstractKmerTable[] tables;
 		
@@ -496,15 +499,16 @@ public abstract class AbstractKmerTable {
 	
 	public static boolean FASTA_DUMP=true;
 	public static boolean NUMERIC_DUMP=false;
+	public static boolean TWO_PASS_RESIZE=false;
 	
 	public static final boolean verbose=false;
 	public static final boolean TESTMODE=false; //123 SLOW!
 	
-	public static final int UNKNOWN=0, ARRAY1D=1, FOREST1D=2, TABLE=3, NODE1D=4, ARRAY2D=5, FOREST2D=6, TABLE2D=7, NODE2D=8, ARRAYH=9;
+	public static final int UNKNOWN=0, ARRAY1D=1, FOREST1D=2, TABLE=3, NODE1D=4, ARRAY2D=5, FOREST2D=6, TABLE2D=7, NODE2D=8, ARRAYH=9, ARRAYHF=10;
 	
 	public static final int NOT_PRESENT=-1, HASH_COLLISION=-2;
 	public static final int NO_OWNER=-1;
 	
-	private final static String killMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
+	private static final String killMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
 	
 }

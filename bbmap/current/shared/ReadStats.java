@@ -2,14 +2,16 @@ package shared;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
 import align2.QualityTools;
 import dna.AminoAcid;
-
+import fileIO.ByteStreamWriter;
+import fileIO.TextStreamWriter;
 import stream.Read;
 import stream.SamLine;
+import structures.ByteBuilder;
 import structures.LongList;
-import fileIO.TextStreamWriter;
 
 
 /**
@@ -206,14 +208,14 @@ public class ReadStats {
 				}
 			}
 			if(COLLECT_INSERT_STATS){
-				x.insertHist.add(rs.insertHist);
+				x.insertHist.incrementBy(rs.insertHist);
 				x.pairedCount+=rs.pairedCount;
 				x.unpairedCount+=rs.unpairedCount;
 			}
 			if(COLLECT_BASE_STATS){
 				for(int i=0; i<rs.baseHist.length; i++){
 					for(int j=0; j<rs.baseHist[i].length; j++){
-						x.baseHist[i][j].add(rs.baseHist[i][j]);
+						x.baseHist[i][j].incrementBy(rs.baseHist[i][j]);
 					}
 				}
 			}
@@ -228,18 +230,18 @@ public class ReadStats {
 			
 
 			if(COLLECT_INDEL_STATS){
-				x.delHist.add(rs.delHist);
-				x.delHist2.add(rs.delHist2);
-				x.insHist.add(rs.insHist);
+				x.delHist.incrementBy(rs.delHist);
+				x.delHist2.incrementBy(rs.delHist2);
+				x.insHist.incrementBy(rs.insHist);
 			}
 
 			if(COLLECT_LENGTH_STATS){
-				x.lengthHist.add(rs.lengthHist);
+				x.lengthHist.incrementBy(rs.lengthHist);
 			}
 			
 
 			if(COLLECT_ERROR_STATS){
-				x.errorHist.add(rs.errorHist);
+				x.errorHist.incrementBy(rs.errorHist);
 			}
 			
 			if(COLLECT_GC_STATS){
@@ -256,7 +258,7 @@ public class ReadStats {
 			}
 			
 			if(COLLECT_TIME_STATS){
-				x.timeHist.add(rs.timeHist);
+				x.timeHist.incrementBy(rs.timeHist);
 			}
 
 			x.gcMaxReadLen=Tools.max(x.gcMaxReadLen, rs.gcMaxReadLen);
@@ -288,7 +290,7 @@ public class ReadStats {
 		}
 		if(pairnum==1){read2Count++;}
 		addToQualityHistogram(quals, pairnum);
-		int x=Read.avgQualityByProbability(bases, quals, true, 0);
+		int x=Read.avgQualityByProbabilityInt(bases, quals, true, 0);
 		aqualArray[pairnum][x]++;
 		if(BQUAL_HIST_FILE!=null){
 			addToBQualityHistogram(quals, pairnum);
@@ -342,14 +344,14 @@ public class ReadStats {
 		final byte[] qual=r.quality;
 		byte[] match=r.match;
 		
-		if(match!=null && r.shortmatch()){match=Read.toLongMatchString(match);}
+		if(r.shortmatch()){match=Read.toLongMatchString(match);}
 
 		final boolean plus=(r.strand()==0);
-		int rpos=0;
+		int bpos=0;
 		byte lastm='A';
 		for(int mpos=0; mpos<match.length/* && rpos<limit*/; mpos++){
-			byte b=bases[rpos];
-			byte q=qual[rpos];
+			byte b=bases[bpos];
+			byte q=qual[bpos];
 			byte m=match[plus ? mpos : match.length-mpos-1];
 			
 			{
@@ -363,11 +365,11 @@ public class ReadStats {
 					//do nothing
 				}else if(m=='C'){
 					//do nothing
-				}else if(m=='V'){
+				}else if(m=='V' || m=='i'){
 					//do nothing
 				}else if(m=='D'){
 					if(lastm!=m){
-						int x=rpos, y=rpos-1;
+						int x=bpos, y=bpos-1;
 						if(x<qual.length){
 							if(AminoAcid.isFullyDefined(bases[x])){
 								qualDel[qual[x]]++;
@@ -379,13 +381,15 @@ public class ReadStats {
 							}
 						}
 					}
-					rpos--;
+					bpos--;
+				}else if(m=='d'){
+					bpos--;
 				}else{
-					assert(!Character.isDigit(m)) : ((char)m);
+					assert(!Tools.isDigit(m)) : ((char)m);
 				}
 			}
 
-			rpos++;
+			bpos++;
 			lastm=m;
 		}
 		
@@ -412,7 +416,7 @@ public class ReadStats {
 	
 	private void addToLengthHistogram(final Read r, int pairnum){
 		if(r==null || r.bases==null){return;}
-		int x=Tools.min(r.length(), MAXLENGTHLEN); 
+		int x=Tools.min(r.length(), MAXLENGTHLEN);
 		lengthHist.increment(x, 1);
 	}
 	
@@ -465,52 +469,108 @@ public class ReadStats {
 	private void addToTimeHistogram(final Read r, int pairnum){
 		if(r==null){return;}
 		assert(r.obj!=null && r.obj.getClass()==Long.class);
-		int x=(int)Tools.min(((Long)r.obj).longValue(), MAXTIMELEN); 
+		int x=(int)Tools.min(((Long)r.obj).longValue(), MAXTIMELEN);
 		timeHist.increment(x, 1);
 	}
 	
-	public void addToIndelHistogram(final Read r){
-		if(r==null){return;}
-		addToIndelHistogram(r, 0);
-		if(r.mate!=null){addToIndelHistogram(r.mate, 1);}
+	public boolean addToIndelHistogram(final Read r){
+		if(r==null){return false;}
+		boolean success=addToIndelHistogram(r, 0);
+		if(r.mate!=null){success=addToIndelHistogram(r.mate, 1)|success;}
+		return success;
 	}
-		
-	private void addToIndelHistogram(final Read r, int pairnum){
-		if(r==null || r.bases==null || r.length()<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
-		final byte[] bases=r.bases, match=r.match;
-		final int limit=Tools.min(bases.length, MAXLEN);
-		
-		int rpos=0;
+
+	/** Handles short match, long match, and reads with attached SamLines */
+	private boolean addToIndelHistogram(final Read r, int pairnum){
+		if(r==null || !r.mapped()){return false;}
+		if(r.obj!=null && r.obj.getClass()==SamLine.class){
+			boolean success=addToIndelHistogram((SamLine)r.obj);
+			if(success){return true;}
+		}
+		if(r.match==null/* || r.discarded()*/){return false;}
+		final byte[] match=r.match;
+
+		byte lastLetter='?';
+		boolean digit=false;
 		int streak=0;
-		byte lastm='A';
-		for(int mpos=0; mpos<match.length && rpos<limit; mpos++){
-			byte m=match[mpos];
-			
-			{	
-				if(lastm!=m){
-					if(lastm=='D'){
+		for(int mpos=0; mpos<match.length; mpos++){
+			final byte m=match[mpos];
+
+			if(Tools.isDigit(m)){
+				streak=streak*10+m-'0';
+				digit=true;
+			}else{
+				if(lastLetter==m){
+					streak++;
+				}else{
+					//						assert(streak>0 || (streak==0 && lastm=='?'));
+					if(!digit){streak++;}
+					digit=false;
+					if(lastLetter=='D'){
 						streak=Tools.min(streak, MAXDELLEN2);
 						if(streak<MAXDELLEN){delHist.increment(streak, 1);}
 						delHist2.increment(streak/100, 1);
-					}else if(lastm=='I'){
+						//						System.err.println("A. Del: "+streak+", "+MAXDELLEN+", "+MAXDELLEN2);
+					}else if(lastLetter=='I'){
 						streak=Tools.min(streak, MAXINSLEN);
 						insHist.increment(streak, 1);
+						//						System.err.println("A. Ins: "+streak+", "+MAXINSLEN);
 					}
 					streak=0;
 				}
+				lastLetter=m;
 			}
-			streak++;
-			rpos++;
-			lastm=m;
 		}
-		if(lastm=='D'){
-			streak=Tools.min(streak, MAXDELLEN2);
-			if(streak<MAXDELLEN){delHist.increment(streak, 1);}
-			delHist2.increment(streak/100, 1);
-		}else if(lastm=='I'){
-			streak=Tools.min(streak, MAXINSLEN);
-			insHist.increment(streak, 1);
+		
+		{//Final symbol
+			if(!digit){streak++;}
+			digit=false;
+			if(lastLetter=='D'){
+				streak=Tools.min(streak, MAXDELLEN2);
+				if(streak<MAXDELLEN){delHist.increment(streak, 1);}
+				delHist2.increment(streak/100, 1);
+				//						System.err.println("A. Del: "+streak+", "+MAXDELLEN+", "+MAXDELLEN2);
+			}else if(lastLetter=='I'){
+				streak=Tools.min(streak, MAXINSLEN);
+				insHist.increment(streak, 1);
+				//						System.err.println("A. Ins: "+streak+", "+MAXINSLEN);
+			}
+			streak=0;
 		}
+		return true;
+	}
+
+	private boolean addToIndelHistogram(SamLine sl){
+		if(sl==null || sl.cigar==null || !sl.mapped()){
+			return false;
+		}
+		final String cigar=sl.cigar;
+		final int pairnum=sl.pairnum();
+		
+		int count=0;
+		for(int cpos=0; cpos<cigar.length(); cpos++){
+			final char c=cigar.charAt(cpos);
+
+			if(Tools.isDigit(c)){
+				count=count*10+c-'0';
+			}else{
+				if(c=='I'){
+					int streak=Tools.min(count, MAXINSLEN);
+					insHist.increment(streak, 1);
+//					System.err.println("A. Ins: "+streak+", "+MAXINSLEN);
+				}else if(c=='D'){
+					int streak=Tools.min(count, MAXDELLEN2);
+					if(streak<MAXDELLEN){delHist.increment(streak, 1);}
+					delHist2.increment(streak/100, 1);
+//					System.err.println("A. Del: "+streak+", "+MAXDELLEN+", "+MAXDELLEN2);
+				}else{
+					//Ignore
+				}
+				count=0;
+			}
+		}
+		assert(count==0) : count;
+		return true;
 	}
 	
 	public void addToMatchHistogram(final Read r){
@@ -544,38 +604,42 @@ public class ReadStats {
 			}
 		}else{
 			final boolean plus=(r.strand()==0);
-			int rpos=0;
+			int bpos=0;
 			byte lastm='A';
-			for(int mpos=0; mpos<match.length && rpos<limit; mpos++){
-				byte b=bases[rpos];//bases[plus ? rpos : bases.length-rpos-1];
+			for(int mpos=0; mpos<match.length && bpos<limit; mpos++){
+				byte b=bases[bpos];//bases[plus ? rpos : bases.length-rpos-1];
 				byte m=match[plus ? mpos : match.length-mpos-1];//match[mpos];
 				if(b=='N'){
 					if(m=='D'){
-						if(lastm!=m){ds[rpos]++;}
-						rpos--;
-					}else{ns[rpos]++;}
+						if(lastm!=m){ds[bpos]++;}
+						bpos--;
+					}else{ns[bpos]++;}
 				}else{
 					if(m=='m'){
-						ms[rpos]++;
+						ms[bpos]++;
 					}else if(m=='S'){
-						ss[rpos]++;
+						ss[bpos]++;
 					}else if(m=='I'){
-						is[rpos]++;
+						is[bpos]++;
 					}else if(m=='N' || m=='V'){
 //						assert(false) : "\n"+r+"\n"+new String(Data.getChromosome(r.chrom).getBytes(r.start, r.stop))+"\nrpos="+rpos+", mpos="+mpos;
-						os[rpos]++;
+						os[bpos]++;
 					}else if(m=='C'){
 //						assert(false) : r;
-						cs[rpos]++;
+						cs[bpos]++;
 					}else if(m=='D'){
-						if(lastm!=m){ds[rpos]++;}
-						rpos--;
+						if(lastm!=m){ds[bpos]++;}
+						bpos--;
+					}else if(m=='i'){
+						os[bpos]++;
+					}else if(m=='d'){
+						bpos--;
 					}else{
-						os[rpos]++;
+						os[bpos]++;
 						assert(false) : "For read "+r.numericID+", unknown symbol in match string: ASCII "+m+" = "+(char)m;
 					}
 				}
-				rpos++;
+				bpos++;
 				lastm=m;
 			}
 		}
@@ -607,11 +671,12 @@ public class ReadStats {
 	
 	public void addToInsertHistogram(final SamLine r1){
 		int x=r1.tlen;
+		if(x<0) {x=-x;}
 		x=Tools.min(MAXINSERTLEN, x);
-		if(x>0){
-			insertHist.increment(x, 1);
+		if(r1.pairedOnSameChrom() && x>0){
 			pairedCount++;
-		}else{
+			insertHist.increment(x, 1);
+		}else {
 			unpairedCount++;
 		}
 	}
@@ -632,7 +697,7 @@ public class ReadStats {
 	}
 	
 	/** This is untested and only gives approximate answers when overlapping reads contain indels.
-	 * It may give incorrect answers for same-strange pairs that are shorter than read length. 
+	 * It may give incorrect answers for same-strange pairs that are shorter than read length.
 	 * It might give negative answers but that would be a bug. */
 	public static int insertSizeMapped(SamLine r1, SamLine r2, boolean requireProperPair){
 		if(r2==null){return r1.length();}
@@ -694,9 +759,9 @@ public class ReadStats {
 	}
 	
 	public static boolean testFiles(boolean allowDuplicates){
-		return Tools.testOutputFiles(overwrite, append, allowDuplicates, 
-				AVG_QUAL_HIST_FILE, QUAL_HIST_FILE, BQUAL_HIST_FILE, BQUAL_HIST_OVERALL_FILE, QUAL_COUNT_HIST_FILE, 
-				MATCH_HIST_FILE, INSERT_HIST_FILE, BASE_HIST_FILE, QUAL_ACCURACY_FILE, INDEL_HIST_FILE, ERROR_HIST_FILE, LENGTH_HIST_FILE, 
+		return Tools.testOutputFiles(overwrite, append, allowDuplicates,
+				AVG_QUAL_HIST_FILE, QUAL_HIST_FILE, BQUAL_HIST_FILE, BQUAL_HIST_OVERALL_FILE, QUAL_COUNT_HIST_FILE,
+				MATCH_HIST_FILE, INSERT_HIST_FILE, BASE_HIST_FILE, QUAL_ACCURACY_FILE, INDEL_HIST_FILE, ERROR_HIST_FILE, LENGTH_HIST_FILE,
 				GC_HIST_FILE, IDENTITY_HIST_FILE, TIME_HIST_FILE);
 	}
 	
@@ -743,9 +808,9 @@ public class ReadStats {
 			long x2=aqualArray[1][i];
 			y-=x1;
 			y-=x2;
-			tsw.print(String.format("%d\t%d\t%.5f", i, x1, x1*mult1));
+			tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.5f", i, x1, x1*mult1));
 			if(writePaired){
-				tsw.print(String.format("\t%d\t%.5f", x2, x2*mult2));
+				tsw.print(String.format(Locale.ROOT, "\t%d\t%.5f", x2, x2*mult2));
 			}
 			tsw.print("\n");
 			if(y<=0){break;}
@@ -771,9 +836,9 @@ public class ReadStats {
 			long x2=qcountHist[1][i];
 			y-=x1;
 			y-=x2;
-			tsw.print(String.format("%d\t%d\t%.5f", i, x1, x1*mult1));
+			tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.5f", i, x1, x1*mult1));
 			if(writePaired){
-				tsw.print(String.format("\t%d\t%.5f", x2, x2*mult2));
+				tsw.print(String.format(Locale.ROOT, "\t%d\t%.5f", x2, x2*mult2));
 			}
 			tsw.print("\n");
 			if(y<=0){break;}
@@ -831,9 +896,9 @@ public class ReadStats {
 					deviation1sum+=Math.abs(blog-bcalc)*div1;
 					deviation2sum+=Math.abs(clog-ccalc)*div2;
 					
-					sb.append(String.format("%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc, clin, clog, ccalc));
+					sb.append(String.format(Locale.ROOT, "%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc, clin, clog, ccalc));
 				}else{
-					sb.append(String.format("%d\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, clin, clog));
+					sb.append(String.format(Locale.ROOT, "%d\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, clin, clog));
 				}
 			}
 		}else{
@@ -851,9 +916,9 @@ public class ReadStats {
 					div1sum+=div1;
 					deviation1sum+=Math.abs(blog-bcalc)*div1;
 					
-					sb.append(String.format("%d\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc));
+					sb.append(String.format(Locale.ROOT, "%d\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc));
 				}else{
-					sb.append(String.format("%d\t%.3f\t%.3f\n", a, blin, blog));
+					sb.append(String.format(Locale.ROOT, "%d\t%.3f\t%.3f\n", a, blin, blog));
 				}
 			}
 		}
@@ -862,9 +927,9 @@ public class ReadStats {
 		tsw.start();
 		if(measure){
 			if(writePaired){
-				tsw.print(String.format("#Deviation\t%.4f\t%.4f\n", deviation1sum/div1sum, deviation2sum/div2sum));
+				tsw.print(String.format(Locale.ROOT, "#Deviation\t%.4f\t%.4f\n", deviation1sum/div1sum, deviation2sum/div2sum));
 			}else{
-				tsw.print(String.format("#Deviation\t%.4f\n", deviation1sum/div1sum));
+				tsw.print(String.format(Locale.ROOT, "#Deviation\t%.4f\n", deviation1sum/div1sum));
 			}
 		}
 		tsw.print(sb);
@@ -881,8 +946,8 @@ public class ReadStats {
 		long i=insSum[pairnum][pos];
 		long s=subSum[pairnum][pos];
 		long n=(includeNs ? nSum[pairnum][pos] : 0); //This only tracks no-calls, not no-refs.
-		long good=Tools.max(0, m*2-d-d2+n/4);
-		long total=Tools.max(0, m*2+i*2+s*2+n); //not d
+		long good=Tools.max(0, m*2-d-d2+n/2);
+		long total=Tools.max(0, m*2+i*2+s*2+n*2); //not d
 		long bad=total-good;
 		if(total<1){return 0;}
 		double error=bad/(double)total;
@@ -894,7 +959,7 @@ public class ReadStats {
 		for(int i=0; i<30; i++){cp30[i]=0;}
 		
 		final long sum=Tools.sum(bqualHistOverall);
-		final long median=Tools.percentile(bqualHistOverall, 0.5);
+		final long median=Tools.percentileHistogram(bqualHistOverall, 0.5);
 		final double mean=Tools.averageHistogram(bqualHistOverall);
 		final double stdev=Tools.standardDeviationHistogram(bqualHistOverall);
 		final double mean30=Tools.averageHistogram(cp30);
@@ -905,16 +970,16 @@ public class ReadStats {
 		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
 		tsw.start();
 		tsw.print("#Median\t"+median+"\n");
-		tsw.print("#Mean\t"+String.format("%.3f", mean)+"\n");
-		tsw.print("#STDev\t"+String.format("%.3f", stdev)+"\n");
-		tsw.print("#Mean_30\t"+String.format("%.3f", mean30)+"\n");
-		tsw.print("#STDev_30\t"+String.format("%.3f", stdev30)+"\n");
+		tsw.print("#Mean\t"+String.format(Locale.ROOT, "%.3f", mean)+"\n");
+		tsw.print("#STDev\t"+String.format(Locale.ROOT, "%.3f", stdev)+"\n");
+		tsw.print("#Mean_30\t"+String.format(Locale.ROOT, "%.3f", mean30)+"\n");
+		tsw.print("#STDev_30\t"+String.format(Locale.ROOT, "%.3f", stdev30)+"\n");
 		tsw.print("#Quality\tbases\tfraction\n");
 		
 		for(int i=0; i<bqualHistOverall.length; i++){
 			long x=bqualHistOverall[i];
 			y-=x;
-			tsw.print(String.format("%d\t%d\t%.5f", i, x, x*mult));
+			tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.5f", i, x, x*mult));
 			tsw.print("\n");
 			if(y<=0){break;}
 		}
@@ -939,26 +1004,26 @@ public class ReadStats {
 				final long a[]=a1, sum=sum1;
 				
 				final long weightedSum=Tools.sumHistogram(a);
-				final long med=Tools.median(a), min=Tools.minHistogram(a), max=Tools.maxHistogram(a);
-				final long firstQuart=Tools.percentile(a, 0.25);
-				final long thirdQuart=Tools.percentile(a, 0.75);
-				final long leftWhisker=Tools.percentile(a, 0.02);
-				final long rightWhisker=Tools.percentile(a, 0.98);
+				final long med=Tools.medianHistogram(a), min=Tools.minHistogram(a), max=Tools.maxHistogram(a);
+				final long firstQuart=Tools.percentileHistogram(a, 0.25);
+				final long thirdQuart=Tools.percentileHistogram(a, 0.75);
+				final long leftWhisker=Tools.percentileHistogram(a, 0.02);
+				final long rightWhisker=Tools.percentileHistogram(a, 0.98);
 				final double mean=weightedSum*1.0/Tools.max(sum, 0);
-				tsw.print(String.format("%d\t%d\t%d\t%d\t%.2f\t%d\t%d\t%d\t%d\t%d", i, sum, min, max, mean, firstQuart, med, thirdQuart, leftWhisker, rightWhisker));
+				tsw.print(String.format(Locale.ROOT, "%d\t%d\t%d\t%d\t%.2f\t%d\t%d\t%d\t%d\t%d", i, sum, min, max, mean, firstQuart, med, thirdQuart, leftWhisker, rightWhisker));
 			}
 
 			if(writePaired){
 				final long a[]=a2, sum=sum2;
 				
 				final long weightedSum=Tools.sumHistogram(a);
-				final long med=Tools.median(a), min=Tools.minHistogram(a), max=Tools.maxHistogram(a);
-				final long firstQuart=Tools.percentile(a, 0.25);
-				final long thirdQuart=Tools.percentile(a, 0.75);
-				final long leftWhisker=Tools.percentile(a, 0.02);
-				final long rightWhisker=Tools.percentile(a, 0.98);
+				final long med=Tools.medianHistogram(a), min=Tools.minHistogram(a), max=Tools.maxHistogram(a);
+				final long firstQuart=Tools.percentileHistogram(a, 0.25);
+				final long thirdQuart=Tools.percentileHistogram(a, 0.75);
+				final long leftWhisker=Tools.percentileHistogram(a, 0.02);
+				final long rightWhisker=Tools.percentileHistogram(a, 0.98);
 				final double mean=weightedSum*1.0/Tools.max(sum, 0);
-				tsw.print(String.format("\t%d\t%d\t%d\t%.2f\t%d\t%d\t%d\t%d\t%d", sum, min, max, mean, firstQuart, med, thirdQuart, leftWhisker, rightWhisker));
+				tsw.print(String.format(Locale.ROOT, "\t%d\t%d\t%d\t%.2f\t%d\t%d\t%d\t%d\t%d", sum, min, max, mean, firstQuart, med, thirdQuart, leftWhisker, rightWhisker));
 			}
 			tsw.print("\n");
 		}
@@ -975,6 +1040,8 @@ public class ReadStats {
 			max=i;
 		}
 
+		final int qMin=Read.MIN_CALLED_QUALITY(), qMax=Read.MAX_CALLED_QUALITY();
+		
 		double devsum=0;
 		double devsumSub=0;
 		long observations=0;
@@ -997,10 +1064,10 @@ public class ReadStats {
 				phred=QualityTools.probErrorToPhredDouble(errorRate);
 				double deviation=phred-i;
 				double deviationSub=phredSub-i;
-				if(i==Read.MIN_CALLED_QUALITY && deviation<0){deviation=0;}
-				else if(i==Read.MAX_CALLED_QUALITY && max==Read.MAX_CALLED_QUALITY+1 && deviation>0){deviation=0;}
-				if(i==Read.MIN_CALLED_QUALITY && deviationSub<0){deviationSub=0;}
-				else if(i==Read.MAX_CALLED_QUALITY && max==Read.MAX_CALLED_QUALITY+1 && deviationSub>0){deviationSub=0;}
+				if(i==qMin && deviation<0){deviation=0;}
+				else if(i==qMax && max==qMax+1 && deviation>0){deviation=0;}
+				if(i==qMin && deviationSub<0){deviationSub=0;}
+				else if(i==qMax && max==qMax+1 && deviationSub>0){deviationSub=0;}
 				devsum+=(Math.abs(deviation)*sum);
 				devsumSub+=(Math.abs(deviationSub)*sum);
 				observations+=sum;
@@ -1009,8 +1076,8 @@ public class ReadStats {
 
 		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
 		tsw.start();
-		tsw.print(String.format("#Deviation\t%.3f\n", devsum/observations));
-		tsw.print(String.format("#DeviationSub\t%.3f\n", devsumSub/observations));
+		tsw.print(String.format(Locale.ROOT, "#Deviation\t%.3f\n", devsum/observations));
+		tsw.print(String.format(Locale.ROOT, "#DeviationSub\t%.3f\n", devsumSub/observations));
 		tsw.print("#Quality\tMatch\tSub\tIns\tDel\tTrueQuality\tTrueQualitySub\n");
 		for(int i=0; i<max; i++){
 			long qm=qualMatch[i]*2;
@@ -1034,8 +1101,8 @@ public class ReadStats {
 			}
 			
 			tsw.print(i+"\t"+qm+"\t"+qs+"\t"+qi+"\t"+qd);
-			tsw.print(phred>=0 ? String.format("\t%.2f", phred) : "\t");
-			tsw.print(phredSub>=0 ? String.format("\t%.2f\n", phredSub) : "\t\n");
+			tsw.print(phred>=0 ? String.format(Locale.ROOT, "\t%.2f", phred) : "\t");
+			tsw.print(phredSub>=0 ? String.format(Locale.ROOT, "\t%.2f\n", phredSub) : "\t\n");
 			
 //			System.err.println(qm+"\t"+qs+"\t"+qi+"\t"+qd);
 		}
@@ -1067,10 +1134,10 @@ public class ReadStats {
 			double inv1=1.0/(double)Tools.max(1, sum1);
 			double inv2=1.0/(double)Tools.max(1, sum2);
 
-			tsw.print(String.format("%d", a));
-			tsw.print(String.format("\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f", 
+			tsw.print(String.format(Locale.ROOT, "%d", a));
+			tsw.print(String.format(Locale.ROOT, "\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f",
 					ms1[i]*inv1, ss1[i]*inv1, ds1[i]*inv1, is1[i]*inv1, ns1[i]*inv1, (os1[i]+cs1[i])*inv1));
-			tsw.print(String.format("\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f", 
+			tsw.print(String.format(Locale.ROOT, "\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f",
 					ms2[i]*inv2, ss2[i]*inv2, ds2[i]*inv2, is2[i]*inv2, ns2[i]*inv2, (os2[i]+cs2[i])*inv2)
 //					+", "+ms2[i]+", "+is2[i]+", "+ss2[i]+", "+ns2[i]+", "+cs2[i]+", "+os2[i]
 					);
@@ -1095,8 +1162,8 @@ public class ReadStats {
 			if(sum1==0){break;}
 			double inv1=1.0/(double)Tools.max(1, sum1);
 
-			tsw.print(String.format("%d", a));
-			tsw.print(String.format("\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f", 
+			tsw.print(String.format(Locale.ROOT, "%d", a));
+			tsw.print(String.format(Locale.ROOT, "\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f",
 					ms1[i]*inv1, ss1[i]*inv1, ds1[i]*inv1, is1[i]*inv1, ns1[i]*inv1, (os1[i]+cs1[i])*inv1)
 //					+", "+ms1[i]+", "+is1[i]+", "+ss1[i]+", "+ns1[i]+", "+cs1[i]+", "+os1[i]
 					);
@@ -1109,39 +1176,34 @@ public class ReadStats {
 	
 	public void writeInsertToFile(String fname){
 		StringBuilder sb=new StringBuilder();
-		sb.append("#Mean\t"+String.format("%.3f", Tools.averageHistogram(insertHist.array))+"\n");
-		sb.append("#Median\t"+Tools.percentile(insertHist.array, 0.5)+"\n");
-		sb.append("#Mode\t"+Tools.calcMode(insertHist.array)+"\n");
-		sb.append("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(insertHist.array))+"\n");
+		sb.append("#Mean\t"+String.format(Locale.ROOT, "%.3f", Tools.averageHistogram(insertHist.array))+"\n");
+		sb.append("#Median\t"+Tools.percentileHistogram(insertHist.array, 0.5)+"\n");
+		sb.append("#Mode\t"+Tools.calcModeHistogram(insertHist.array)+"\n");
+		sb.append("#STDev\t"+String.format(Locale.ROOT, "%.3f", Tools.standardDeviationHistogram(insertHist.array))+"\n");
 		double percent=pairedCount*100.0/(pairedCount+unpairedCount);
-		sb.append("#PercentOfPairs\t"+String.format("%.3f", percent)+"\n");
-//		sb.append("#PercentOfPairs\t"+String.format("%.3f", matedPercent)+"\n");
+		sb.append("#PercentOfPairs\t"+String.format(Locale.ROOT, "%.3f", percent)+"\n");
+//		sb.append("#PercentOfPairs\t"+String.format(Locale.ROOT, "%.3f", matedPercent)+"\n");
 		sb.append("#InsertSize\tCount\n");
 		writeHistogramToFile(fname, sb.toString(), insertHist, !skipZeroInsertCount);
 	}
 	
 	public void writeBaseContentToFile(String fname, boolean paired){
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-//		if(paired){
-			tsw.print("#Pos\tA\tC\tG\tT\tN\n");
-//		}
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, false);
+		bsw.start();
+		bsw.print("#Pos\tA\tC\tG\tT\tN\n");
 		
-		LongList[] lists;
-		
-		int max=writeBaseContentToFile2(tsw, baseHist[0], 0);
+		int max=writeBaseContentToFile2(bsw, baseHist[0], 0);
 		if(paired){
-			writeBaseContentToFile2(tsw, baseHist[1], max);
+			writeBaseContentToFile2(bsw, baseHist[1], max);
 		}
 		
-		tsw.poison();
-		tsw.waitForFinish();
-		errorState|=tsw.errorState;
+		bsw.poisonAndWait();
+		errorState|=bsw.errorState;
 	}
 	
-	private static int writeBaseContentToFile2(TextStreamWriter tsw, LongList[] lists, int offset){
+	private static int writeBaseContentToFile2(ByteStreamWriter bsw, LongList[] lists, int offset){
 		int max=0;
-		StringBuilder sb=new StringBuilder(100);
+		ByteBuilder sb=new ByteBuilder(100);
 		for(LongList ll : lists){max=Tools.max(max, ll.size);}
 		for(int i=0; i<max; i++){
 			long a=lists[1].get(i);
@@ -1152,30 +1214,34 @@ public class ReadStats {
 			double mult=1.0/(a+c+g+t+n);
 
 			sb.setLength(0);
-			sb.append(i+offset).append('\t');
-			sb.append(String.format("%.5f\t", a*mult));
-			sb.append(String.format("%.5f\t", c*mult));
-			sb.append(String.format("%.5f\t", g*mult));
-			sb.append(String.format("%.5f\t", t*mult));
-			sb.append(String.format("%.5f\n", n*mult));
+			sb.append(i+offset).tab();
+			sb.append(a*mult, 5).tab();
+			sb.append(c*mult, 5).tab();
+			sb.append(g*mult, 5).tab();
+			sb.append(t*mult, 5).tab();
+			sb.append(n*mult, 5);
+			sb.nl();
 			
-			tsw.print(sb.toString());
+			bsw.print(sb);
 		}
 		return max;
 	}
 	
 	public void writeIndelToFile(String fname){
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-		tsw.print("#Length\tDeletions\tInsertions\n");
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, false);
+		bsw.start();
+		bsw.print("#Length\tDeletions\tInsertions\n");
 		
 		int max=Tools.max(insHist.size, delHist.size);
 
+		ByteBuilder bb=new ByteBuilder(100);
 		for(int i=0; i<max; i++){
 			long x=delHist.get(i);
 			long y=insHist.get(i);
 			if(x>0 || y>0 || !skipZeroIndel){
-				tsw.print(i+"\t"+x+"\t"+y+"\n");
+				bb.clear();
+				bb.append(i).tab().append(x).tab().append(y).nl();
+				bsw.print(bb);
 			}
 		}
 		
@@ -1189,9 +1255,8 @@ public class ReadStats {
 //			}
 //		}
 		
-		tsw.poison();
-		tsw.waitForFinish();
-		errorState|=tsw.errorState;
+		bsw.poisonAndWait();
+		errorState|=bsw.errorState;
 	}
 	
 	public void writeErrorToFile(String fname){
@@ -1207,21 +1272,23 @@ public class ReadStats {
 	}
 	
 	public void writeHistogramToFile(String fname, String header, LongList hist, boolean printZeros){
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-		tsw.print(header);
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, false);
+		bsw.start();
+		bsw.print(header);
 		
 		int max=hist.size;
 
+		ByteBuilder bb=new ByteBuilder(40);
 		for(int i=0; i<max; i++){
 			long x=hist.get(i);
 			if(x>0 || printZeros){
-				tsw.print(i+"\t"+x+"\n");
+				bb.clear().append(i).tab().append(x).nl();
+				bsw.print(bb);
 			}
 		}
-		tsw.poison();
-		tsw.waitForFinish();
-		errorState|=tsw.errorState;
+		bsw.poison();
+		bsw.waitForFinish();
+		errorState|=bsw.errorState;
 	}
 	
 	public void writeGCToFile(String fname, boolean printZeros){
@@ -1237,19 +1304,38 @@ public class ReadStats {
 		final long max=Tools.max(hist);
 		final double countsPerX=Tools.max(1, ((max*1000.0)/40));
 		final double fractionMult=1.0/Tools.max(1, total);
-		long sum=0;
+		long sum=0;	
 		
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-		tsw.print("#Mean\t"+String.format("%.3f", Tools.averageHistogram(hist)*gcMult)+"\n");
-		tsw.print("#Median\t"+String.format("%.3f", Tools.percentile(hist, 0.5)*gcMult)+"\n");
-		tsw.print("#Mode\t"+String.format("%.3f", Tools.calcMode(hist)*gcMult)+"\n");
-		tsw.print("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(hist)*gcMult)+"\n");
+		GCMean=Tools.averageHistogram(hist)*gcMult;
+		GCMedian=Tools.percentileHistogram(hist, 0.5)*gcMult;
+		GCMode=Tools.calcModeHistogram(hist)*gcMult;
+		GCSTDev=Tools.standardDeviationHistogram(hist)*gcMult;
+		
+		ByteBuilder bb=new ByteBuilder(256);
+		bb.append("#Mean\t").append(GCMean, 3).nl();
+		bb.append("#Median\t").append(GCMedian, 3).nl();
+		bb.append("#Mode\t").append(GCMode, 3).nl();
+		bb.append("#STDev\t").append(GCSTDev, 3).nl();
 		if(GC_PLOT_X){
-			tsw.print("#GC\tCount\tCumulative\tPlot\n");
+			bb.append("#GC\tCount\tCumulative\tPlot\n");
 		}else{
-			tsw.print("#GC\tCount\n");
+			bb.append("#GC\tCount\n");
 		}
+		
+
+//		bsw.print("#Mean\t"+String.format(Locale.ROOT, "%.3f", GCMean)+"\n");
+//		bsw.print("#Median\t"+String.format(Locale.ROOT, "%.3f", GCMedian)+"\n");
+//		bsw.print("#Mode\t"+String.format(Locale.ROOT, "%.3f", GCMode)+"\n");
+//		bsw.print("#STDev\t"+String.format(Locale.ROOT, "%.3f", GCSTDev)+"\n");
+//		if(GC_PLOT_X){
+//			bsw.print("#GC\tCount\tCumulative\tPlot\n");
+//		}else{
+//			bsw.print("#GC\tCount\n");
+//		}
+		
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, false);
+		bsw.start();
+		bsw.print(bb);
 		
 		for(int i=0; i<bins; i++){
 			long x=hist[i];
@@ -1258,26 +1344,28 @@ public class ReadStats {
 				//This assumes GC_BINS==100
 //				tsw.print(i+"\t"+x+"\n");
 				if(GC_PLOT_X){
-					tsw.print(String.format("%.1f\t%d\t", i*gcMult, x));
-					
-					tsw.print(String.format("%.3f\t", sum*fractionMult));
+					bb.clear();
+					bb.append(i*gcMult, 1).tab().append(x).tab();
+					bb.append(sum*fractionMult, 3).tab();
 					
 					int len=(int)((x*1000)/countsPerX);
-					for(int j=0; j<len; j++){tsw.print("X");}
+					for(int j=0; j<len; j++){bb.append('X');}
 					if(len<1 && x>0){
-						if((x*1000f)/countsPerX>0.1f){tsw.print("x");}
-						else{tsw.print(".");}
-					} 
+						if((x*1000f)/countsPerX>0.1f){bb.append('x');}
+						else{bb.append('.');}
+					}
 					
-					tsw.print("\n");
+					bb.append('\n');
+					bsw.print(bb);
 				}else{
-					tsw.print(String.format("%.1f\t%d\n", i*gcMult, x));
+					bb.clear().append(i*gcMult, 1).tab().append(x).nl();
+					bsw.print(bb);
 				}
 			}
 		}
-		tsw.poison();
-		tsw.waitForFinish();
-		errorState|=tsw.errorState;
+		bsw.poison();
+		bsw.waitForFinish();
+		errorState|=bsw.errorState;
 	}
 	
 	public void writeIdentityToFile(String fname, boolean printZeros){
@@ -1296,30 +1384,25 @@ public class ReadStats {
 		tsw.start();
 		
 		
-		tsw.print("#Mean_reads\t"+String.format("%.3f", (Tools.averageHistogram(hist)*mult))+"\n");
-		tsw.print("#Mean_bases\t"+(String.format("%.3f", Tools.averageHistogram(histb)*mult))+"\n");
-		tsw.print("#Median_reads\t"+(int)Math.round(Tools.percentile(hist, 0.5)*mult)+"\n");
-		tsw.print("#Median_bases\t"+(int)Math.round(Tools.percentile(histb, 0.5)*mult)+"\n");
-		tsw.print("#Mode_reads\t"+(int)Math.round(Tools.calcMode(hist)*mult)+"\n");
-		tsw.print("#Mode_bases\t"+(int)Math.round(Tools.calcMode(histb)*mult)+"\n");
-		tsw.print("#STDev_reads\t"+String.format("%.3f", (Tools.standardDeviationHistogram(hist)*mult))+"\n");
-		tsw.print("#STDev_bases\t"+String.format("%.3f", (Tools.standardDeviationHistogram(histb)*mult))+"\n");
+		tsw.print("#Mean_reads\t"+String.format(Locale.ROOT, "%.3f", (Tools.averageHistogram(hist)*mult))+"\n");
+		tsw.print("#Mean_bases\t"+(String.format(Locale.ROOT, "%.3f", Tools.averageHistogram(histb)*mult))+"\n");
+		tsw.print("#Median_reads\t"+(int)Math.round(Tools.percentileHistogram(hist, 0.5)*mult)+"\n");
+		tsw.print("#Median_bases\t"+(int)Math.round(Tools.percentileHistogram(histb, 0.5)*mult)+"\n");
+		tsw.print("#Mode_reads\t"+(int)Math.round(Tools.calcModeHistogram(hist)*mult)+"\n");
+		tsw.print("#Mode_bases\t"+(int)Math.round(Tools.calcModeHistogram(histb)*mult)+"\n");
+		tsw.print("#STDev_reads\t"+String.format(Locale.ROOT, "%.3f", (Tools.standardDeviationHistogram(hist)*mult))+"\n");
+		tsw.print("#STDev_bases\t"+String.format(Locale.ROOT, "%.3f", (Tools.standardDeviationHistogram(histb)*mult))+"\n");
 		tsw.print("#Identity\tReads\tBases\n");
 		
 		for(int i=0; i<max; i++){
 			long x=hist[i], x2=histb[i];
 			if(x>0 || printZeros){
-				tsw.print(String.format("%.1f", i*mult)+"\t"+x+"\t"+x2+"\n");
+				tsw.print(String.format(Locale.ROOT, "%.1f", i*mult)+"\t"+x+"\t"+x2+"\n");
 			}
 		}
 		tsw.poison();
 		tsw.waitForFinish();
 		errorState|=tsw.errorState;
-	}
-	
-	public static boolean collectingStats(){
-		return COLLECT_QUALITY_STATS || COLLECT_QUALITY_ACCURACY || COLLECT_MATCH_STATS || COLLECT_INSERT_STATS || COLLECT_BASE_STATS
-				|| COLLECT_INDEL_STATS || COLLECT_GC_STATS || COLLECT_ERROR_STATS || COLLECT_LENGTH_STATS || COLLECT_IDENTITY_STATS || COLLECT_TIME_STATS;
 	}
 	
 	//Tracks to see if read2s have been encountered, for displaying stats.
@@ -1376,9 +1459,9 @@ public class ReadStats {
 	public final LongList timeHist;
 	
 	public static boolean REQUIRE_PROPER_PAIR=true;
-	public static final int MAXLEN=6000;
-	public static final int MAXINSERTLEN=40000;
-	public static final int MAXLENGTHLEN=80000;
+	public static int MAXLEN=6000;
+	public static int MAXINSERTLEN=40000;
+	public static int MAXLENGTHLEN=80000;
 	public static final int MAXTIMELEN=80000;
 	public static final int MAXINSLEN=1000;
 	public static final int MAXDELLEN=1000;
@@ -1389,6 +1472,11 @@ public class ReadStats {
 	public static boolean ID_BINS_AUTO=false;
 	public static boolean GC_BINS_AUTO=false;
 	public static boolean GC_PLOT_X=false;
+
+	public static double GCMean;
+	public static double GCMedian;
+	public static double GCMode;
+	public static double GCSTDev;
 	
 	public boolean errorState=false;
 	
@@ -1408,6 +1496,11 @@ public class ReadStats {
 	public static boolean COLLECT_LENGTH_STATS=false;
 	public static boolean COLLECT_IDENTITY_STATS=false;
 	public static boolean COLLECT_TIME_STATS=false;
+	
+	public static boolean collectingStats(){
+		return COLLECT_QUALITY_STATS || COLLECT_QUALITY_ACCURACY || COLLECT_MATCH_STATS || COLLECT_INSERT_STATS || COLLECT_BASE_STATS
+				|| COLLECT_INDEL_STATS || COLLECT_GC_STATS || COLLECT_ERROR_STATS || COLLECT_LENGTH_STATS || COLLECT_IDENTITY_STATS || COLLECT_TIME_STATS;
+	}
 	
 	public static boolean usePairGC=true;
 	

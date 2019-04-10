@@ -1,22 +1,22 @@
 package tax;
 
 import java.io.PrintStream;
-import java.util.Arrays;
 
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.ByteStreamWriter;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import stream.ByteBuilder;
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastaReadInputStream;
+import structures.ByteBuilder;
 import structures.IntList;
 
 /**
@@ -28,19 +28,20 @@ public class FindAncestor {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		FindAncestor fa=new FindAncestor(args);
-		fa.process(t);
+		FindAncestor x=new FindAncestor(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public FindAncestor(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -51,17 +52,13 @@ public class FindAncestor {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
 			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
-				tableFile=b;
-				if("auto".equalsIgnoreCase(b)){tableFile=TaxTree.defaultTableFile();}
+				giTableFile=b;
 			}else if(a.equals("tree") || a.equals("taxtree")){
-				treeFile=b;
-				if("auto".equalsIgnoreCase(b)){treeFile=TaxTree.defaultTreeFile();}
+				taxTreeFile=b;
 			}else if(a.equals("invalid")){
 				outInvalid=b;
 			}else if(a.equals("lines")){
@@ -81,6 +78,8 @@ public class FindAncestor {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		if("auto".equalsIgnoreCase(taxTreeFile)){taxTreeFile=TaxTree.defaultTreeFile();}
+		if("auto".equalsIgnoreCase(giTableFile)){giTableFile=TaxTree.defaultTableFile();}
 		
 		{//Process parser fields
 			overwrite=ReadStats.overwrite=parser.overwrite;
@@ -93,10 +92,7 @@ public class FindAncestor {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		if(!ByteFile.FORCE_MODE_BF2){
 			ByteFile.FORCE_MODE_BF2=false;
@@ -114,17 +110,12 @@ public class FindAncestor {
 		ffoutInvalid=FileFormat.testOutput(outInvalid, FileFormat.TXT, null, true, overwrite, append, false);
 		ffin1=FileFormat.testInput(in1, FileFormat.TXT, null, true, true);
 		
-		if(tableFile!=null){
+		if(giTableFile!=null){
 			outstream.println("Loading gi table.");
-			GiToNcbi.initialize(tableFile);
+			GiToNcbi.initialize(giTableFile);
 		}
-		if(treeFile!=null){
-			outstream.println("Loading tree.");
-			tree=ReadWrite.read(TaxTree.class, treeFile, true);
-			if(tree.nameMap==null){
-				outstream.println("Hashing names.");
-				tree.hashNames();
-			}
+		if(taxTreeFile!=null){
+			tree=TaxTree.loadTaxTree(taxTreeFile, outstream, true, true);
 			assert(tree.nameMap!=null);
 		}else{
 			tree=null;
@@ -135,7 +126,7 @@ public class FindAncestor {
 	
 	void process(Timer t){
 		
-		ByteFile bf=ByteFile.makeByteFile(ffin1, false);
+		ByteFile bf=ByteFile.makeByteFile(ffin1);
 		ByteStreamWriter bsw=new ByteStreamWriter(ffout1);
 		bsw.start();
 		
@@ -180,21 +171,21 @@ public class FindAncestor {
 					for(int i=0; i<line.length && line[i]!='\t'; i++){
 						bb.append(line[i]);
 					}
-					bb.append('\t');
+					bb.tab();
 					bb.append(ancestor);
-					bb.append('\t');
+					bb.tab();
 					bb.append(majority);
-					bb.append('\t');
+					bb.tab();
 					
 					fillTraversal(majority, traversal, true);
 					writeTraversal(traversal, bb);
-					bb.append('\n');
+					bb.nl();
 					
 					for(int i=0; i<ncbiList.size; i++){
 						final int id=ncbiList.get(i);
 						fillTraversal(id, traversal, true);
 						writeTraversal(traversal, bb);
-						bb.append('\n');
+						bb.nl();
 					}
 					
 					bsw.print(bb.toBytes());
@@ -213,19 +204,7 @@ public class FindAncestor {
 		if(bswInvalid!=null){errorState|=bswInvalid.poisonAndWait();}
 		
 		t.stop();
-		
-		double rpnano=linesProcessed/(double)(t.elapsed);
-		double bpnano=bytesProcessed/(double)(t.elapsed);
-
-		String rpstring=(linesProcessed<100000 ? ""+linesProcessed : linesProcessed<100000000 ? (linesProcessed/1000)+"k" : (linesProcessed/1000000)+"m");
-		String bpstring=(bytesProcessed<100000 ? ""+bytesProcessed : bytesProcessed<100000000 ? (bytesProcessed/1000)+"k" : (bytesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Lines Processed:    "+rpstring+" \t"+String.format("%.2fk lines/sec", rpnano*1000000));
-		outstream.println("Bytes Processed:    "+bpstring+" \t"+String.format("%.2fm bytes/sec", bpnano*1000));
+		outstream.println(Tools.timeLinesBytesProcessed(t, linesProcessed, bytesProcessed, 8));
 		
 		outstream.println();
 		outstream.println("Valid Lines:       \t"+linesValid);
@@ -254,7 +233,7 @@ public class FindAncestor {
 				TaxNode tn=tree.getNode(id);
 				//			bb.append(tn.level+"_"+tn.name);
 				bb.append(/*tn.level+"_"+*/tn.name);
-				if(i>0){bb.append('\t');}
+				if(i>0){bb.tab();}
 			}
 		}
 	}
@@ -284,7 +263,7 @@ public class FindAncestor {
 		return list.size;
 	}
 	
-	private int getNcbiNumbers(final IntList giList, final IntList ncbiList){
+	private static int getNcbiNumbers(final IntList giList, final IntList ncbiList){
 		final int size=giList.size;
 		for(int i=0; i<size; i++){
 			final int gi=giList.get(i);
@@ -292,10 +271,6 @@ public class FindAncestor {
 //			System.err.println(gi+" -> "+ncbi);
 			if(ncbi>=0){ncbiList.add(ncbi);}
 		}
-//		for(int i=0; i<20; i++){
-//			System.err.println(GiToNcbi.getID(i*i*i));
-//		}
-//		assert(false);
 		return ncbiList.size;
 	}
 	
@@ -343,7 +318,7 @@ public class FindAncestor {
 			final int id=list.get(i);
 			TaxNode tn=tree.getNode(id);
 			while(tn!=null && tn!=lifeNode){
-				if(tn.countSum>=majority && tn.level<best.level){
+				if(tn.countSum>=majority && tn.levelExtended<best.levelExtended){
 					best=tn;
 					break;
 				}
@@ -366,10 +341,6 @@ public class FindAncestor {
 	
 	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-	}
-	
 	
 	/*--------------------------------------------------------------*/
 	
@@ -377,8 +348,8 @@ public class FindAncestor {
 	private String out1=null;
 	private String outInvalid=null;
 
-	private String tableFile=null;
-	private String treeFile=null;
+	private String giTableFile=null;
+	private String taxTreeFile=null;
 	
 	private final TaxTree tree;
 	
@@ -414,7 +385,5 @@ public class FindAncestor {
 	public boolean errorState=false;
 	private boolean overwrite=false;
 	private boolean append=false;
-	
-//	private static final byte[] ncbi=">ncbi|".getBytes();
 	
 }

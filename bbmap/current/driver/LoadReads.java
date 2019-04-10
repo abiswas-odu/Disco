@@ -3,21 +3,22 @@ package driver;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
+import shared.ReadStats;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ReadWrite;
-import shared.ReadStats;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
-import fileIO.FileFormat;
 
 /**
  * This class loads data to see how much memory is used.
@@ -38,8 +39,11 @@ public class LoadReads {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		LoadReads as=new LoadReads(args);
-		as.process(t);
+		LoadReads x=new LoadReads(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -48,28 +52,21 @@ public class LoadReads {
 	 */
 	public LoadReads(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether interleaved was explicitly set.
-		
-		//Set some shared static variables regarding PIGZ
-		Shared.READ_BUFFER_LENGTH=Tools.min(100, Shared.READ_BUFFER_LENGTH);
+		//Set shared static variables
+		Shared.capBufferLen(100);
 		Shared.capBuffers(1);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		
 		//Create a parser object
 		Parser parser=new Parser();
+		boolean setInterleaved=false; //Whether interleaved was explicitly set.
 		
 		//Parse each argument
 		for(int i=0; i<args.length; i++){
@@ -79,9 +76,6 @@ public class LoadReads {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(parser.parse(arg, a, b)){//Parse standard flags in the parser
 				//do nothing
@@ -89,6 +83,8 @@ public class LoadReads {
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("earlyexit")){
 				earlyExit=Tools.parseBoolean(b);
+			}else if(a.equals("lowcomplexity")){
+				lowComplexity=Tools.parseBoolean(b);
 			}else if(a.equals("gc")){
 				gc=Tools.parseBoolean(b);
 			}else if(a.equals("overhead")){
@@ -134,10 +130,7 @@ public class LoadReads {
 		assert(FastaReadInputStream.settingsOK());
 		
 		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		//Adjust the number of threads for input file reading
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
@@ -155,7 +148,7 @@ public class LoadReads {
 		
 		//Ensure input files can be read
 		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
+			throw new RuntimeException("\nCan't read some input files.\n");  
 		}
 		
 		//Ensure that no file was specified multiple times
@@ -204,18 +197,19 @@ public class LoadReads {
 		
 		calcMem();
 		
-		double[] estimates=Tools.estimateFileMemory(in1, 200, overhead, earlyExit);
+		double[] estimates=Tools.estimateFileMemory(in1, 200, overhead, earlyExit, lowComplexity);
 		long memEst0=(long)estimates[0];
 		long diskEst0=(long)estimates[1];
 		double memRatio0=estimates[2];
 		double diskRatio0=estimates[3];
+		double readEst0=estimates[4];
 		
 		long size=new File(in1).length();
 		long usedMem=maxMem-minMem;
 		double memRatio1=memBytesProcessed/(double)size;
 		double memRatio=usedMem/(double)size;
 		double diskRatio=diskBytesProcessed/(double)size;
-		
+		double readRatio=readsProcessed/(double)size;
 		
 		long overhead=usedMem-diskBytesProcessed;
 		
@@ -252,20 +246,24 @@ public class LoadReads {
 		outstream.println("Disk Estimate 0:    \t"+(diskEst0/1000000+" m"));
 		outstream.println("Disk Bytes:         \t"+((diskBytesProcessed)/1000000)+" m");
 		outstream.println();
-		outstream.println("Memory Ratio Est 0: \t"+(String.format("%.2f", memRatio0)));
-		outstream.println("Memory Ratio Est 1: \t"+(String.format("%.2f", memRatio1)));
-		outstream.println("Memory Ratio:       \t"+(String.format("%.2f", memRatio)));
-		outstream.println();		
-		outstream.println("Disk Ratio Est 0:   \t"+(String.format("%.2f", diskRatio0)));
-		outstream.println("Disk Ratio:         \t"+(String.format("%.2f", diskRatio)));
+		outstream.println("Memory Ratio Est 0: \t"+(String.format(Locale.ROOT, "%.2f", memRatio0)));
+		outstream.println("Memory Ratio Est 1: \t"+(String.format(Locale.ROOT, "%.2f", memRatio1)));
+		outstream.println("Memory Ratio:       \t"+(String.format(Locale.ROOT, "%.2f", memRatio)));
 		outstream.println();
-//		outstream.println("Average Memory 0:   \t"+(String.format("%.2f", mem0PerRead)));
-		outstream.println("Average Memory 1:   \t"+(String.format("%.2f", mem1PerRead)));
-		outstream.println("Average Memory:     \t"+(String.format("%.2f", memPerRead)));
-		outstream.println("Average Bases:      \t"+(String.format("%.2f", basesPerRead)));
-		outstream.println("Average Q-Scores:   \t"+(String.format("%.2f", qualsPerRead)));
-		outstream.println("Average Header Len: \t"+(String.format("%.2f", headerPerRead)));
-		outstream.println("Average Overhead:   \t"+(String.format("%.2f", overheadPerRead)));
+		outstream.println("Disk Ratio Est 0:   \t"+(String.format(Locale.ROOT, "%.2f", diskRatio0)));
+		outstream.println("Disk Ratio:         \t"+(String.format(Locale.ROOT, "%.2f", diskRatio)));
+		outstream.println();
+		outstream.println("Read Estimate 0:    \t"+(String.format(Locale.ROOT, "%d", (long)Math.ceil(readEst0))));
+		outstream.println("Read Ratio 1:       \t"+(String.format(Locale.ROOT, "%.2f", readRatio)));
+		outstream.println("Reads:              \t"+(String.format(Locale.ROOT, "%d", readsProcessed)));
+		outstream.println();
+//		outstream.println("Average Memory 0:   \t"+(String.format(Locale.ROOT, "%.2f", mem0PerRead)));
+		outstream.println("Average Memory 1:   \t"+(String.format(Locale.ROOT, "%.2f", mem1PerRead)));
+		outstream.println("Average Memory:     \t"+(String.format(Locale.ROOT, "%.2f", memPerRead)));
+		outstream.println("Average Bases:      \t"+(String.format(Locale.ROOT, "%.2f", basesPerRead)));
+		outstream.println("Average Q-Scores:   \t"+(String.format(Locale.ROOT, "%.2f", qualsPerRead)));
+		outstream.println("Average Header Len: \t"+(String.format(Locale.ROOT, "%.2f", headerPerRead)));
+		outstream.println("Average Overhead:   \t"+(String.format(Locale.ROOT, "%.2f", overheadPerRead)));
 		outstream.println();
 		
 		
@@ -274,28 +272,20 @@ public class LoadReads {
 			t.stop();
 			
 			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
 			double dpnano=diskBytesProcessed/(double)(t.elapsed);
 			double mpnano=memBytesProcessed/(double)(t.elapsed);
 			
 			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
 			String dpstring=(diskBytesProcessed<100000 ? ""+diskBytesProcessed : diskBytesProcessed<100000000 ? (diskBytesProcessed/1000)+"k" : (diskBytesProcessed/1000000)+"m");
 			String mpstring=(memBytesProcessed<100000 ? ""+memBytesProcessed : memBytesProcessed<100000000 ? (memBytesProcessed/1000)+"k" : (memBytesProcessed/1000000)+"m");
 			
 			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
 			while(dpstring.length()<8){dpstring=" "+dpstring;}
 			while(mpstring.length()<8){mpstring=" "+mpstring;}
 			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:      "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:      "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-			outstream.println("Disk Bytes Processed: "+dpstring+" \t"+String.format("%.2fm bytes/sec", dpnano*1000));
-			outstream.println("Mem Bytes Processed:  "+mpstring+" \t"+String.format("%.2fm bytes/sec", mpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
+			outstream.println("Disk Bytes Processed: "+dpstring+" \t"+String.format(Locale.ROOT, "%.2fm bytes/sec", dpnano*1000));
+			outstream.println("Mem Bytes Processed:  "+mpstring+" \t"+String.format(Locale.ROOT, "%.2fm bytes/sec", mpnano*1000));
 		}
 		
 		//Throw an exception of there was an error in a thread
@@ -322,7 +312,7 @@ public class LoadReads {
 			}
 			
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				storage.add(reads);
 				calcMem();
@@ -337,7 +327,7 @@ public class LoadReads {
 					final int initialLength2=(r1.mateLength());
 					
 					//Increment counters
-					readsProcessed+=1+r1.mateCount();
+					readsProcessed+=r1.pairCount();
 					basesProcessed+=initialLength1+initialLength2;
 					
 					qualitiesProcessed+=(r1.qlength()+(r2==null ? 0 : r2.qlength()));
@@ -351,7 +341,7 @@ public class LoadReads {
 				}
 				
 				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				
 				//Fetch a new list
@@ -383,11 +373,6 @@ public class LoadReads {
 			initialMem=used;
 		}
 //		System.err.println(minMem+", "+maxMem+", "+initialMem+", "+finalMem);
-	}
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -437,6 +422,7 @@ public class LoadReads {
 	private int overhead=0;
 	private boolean earlyExit=false;
 	private boolean gc=false;
+	private boolean lowComplexity=false;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Final Fields         ----------------*/

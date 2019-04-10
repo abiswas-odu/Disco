@@ -7,6 +7,7 @@ public class StringPair {
 		b=b_;
 	}
 	
+	@Override
 	public String toString(){return "("+a+", "+b+")";}
 	
 	public String a;

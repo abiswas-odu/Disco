@@ -6,7 +6,7 @@ public class Grep {
 	
 	public static void main(String[] args){
 		
-		TextFile tf=new TextFile(args[0], true, true);
+		TextFile tf=new TextFile(args[0], true);
 		
 		String s=null;
 		

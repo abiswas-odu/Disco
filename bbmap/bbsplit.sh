@@ -1,10 +1,10 @@
 #!/bin/bash
 
-function usage(){
+usage(){
 echo "
-BBSplit / BBMap v36.x
+BBSplit
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified October 9, 2015
+Last modified June 11, 2018
 
 Description:  Maps reads to multiple references simultaneously.
 Outputs reads to a file for the reference they best match, with multiple options for dealing with ambiguous mappings.
@@ -23,46 +23,47 @@ For example, basename=o%_#.fq will produce ox_1.fq, ox_2.fq, oy_1.fq, and oy_2.f
 
      
 Indexing Parameters (required when building the index):
-ref=<file,file>      A list of references, or directories containing fasta files.
-ref_<name>=<ref.fa>  Alternate, longer way to specify references. e.g., ref_ecoli=ecoli.fa
-                     These can also be comma-delimited lists of files; e.g., ref_a=a1.fa,a2.fa,a3.fa
-build=<1>            If multiple references are indexed in the same directory, each needs a unique build ID.
-path=<.>             Specify the location to write the index, if you don't want it in the current working directory.
+ref=<file,file>     A list of references, or directories containing fasta files.
+ref_<name>=<ref.fa> Alternate, longer way to specify references. e.g., ref_ecoli=ecoli.fa
+                    These can also be comma-delimited lists of files; e.g., ref_a=a1.fa,a2.fa,a3.fa
+build=<1>           If multiple references are indexed in the same directory, each needs a unique build ID.
+path=<.>            Specify the location to write the index, if you don't want it in the current working directory.
 
 Input Parameters:
-build=<1>            Designate index to use.  Corresponds to the number specified when building the index.
-in=<reads.fq>        Primary reads input; required parameter.
-in2=<reads2.fq>      For paired reads in two files.
-qin=<auto>           Set to 33 or 64 to specify input quality value ASCII offset.
-interleaved=<auto>   True forces paired/interleaved input; false forces single-ended mapping.
-                     If not specified, interleaved status will be autodetected from read names.
+build=<1>           Designate index to use.  Corresponds to the number specified when building the index.
+in=<reads.fq>       Primary reads input; required parameter.
+in2=<reads2.fq>     For paired reads in two files.
+qin=<auto>          Set to 33 or 64 to specify input quality value ASCII offset.
+interleaved=<auto>  True forces paired/interleaved input; false forces single-ended mapping.
+                    If not specified, interleaved status will be autodetected from read names.
 
 Mapping Parameters:
-maxindel=<20>        Don't look for indels longer than this.  Lower is faster.  Set to >=100k for RNA-seq.
-minratio=<0.65>      Fraction of max alignment score required to keep a site.  Higher is faster.
-minhits=<1>          Minimum number of seed hits required for candidate sites.  Higher is faster.
-ambiguous=<best>     Set behavior on ambiguously-mapped reads (with multiple top-scoring mapping locations).
-                     best   (use the first best site)
-                     toss   (consider unmapped)
-                     random   (select one top-scoring site randomly)
-                     all   (retain all top-scoring sites.  Does not work yet with SAM output)
-ambiguous2=<best>    Set behavior only for reads that map ambiguously to multiple different references.
-                     Normal 'ambiguous=' controls behavior on all ambiguous reads;
-                     Ambiguous2 excludes reads that map ambiguously within a single reference.
-                     best   (use the first best site)
-                     toss   (consider unmapped)
-                     all   (write a copy to the output for each reference to which it maps)
-                     split   (write a copy to the AMBIGUOUS_ output for each reference to which it maps)
-trim=<true>          Quality-trim ends to Q5 before mapping.  Options are 'l' (left), 'r' (right), and 'lr' (both).
-untrim=<true>        Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings.
+maxindel=<20>       Don't look for indels longer than this.  Lower is faster.  Set to >=100k for RNA-seq.
+minratio=<0.56>     Fraction of max alignment score required to keep a site.  Higher is faster.
+minhits=<1>         Minimum number of seed hits required for candidate sites.  Higher is faster.
+ambiguous=<best>    Set behavior on ambiguously-mapped reads (with multiple top-scoring mapping locations).
+                       best   (use the first best site)
+                       toss   (consider unmapped)
+                       random   (select one top-scoring site randomly)
+                       all   (retain all top-scoring sites.  Does not work yet with SAM output)
+ambiguous2=<best>   Set behavior only for reads that map ambiguously to multiple different references.
+                    Normal 'ambiguous=' controls behavior on all ambiguous reads;
+                    Ambiguous2 excludes reads that map ambiguously within a single reference.
+                       best   (use the first best site)
+                       toss   (consider unmapped)
+                       all   (write a copy to the output for each reference to which it maps)
+                       split   (write a copy to the AMBIGUOUS_ output for each reference to which it maps)
+qtrim=<true>        Quality-trim ends to Q5 before mapping.  Options are 'l' (left), 'r' (right), and 'lr' (both).
+untrim=<true>       Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings.
 
 Output Parameters:
-out_<name>=<file>    Output reads that map to the reference <name> to <file>.
+out_<name>=<file>   Output reads that map to the reference <name> to <file>.
 basename=prefix%suffix     Equivalent to multiple out_%=prefix%suffix expressions, in which each % is replaced by the name of a reference file.
-bs=<file>            Write a shell script to 'file' that will turn the sam output into a sorted, indexed bam file.
-scafstats=<file>     Write statistics on how many reads mapped to which scaffold to this file.
-refstats=<file>      Write statistics on how many reads mapped to which reference to this file.
-nzo=t                Only print lines with nonzero coverage.
+bs=<file>           Write a shell script to 'file' that will turn the sam output into a sorted, indexed bam file.
+scafstats=<file>    Write statistics on how many reads mapped to which scaffold to this file.
+refstats=<file>     Write statistics on how many reads were assigned to which reference to this file.
+                    Unmapped reads whose mate mapped to a reference are considered assigned and will be counted.
+nzo=t               Only print lines with nonzero coverage.
 
 ***** Notes *****
 Almost all BBMap parameters can be used; run bbmap.sh for more details.
@@ -71,14 +72,19 @@ BBSplit is recommended for fastq and fasta output, not for sam/bam output.
 When the reference sequences are shorter than read length, use Seal instead of BBSplit.
 
 Java Parameters:
--Xmx                 This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                     -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+                    The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 This list is not complete.  For more information, please consult $DIRdocs/readme.txt
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -96,6 +102,7 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -116,11 +123,29 @@ calcXmx () {
 calcXmx "$@"
 
 function bbsplit() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBSplitter ow=t fastareadlen=500 minhits=1 minratio=0.56 maxindel=20 qtrim=rl untrim=t trimq=6 $@"
 	echo $CMD >&2

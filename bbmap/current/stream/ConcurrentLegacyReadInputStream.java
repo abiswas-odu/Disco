@@ -18,6 +18,7 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 //		if(maxReads<Long.MAX_VALUE){System.err.println("maxReads="+maxReads);}
 	}
 	
+	@Override
 	public synchronized ListNum<Read> nextList() {
 		ArrayList<Read> list=null;
 		while(list==null){
@@ -34,6 +35,7 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 		return ln;
 	}
 	
+	@Override
 	public void returnList(long listNumber, boolean poison){
 		if(poison){
 			if(verbose){System.err.println("cris_:    A: Adding empty list to full.");}
@@ -212,7 +214,7 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 		shutdown=false;
 		producer.restart();
 		depot=new ConcurrentDepot<Read>(BUF_LEN, NUM_BUFFS);
-		generated=0;	
+		generated=0;
 		basesIn=0;
 		readsIn=0;
 	}
@@ -248,7 +250,9 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 		}
 	}
 	
+	@Override
 	public long basesIn(){return basesIn;}
+	@Override
 	public long readsIn(){return readsIn;}
 	
 	@Override
@@ -259,6 +263,7 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 	private float samplerate=1f;
 	private java.util.Random randy=null;
 	
+	@Override
 	public Object[] producers(){return new Object[] {producer};}
 
 	private Thread[] threads;

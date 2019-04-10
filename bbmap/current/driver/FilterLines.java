@@ -2,14 +2,15 @@ package driver;
 
 import java.io.File;
 import java.io.PrintStream;
-import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -24,26 +25,24 @@ public class FilterLines {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		FilterLines mb=new FilterLines(args);
-		mb.process(t);
+		FilterLines x=new FilterLines(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public FilterLines(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -51,8 +50,6 @@ public class FilterLines {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -80,6 +77,7 @@ public class FilterLines {
 			}else if(a.equals("prefix") || a.equals("prefixmode")){
 				prefixMode=Tools.parseBoolean(b);
 			}else if(a.equals("replace")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				assert(split2.length==2);
 				replace1=split2[0];
@@ -125,10 +123,7 @@ public class FilterLines {
 			out1=parser.out1;
 		}
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		
@@ -193,7 +188,7 @@ public class FilterLines {
 				//					assert(false) : names.contains(name)+", "+name+", "+prefix+", "+exclude;
 				
 				if(keepThisLine){
-					tsw.println(line0);
+					if(tsw!=null){tsw.println(line0);}
 					linesOut++;
 					bytesOut+=line0.length();
 				}
@@ -201,14 +196,14 @@ public class FilterLines {
 		}
 
 		errorState|=tf.close();
-		errorState|=tsw.poisonAndWait();
+		if(tsw!=null){errorState|=tsw.poisonAndWait();}
 		
 		t.stop();
 		
 		double rpnano=linesProcessed/(double)(t.elapsed);
 		
 		outstream.println("\nTime:               "+t);
-		outstream.println("Lines Processed:    "+linesProcessed+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
+		outstream.println("Lines Processed:    "+linesProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
 		outstream.println("Lines Out:          "+linesOut);
 		
 		if(errorState){
@@ -217,10 +212,6 @@ public class FilterLines {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-	}
 	
 	
 	/*--------------------------------------------------------------*/

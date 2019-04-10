@@ -1,21 +1,24 @@
 package kmer;
 
+import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 
-import stream.Read;
-import structures.IntList;
-import ukmer.Kmer;
-import jgi.CallPeaks;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 import bloom.KCountArray;
 import bloom.KmerCount7MTA;
 import bloom.KmerCountAbstract;
 import fileIO.ByteStreamWriter;
+import jgi.CallPeaks;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
+import stream.Read;
+import structures.IntList;
+import ukmer.Kmer;
 
 
 /**
@@ -25,13 +28,6 @@ import fileIO.ByteStreamWriter;
  *
  */
 public abstract class AbstractKmerTableSet {
-	
-	/**
-	 * Display usage information.
-	 */
-	public static final void printOptions(){
-		outstream.println("Syntax:\nTODO");
-	}
 	
 	public static final boolean isValidArgument(String a){
 			if(a.equals("in") || a.equals("in1")){
@@ -61,6 +57,7 @@ public abstract class AbstractKmerTableSet {
 			}else if(a.equals("onepass")){
 			}else if(a.equals("passes")){
 			}else if(a.equals("rcomp")){
+			}else if(a.equals("filtermemory") || a.equals("prefiltermemory") || a.equals("filtermem")){
 			}else{
 				return false;
 			}
@@ -117,7 +114,7 @@ public abstract class AbstractKmerTableSet {
 		}
 //		assert(false) : prefilterArray.cellBits+", "+prefilterArray.maxValue+", "+filterMax+", "+filterMax2;
 		
-		System.err.println("Estimated kmer capacity: \t"+estimatedKmerCapacity());
+		if(DISPLAY_STATS){System.err.println("Estimated kmer capacity: \t"+estimatedKmerCapacity());}
 		
 		assert(!allocated);
 		allocateTables();
@@ -181,19 +178,19 @@ public abstract class AbstractKmerTableSet {
 
 		if(onePass){
 			assert(filter==null || filter.length==1) : "Multiple filtering passes are not allowed in onepass mode.\n"+filter.length+","+prepasses+", "+onePass+", "+prefilter;
-			filter[0]=KmerCount7MTA.makeKca(null, null, null, kbig(), cbits, 0, precells, prehashes, minq, true, ecco(), maxReads, 1, 1, 1, 1, null, 0);
+			filter[0]=KmerCount7MTA.makeKca(null, null, null, kbig(), cbits, 0, precells, prehashes, minq, true, ecco(), false,
+					maxReads, 1, 1, 1, 1, null, 0, Shared.AMINO_IN);
 		}else{
 			if(ht==null){ht=new Timer();}
 			ht.start();
-
-			ArrayList<String> extra=null;
-			filter[0]=KmerCount7MTA.makeKca_als(in1, in2, extra, kbig(), cbits, 0, precells, prehashes, minq, true, ecco(), maxReads, 1, 1, 1, 1, filter[0], filterMax);
+			filter[0]=KmerCount7MTA.makeKca_als(in1, in2, extra, kbig(), cbits, 0, precells, prehashes, minq, true, ecco(), false,
+					maxReads, 1, 1, 1, 1, filter[0], filterMax, Shared.AMINO_IN);
 			assert(filterMax<filter[0].maxValue || (currentPass>0 && currentPass==prepasses-1));
 			outstream.println("Made prefilter:   \t"+filter[0].toShortString(prehashes));
 			double uf=filter[0].usedFraction();
 //			System.err.println("cellsUsed: "+filter[0].cellsUsed(1)+" //123"); //123
 			if(uf>0.5){
-				outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" : 
+				outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" :
 					uf>0.7 ? "rather" : uf>0.6 ? "fairly" : "somewhat")+" full.  Ideal load is under 50% used." +
 						"\nFor better accuracy, run on a node with more memory; quality-trim or error-correct reads; or increase prefiltersize.");
 			}
@@ -248,18 +245,8 @@ public abstract class AbstractKmerTableSet {
 		outstream.println("Load Time:                  \t"+t);
 		
 		if(showSpeed){
-			double rpnano=readsIn/(double)(t.elapsed);
-			double bpnano=basesIn/(double)(t.elapsed);
-
-			//Format with k or m suffixes
-			String rpstring=(readsIn<100000 ? ""+readsIn : readsIn<100000000 ? (readsIn/1000)+"k" : (readsIn/1000000)+"m");
-			String bpstring=(basesIn<100000 ? ""+basesIn : basesIn<100000000 ? (basesIn/1000)+"k" : (basesIn/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("\nReads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println();
+			outstream.println(Tools.readsBasesProcessed(t.elapsed, readsIn, basesIn, 8));
 		}
 	}
 	
@@ -278,7 +265,17 @@ public abstract class AbstractKmerTableSet {
 			String a=in1.get(i);
 			String b=in2.size()>i ? in2.get(i) : null;
 			int idx=a.indexOf('#');
-			if(idx>=0 && b==null){
+			if(idx>=0 && b==null && !new File(a).exists()){
+				b=a.replaceFirst("#", "2");
+				a=a.replaceFirst("#", "1");
+			}
+			kmersLoaded+=loadKmers(a, b);
+		}
+		for(int i=0; i<extra.size(); i++){
+			String a=extra.get(i);
+			String b=null;
+			int idx=a.indexOf('#');
+			if(idx>=0 && b==null && !new File(a).exists()){
 				b=a.replaceFirst("#", "2");
 				a=a.replaceFirst("#", "1");
 			}
@@ -328,7 +325,11 @@ public abstract class AbstractKmerTableSet {
 	
 	public abstract int ways();
 	
-	public abstract int fillCounts(byte[] bases, IntList counts, Kmer kmer);
+	public final int fillCounts(byte[] bases, IntList counts, Kmer kmer){
+		return fillSpecificCounts(bases, counts, null, kmer);
+	}
+	
+	public abstract int fillSpecificCounts(byte[] bases, IntList counts, BitSet positions, Kmer kmer);
 	
 	public abstract int regenerateCounts(byte[] bases, IntList counts, Kmer kmer, BitSet changed);
 	
@@ -336,10 +337,11 @@ public abstract class AbstractKmerTableSet {
 	/*----------------       Printing Methods       ----------------*/
 	/*--------------------------------------------------------------*/
 
-	public abstract boolean dumpKmersAsBytes(String fname, int minToDump, boolean printTime);
-	public abstract boolean dumpKmersAsBytes_MT(String fname, int minToDump, boolean printTime);
+	public abstract boolean dumpKmersAsBytes(String fname, int mincount, int maxcount, boolean printTime, AtomicLong remaining);
+	public abstract boolean dumpKmersAsBytes_MT(String fname, int mincount, int maxcount, boolean printTime, AtomicLong remaining);
 	
-	public final long[] makeKhist(String fname, int cols, int max, boolean printHeader, boolean printZeros, boolean printTime, boolean smooth, boolean calcGC, int smoothRadius){
+	public final long[][] makeKhist(String fname, int cols, int max, boolean printHeader, boolean printZeros, boolean printTime, 
+			boolean smooth, boolean calcGC, boolean doLogScale, double logWidth, int logPasses, int smoothRadius){
 		Timer t=new Timer();
 		
 		long[] ca=fillHistogram(max);
@@ -351,15 +353,31 @@ public abstract class AbstractKmerTableSet {
 			gcHist=makeGcHistogram(ca, gc);
 		}
 		
+		long[] logScale=null;
+		
 		if(smooth){
 			ca=CallPeaks.smoothProgressive(ca, smoothRadius);
 		}
-		if(fname==null){return ca;}
+		if(doLogScale){
+			logScale=CallPeaks.logScale(ca, logWidth, 1, logPasses);
+		}
+		
+		long[][] ret=new long[2][];
+		ret[0]=ca;
+		if(gcHist!=null){
+			final int k=kbig();
+			ret[1]=new long[ca.length];
+			for(int i=1; i<ca.length; i++){
+				ret[1][i]=Math.round(ca[i]*gcHist[i]*k);
+			}
+		}
+		
+		if(fname==null){return ret;}
 		
 		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, true);
 		bsw.start();
 		if(printHeader){
-			bsw.print("#Depth\t"+(cols==3 ? "RawCount\t" : "")+"Count"+(calcGC ? "\tGC%\n" : "\n"));
+			bsw.print("#Depth\t"+(cols==3 ? "RawCount\t" : "")+"Count"+(doLogScale ? "\tlogScale" : "")+(calcGC ? "\tGC%\n" : "\n"));
 		}
 		
 		for(int i=1; i<ca.length; i++){
@@ -372,8 +390,11 @@ public abstract class AbstractKmerTableSet {
 					bsw.print('\t');
 				}
 				bsw.print(count);
-				if(calcGC){
-					bsw.print(String.format("\t%.2f", 100f*gcHist[i]));
+				if(doLogScale){
+					bsw.print('\t').print(logScale[i]);
+				}
+				if(gcHist!=null){
+					bsw.print(String.format(Locale.ROOT, "\t%.2f", 100f*gcHist[i]));
 				}
 				bsw.print('\n');
 			}
@@ -381,7 +402,7 @@ public abstract class AbstractKmerTableSet {
 		bsw.poisonAndWait();
 		t.stop();
 		if(printTime){outstream.println("Histogram Write Time:       \t"+t);}
-		return ca;
+		return ret;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -390,6 +411,8 @@ public abstract class AbstractKmerTableSet {
 	
 	public boolean showStats=true;
 	
+//	public boolean silent=false;
+	
 	/** Has this class encountered errors while processing? */
 	public boolean errorState=false;
 	
@@ -397,6 +420,8 @@ public abstract class AbstractKmerTableSet {
 	public boolean prefilter=false;
 	/** Fill the prefilter at the same time as the main table */
 	public boolean onePass=false;
+	
+	public boolean amino=false;
 	/** Number of hashes used by prefilter */
 	public int prehashes=2;
 	/** Fraction of memory used by prefilter */
@@ -415,12 +440,15 @@ public abstract class AbstractKmerTableSet {
 	/** Input reads for kmers */
 	public ArrayList<String> in1=new ArrayList<String>(), in2=new ArrayList<String>();
 	
+	/** Extra files for use as kmers */
+	public ArrayList<String> extra=new ArrayList<String>();
+	
 	/** Maximum input reads (or pairs) to process.  Does not apply to references.  -1 means unlimited. */
 	public long maxReads=-1;
 	
 	public int buflen=1000;
 	
-	/** Filter kmers up to this level; don't store them in primary data structure */ 
+	/** Filter kmers up to this level; don't store them in primary data structure */
 	protected int filterMax=0;
 	protected int filterMax2=0;
 	
@@ -431,6 +459,7 @@ public abstract class AbstractKmerTableSet {
 	public long readsTrimmed=0;
 	public long basesTrimmed=0;
 	
+	public long kmersIn=0;
 	public long kmersLoaded=0;
 	
 	private int currentPass=0;
@@ -447,8 +476,9 @@ public abstract class AbstractKmerTableSet {
 	public abstract boolean ecco();
 	public abstract boolean qtrimLeft();
 	public abstract boolean qtrimRight();
-	public abstract byte minAvgQuality();
+	public abstract float minAvgQuality();
 	public final int filterMax(){return filterMax;}
+	public abstract boolean rcomp();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/
@@ -476,7 +506,7 @@ public abstract class AbstractKmerTableSet {
 	/** Number of ProcessThreads */
 	public static int THREADS=Shared.threads();
 	
-	/** Increment owner by this much to indicate claim is final. */ 
+	/** Increment owner by this much to indicate claim is final. */
 	public static final int CLAIM_OFFSET=100000;
 	
 	/** Default initial table size */
@@ -491,5 +521,8 @@ public abstract class AbstractKmerTableSet {
 	public static final int NO_OWNER=AbstractKmerTable.NO_OWNER;
 	
 	public static double defaultMinprob=0;
+	
+	public static boolean MASK_CORE=false;
+	public static boolean FAST_FILL=true;
 	
 }

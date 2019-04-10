@@ -2,17 +2,15 @@ package var;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
-
 
 import align2.IndexMaker4;
-import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays2;
-import dna.Gene;
 import fileIO.ReadWrite;
+import shared.PreParser;
 import shared.ReadStats;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 
@@ -24,7 +22,12 @@ import shared.Tools;
 public class ApplyVarsToReference {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 
 		String inPattern=args[0];
@@ -39,7 +42,7 @@ public class ApplyVarsToReference {
 			final String arg=args[i].toLowerCase();
 			String[] split=arg.split("=");
 			String a=split[0];
-			String b=(split.length>1 ? split[1] : null);
+			String b=split.length>1 ? split[1] : null;
 			
 			if(a.equals("ingenome")){
 				Data.setGenome(Integer.parseInt(b));
@@ -117,15 +120,10 @@ public class ApplyVarsToReference {
 		
 	}
 	
-	/**
-	 * @param replaceFirst
-	 * @param chromFname
-	 * @param chrom
-	 */
 	public static void process(String inVarsName, String outChromName, int chrom) {
 		ArrayList<Varlet> vars=Varlet.fromTextFile(inVarsName);
 		ChromosomeArray cha=Data.getChromosome(chrom);
-		ChromosomeArray chb=new ChromosomeArray(chrom, Gene.PLUS);
+		ChromosomeArray chb=new ChromosomeArray(chrom, Shared.PLUS);
 		
 		//Next location to read in a
 		int aloc=0;

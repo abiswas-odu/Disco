@@ -3,6 +3,7 @@ package driver;
 import dna.Data;
 import dna.Gene;
 import fileIO.ChainLine;
+import shared.Shared;
 
 public class Translator2 {
 	
@@ -28,23 +29,23 @@ public class Translator2 {
 			int loc=Integer.parseInt(args[i]);
 			int[] result=ChainLine.translate(loc, lines[chrom]);
 			System.out.print("(build"+from+", chr"+chrom+", +, "+loc+")  ->  ");
-			System.out.println(result==null ? "null" : 
-				"(build"+to+", chr"+result[0]+", "+Gene.strandCodes[result[1]]+", "+result[2]+")");
+			System.out.println(result==null ? "null" :
+				"(build"+to+", chr"+result[0]+", "+Shared.strandCodes[result[1]]+", "+result[2]+")");
 		}
 		
 //		Translator2 tr=new Translator2(from, to);
-//		
+//
 //		ChainLine[] array=lines[chrom];
 //		int index=ChainLine.binarySearch(loc, array);
 ////		if(index<0){return null;}
 //		ChainLine cl=array[index];
-//		
+//
 ////		System.out.println(cl);
-//		
+//
 //		int[] dest=cl.translate(loc);
-//		
+//
 ////		{qChrom, qStrand, qStart+loc-tStart};
-//		
+//
 //		System.out.println(chrom+", +, "+loc+"   ->   "+dest[0]+", "+Gene.strandCodes[dest[1]]+", "+dest[2]);
 	}
 	
@@ -55,9 +56,9 @@ public class Translator2 {
 		if(result==null){return null;}
 		int strand2=result[1];
 		if(strand2==strand){
-			result[1]=Gene.PLUS;
+			result[1]=Shared.PLUS;
 		}else{
-			result[1]=Gene.MINUS;
+			result[1]=Shared.MINUS;
 		}
 		return result;
 	}

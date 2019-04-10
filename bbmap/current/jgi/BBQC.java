@@ -6,19 +6,17 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.TimeZone;
 
-import stream.FASTQ;
-
-import dna.Data;
-import dna.Parser;
-
 import align2.BBMap;
+import dna.Data;
 import fileIO.ByteFile1;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
-import shared.ReadStats;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Tools;
 import shared.TrimRead;
+import stream.FASTQ;
 
 /**
  * Wrapper for BBDukF, BBMap, and BBNorm to perform quality-control and artifact removal.
@@ -55,9 +53,11 @@ public class BBQC {
 	 */
 	BBQC(String[] args){
 		
-		//Optional default parameters to match current pipeline
-//		arglist.add("k=22");
-//		arglist.add("maxbadkmers=2");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		//Symbols to insert in output filename to denote operations performed; may be overriden from command line
 		String symbols_=null;//"filtered"
@@ -69,11 +69,8 @@ public class BBQC {
 			String[] split=arg.split("="); //Expect key=value pairs
 			String a=split[0].toLowerCase(); //All keys are converted to lower case
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			
+			if(Parser.parseZip(arg, a, b)){
 				if(a.equals("pigz")){
 					pigz=b;
 				}else if(a.equals("unpigz")){
@@ -175,6 +172,7 @@ public class BBQC {
 			}else if(a.equals("trimhdist2")){
 				hdist2_trim=Integer.parseInt(b);
 			}else if(a.equals("maq")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				if(b.indexOf(',')>-1){
 					String[] x=b.split(",");
 					assert(x.length==2) : "maq should be length 1 or 2 (at most 1 comma).\nFormat: maq=quality,bases; e.g. maq=10 or maq=10,20";
@@ -246,12 +244,12 @@ public class BBQC {
 				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrim="l";}
 				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrim="r";}
 				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){qtrim="lr";}
-				else if(Character.isDigit(b.charAt(0))){
+				else if(Tools.isDigit(b.charAt(0))){
 					trimq=Byte.parseByte(b);
 					qtrim=(trimq>=0 ? "lr" : "f");
 				}else{qtrim=""+Tools.parseBoolean(b);}
 			}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
-				if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
+				if(b!=null && (b.charAt(0)=='.' || Tools.isDigit(b.charAt(0)))){
 					TrimRead.optimalMode=true;
 					TrimRead.optimalBias=Float.parseFloat(b);
 					assert(TrimRead.optimalBias>=0 && TrimRead.optimalBias<1);
@@ -417,11 +415,11 @@ public class BBQC {
 			}
 		}
 		
-		//Write combined stats file (number of reads/bases present/removed in each stage) 
+		//Write combined stats file (number of reads/bases present/removed in each stage)
 		if(rqcStatsName!=null){
 			final TextStreamWriter tsw=new TextStreamWriter(rqcStatsName, overwrite, false, false);
 			tsw.start();
-			tsw.println(BBDukF.rqcString());
+			tsw.println(BBDuk.rqcString());
 			tsw.poisonAndWait();
 		}
 		
@@ -525,7 +523,7 @@ public class BBQC {
 		String[] dukargs=argList.toArray(new String[0]);
 		
 		{//run BBDuk
-			BBDukF duk=new BBDukF(dukargs);
+			BBDuk duk=new BBDuk(dukargs);
 			try {
 				duk.process();
 			} catch (Exception e) {
@@ -554,7 +552,7 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,  
+	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,
 			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("filter start", true);
@@ -624,7 +622,7 @@ public class BBQC {
 		String[] dukargs=argList.toArray(new String[0]);
 		
 		{//Run BBDuk
-			BBDukF duk=new BBDukF(dukargs);
+			BBDuk duk=new BBDuk(dukargs);
 			try {
 				duk.process();
 			} catch (Exception e) {
@@ -653,7 +651,7 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, 
+	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2,
 			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("dehumanize start", true);
@@ -735,7 +733,7 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void normalize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,  
+	private void normalize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,
 			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("normalization start", true);
@@ -909,17 +907,8 @@ public class BBQC {
 		return sdf.format(new Date());
 	}
 	
-	/**
-	 * Strips the directories, leaving only a filename
-	 * @param fname
-	 * @return
-	 */
-	public static String stripDirs(String fname){
-		if(fname==null){return null;}
-		if(fname.indexOf('\\')>=0){fname=fname.replace('\\', '/');}
-		final int index=fname.lastIndexOf('/');
-		if(index>=0){fname=fname.substring(index+1);}
-		return fname;
+	private static String stripDirs(String path){
+		return ReadWrite.stripPath(path);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -970,9 +959,9 @@ public class BBQC {
 	/** Toss reads shorter than this fraction of initial length, after trimming */
 	private float minLenFraction=0.6f;
 	/** Trim bases at this quality or below */
-	private byte trimq=12;
-	/** Throw away reads below this average quality before trimming.  Default: 8 */
-	private byte minAvgQuality=8;
+	private float trimq=12;
+	/** Throw away reads below this average quality after trimming.  Default: 8 */
+	private float minAvgQuality=8;
 	/** If positive, calculate the average quality from the first X bases. */
 	private int minAvgQualityBases=0;
 	

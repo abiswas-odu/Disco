@@ -15,6 +15,11 @@ import shared.Timer;
  */
 public class KCountArray4 extends KCountArray {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -1418539960644885681L;
+
 	public static void main(String[] args){
 		long cells=Long.parseLong(args[0]);
 		int bits=Integer.parseInt(args[1]);
@@ -68,6 +73,7 @@ public class KCountArray4 extends KCountArray {
 		assert(hashes>0 && hashes<=hashMasks.length);
 	}
 	
+	@Override
 	public int read(final long rawKey){
 		if(verbose){System.err.println("Reading raw key "+rawKey);}
 		long key2=hash(rawKey, 0);
@@ -104,10 +110,12 @@ public class KCountArray4 extends KCountArray {
 		return (int)((word>>>cellShift)&valueMask);
 	}
 	
+	@Override
 	public void write(final long key, int value){
 		throw new RuntimeException("Not allowed for this class.");
 	}
 	
+	@Override
 	public int incrementAndReturn(final long rawKey, int incr){
 //		verbose=(rawKey==32662670693L);
 		if(verbose){System.err.println("\n*** Incrementing raw key "+rawKey+" ***");}
@@ -142,6 +150,7 @@ public class KCountArray4 extends KCountArray {
 	}
 	
 	/** Returns unincremented value */
+	@Override
 	public int incrementAndReturnUnincremented(long rawKey, int incr){
 //		verbose=(rawKey==32662670693L);
 		if(verbose){System.err.println("\n*** Incrementing raw key "+rawKey+" ***");}
@@ -210,10 +219,12 @@ public class KCountArray4 extends KCountArray {
 		return value;
 	}
 	
+	@Override
 	public long[] transformToFrequency(){
 		return transformToFrequency(matrix);
 	}
 	
+	@Override
 	public String toContentsString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append("[");
@@ -234,10 +245,13 @@ public class KCountArray4 extends KCountArray {
 		return sb.toString();
 	}
 	
+	@Override
 	public double usedFraction(){return cellsUsed/(double)cells;}
 	
+	@Override
 	public double usedFraction(int mindepth){return cellsUsed(mindepth)/(double)cells;}
 	
+	@Override
 	public long cellsUsed(int mindepth){
 		long count=0;
 		for(int[] array : matrix){
@@ -255,6 +269,7 @@ public class KCountArray4 extends KCountArray {
 	}
 	
 	
+	@Override
 	final long hash(long key, int row){
 		int cell=(int)((Long.MAX_VALUE&key)%(hashArrayLength-1));
 //		int cell=(int)(hashCellMask&(key));
@@ -293,12 +308,6 @@ public class KCountArray4 extends KCountArray {
 		return r;
 	}
 	
-	
-	/**
-	 * @param cols
-	 * @param randy
-	 * @return
-	 */
 	private static void fillMasks(long[] r, Random randy) {
 //		for(int i=0; i<r.length; i++){
 //			long x=0;

@@ -3,17 +3,17 @@ import java.io.Serializable;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 import dna.Data;
 import dna.Gene;
 import dna.GeneSet;
-import dna.Range;
 import driver.Search;
 import shared.Shared;
+import shared.Tools;
+import structures.Range;
 
 
 
@@ -47,12 +47,12 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 //	public Variation(GeneVarLine line){
 ////		this(line.chromosome, line.beginLoc, line.endLoc, line.xRef, line.varType, line.ref, line.call);
 //		this(line.chromosome, line.beginLoc, line.endLoc, line.xRef, line.xRefArray, line.varType, line.ref, line.call);
-//		
+//
 //		assert(beginLoc<=endLoc) : line.toString();
 //
 //		assert(this.equals(line)) : "\n\n"+this+"\n!=\n"+line.toSuperString()+"\n\n"+line;
 //		assert(line.equals(this)) : "\n\n"+this+"\n!=\n"+line.toSuperString()+"\n\n"+line;
-//		
+//
 //	}
 	
 	public Variation(Variation line){
@@ -80,6 +80,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 	public Variation(){}
 	
 	
+	@Override
 	public Variation clone(){
 		Variation v=null;
 		try {
@@ -232,7 +233,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 		
 		int i=0, max=s.length();
 //		System.err.println(s);
-		while(i<max && !Character.isDigit(s.charAt(i))){i++;}
+		while(i<max && !Tools.isDigit(s.charAt(i))){i++;}
 		if(i>=max){assert(s.equals(".")) : s; return -1;}
 		s=s.substring(i);
 		
@@ -293,7 +294,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 		if(type==REF || type==REFPOINT || type==DEL || type==NOCALL){
 			return true;
 		}
-		return call.equals(call2); 
+		return call.equals(call2);
 		
 	}
 	
@@ -305,7 +306,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 		switch(vt){
 			
 			case REF: {
-			}break;	
+			}break;
 			case SNP: {
 				ref=rf; call=ca;
 			}break;
@@ -371,6 +372,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 	
 	public String toSuperString(){return toString();}
 	
+	@Override
 	public String toString(){
 		return toString(0);
 	}
@@ -458,6 +460,9 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 //			case NULL: {
 //				throw new RuntimeException();
 //			}
+			default: {
+				break;
+			}
 		}
 		return endLoc-beginLoc+1;
 	}
@@ -770,6 +775,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 		return other.call==null ? 1 : call.compareTo(other.call);
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return equals((Variation)other);
 	}
@@ -789,7 +795,7 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 	/** This is quite clever. */
 	public static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	public static boolean touch(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
@@ -799,12 +805,12 @@ public class Variation implements Comparable<Variation>, Serializable, Cloneable
 	/** Is (a1, b1) within (a2, b2) ? */
 	public static boolean isWithin(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a1>=a2 && b1<=b2; 
+		return a1>=a2 && b1<=b2;
 	}
 	
 	public static boolean isWithinNotTouching(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a1>a2 && b1<b2; 
+		return a1>a2 && b1<b2;
 	}
 	
 	//Slow if not inlined

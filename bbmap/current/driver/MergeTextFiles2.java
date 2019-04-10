@@ -4,8 +4,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 
-import dna.Data;
-
 import fileIO.TextFile;
 
 public class MergeTextFiles2 {
@@ -17,12 +15,12 @@ public class MergeTextFiles2 {
 	
 	public static StringBuilder mergeWithHeader(String fname1, String fname2, int col1, int col2){
 
-		TextFile tf1=new TextFile(fname1, false, false);
+		TextFile tf1=new TextFile(fname1, false);
 		String[][] lines1=TextFile.doublesplitTab(tf1.toStringLines(), false);
 		tf1.close();
 		tf1=null;
 		
-		TextFile tf2=new TextFile(fname2, false, false);
+		TextFile tf2=new TextFile(fname2, false);
 		String[][] lines2=TextFile.doublesplitTab(tf2.toStringLines(), false);
 		tf2.close();
 		tf2=null;

@@ -31,24 +31,19 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 		
 		if(ff1.hasName() && ff1.devnull()){
 			File f=new File(ff1.name());
-			assert(ff1.overwrite() || !f.exists()) : f.getAbsolutePath()+" already exists; please delete it.";
+			assert(ff1.overwrite() || !f.exists() || ff1.name().equals("/dev/null")) : f.getAbsolutePath()+" already exists; please delete it.";
 			if(ff2!=null){assert(!ff1.name().equals(ff2.name())) : ff1.name()+"=="+ff2.name();}
 		}
 		
-		if(BYTE_WRITER){
-			readstream1=new ReadStreamByteWriter(ff1, qf1, true, maxSize, header, useSharedHeader);
-			readstream2=ff1.stdio() || ff2==null ? null : new ReadStreamByteWriter(ff2, qf2, false, maxSize, header, useSharedHeader);
-		}else{
-			readstream1=new ReadStreamStringWriter(ff1, qf1, true, maxSize, header, useSharedHeader);
-			readstream2=ff1.stdio() || ff2==null ? null : new ReadStreamStringWriter(ff2, qf2, false, maxSize, header, useSharedHeader);
-		}
+		readstream1=new ReadStreamByteWriter(ff1, qf1, true, maxSize, header, useSharedHeader);
+		readstream2=ff1.stdio() || ff2==null ? null : new ReadStreamByteWriter(ff2, qf2, false, maxSize, header, useSharedHeader);
 		
 		if(readstream2==null && readstream1!=null){
 //			System.out.println("ConcurrentReadOutputStream detected interleaved output.");
 			readstream1.OUTPUT_INTERLEAVED=true;
 		}
 		
-		table=(ORDERED ? new HashMap<Long, ArrayList<Read>>(MAX_CAPACITY) : null);
+		table=(ordered ? new HashMap<Long, ArrayList<Read>>(MAX_CAPACITY) : null);
 		
 		assert(readstream1==null || readstream1.read1==true);
 		assert(readstream2==null || (readstream2.read1==false));
@@ -74,7 +69,7 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 	@Override
 	public synchronized void add(ArrayList<Read> list, long listnum){
 		
-		if(ORDERED){
+		if(ordered){
 			int size=table.size();
 //			System.err.print(size+", ");
 			final boolean flag=(size>=HALF_LIMIT);
@@ -143,14 +138,14 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 	@Override
 	public synchronized void resetNextListID(){
 		for(int i=0; i<2000 && !table.isEmpty(); i++){
-			try {this.wait(2000);} 
+			try {this.wait(2000);}
 			catch (InterruptedException e) {e.printStackTrace();}
 		}
 		if(!table.isEmpty()){
 			System.err.println("WARNING! resetNextListID() waited a long time and the table never cleared.  Process may have stalled.");
 		}
 		while(!table.isEmpty()){
-			try {this.wait(2000);} 
+			try {this.wait(2000);}
 			catch (InterruptedException e) {e.printStackTrace();}
 		}
 		nextListID=0;
@@ -245,7 +240,5 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 	/*--------------------------------------------------------------*/
 	
 	private boolean printBufferNotification=true;
-	
-	public static boolean verbose=false;
 	
 }

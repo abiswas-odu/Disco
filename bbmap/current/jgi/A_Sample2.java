@@ -1,16 +1,18 @@
 package jgi;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import shared.Timer;
 
 /**
  * @author Brian Bushnell
@@ -20,20 +22,26 @@ import shared.Timer;
 public class A_Sample2 {
 
 	public static void main(String[] args){
+		//Start a timer immediately upon code entrance.
 		Timer t=new Timer();
-		A_Sample2 as=new A_Sample2(args);
-		as.process(t);
+		
+		//Create an instance of this class
+		A_Sample2 x=new A_Sample2(args);
+		
+		//Run the object
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public A_Sample2(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -41,17 +49,16 @@ public class A_Sample2 {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
+			if(b!=null && b.equalsIgnoreCase("null")){b=null;}
 
-			if(parser.parse(arg, a, b)){
-				//do nothing
-			}else if(a.equals("parse_flag_goes_here")){
+			if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
+			}else if(parser.parse(arg, a, b)){
+				//do nothing
 			}else{
-				outstream.println("Unknown parameter "+args[i]);
-				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
+				assert(false) : "Unknown parameter "+args[i];
+				outstream.println("Unknown parameter "+args[i]);
 			}
 		}
 		
@@ -82,7 +89,7 @@ public class A_Sample2 {
 			
 			if(cris.paired() && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
@@ -90,7 +97,7 @@ public class A_Sample2 {
 			ros.start();
 		}else{ros=null;}
 		
-		long readsProcessed=0;
+		long readsProcessed=0, basesProcessed=0;
 		{
 			
 			ListNum<Read> ln=cris.nextList();
@@ -101,20 +108,20 @@ public class A_Sample2 {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
+					readsProcessed++;
+					basesProcessed+=r1.length();
 					
 					//  *********  Process reads here  *********
-					
-					readsProcessed++;
 				}
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -128,14 +135,10 @@ public class A_Sample2 {
 		
 		t.stop();
 		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
+		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	

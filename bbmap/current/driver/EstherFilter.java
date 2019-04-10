@@ -7,14 +7,12 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FastaReadInputStream;
-import stream.Read;
-import structures.ListNum;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import shared.Shared;
+import stream.ConcurrentReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -37,7 +35,7 @@ public class EstherFilter {
 
 //		InputStream is=ReadWrite.getInputStreamFromProcess("stdin", command, false);
 //		InputStream is=ReadWrite.getInputStreamFromProcess("", command, false);
-		InputStream is=ReadWrite.getInputStreamFromProcess(null, command, false);
+		InputStream is=ReadWrite.getInputStreamFromProcess("foo", command, false, false, true);
 		
 		InputStreamReader isr=new InputStreamReader(is);
 		BufferedReader b=new BufferedReader(isr, 32768);
@@ -56,7 +54,7 @@ public class EstherFilter {
 
 //		ReadWrite.finishReading(is, "stdin", true, b, isr);
 //		ReadWrite.finishReading(is, "", true, b, isr);
-		ReadWrite.finishReading(is, null, true, b, isr);
+		ReadWrite.finishReading(is, "foo", true, b, isr);
 		
 	}
 	
@@ -145,7 +143,7 @@ public class EstherFilter {
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
 		/* Iterate through read lists from the input stream */
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			
 			for(Read r : reads){
 				if(Collections.binarySearch(names, r.id)>=0){
@@ -154,12 +152,12 @@ public class EstherFilter {
 			}
 			
 			/* Dispose of the old list and fetch a new one */
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		/* Cleanup */
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 	}
 	
 	

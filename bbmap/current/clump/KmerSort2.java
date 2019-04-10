@@ -1,39 +1,28 @@
 package clump;
 
 import java.io.File;
-import java.io.PrintStream;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-
-import stream.ConcurrentReadInputStream;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.FASTQ;
-import stream.Read;
-import structures.ListNum;
-import sun.reflect.Reflection;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import jgi.BBMerge;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import sort.ReadComparatorID;
-import sort.ReadComparatorName;
-import fileIO.FileFormat;
-import bloom.KCountArray;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
 
 /**
  * @author Brian Bushnell
  * @date June 20, 2014
  *
  */
-public class KmerSort2 {
+public class KmerSort2 extends KmerSort {
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
@@ -49,13 +38,16 @@ public class KmerSort2 {
 		final int mzt=ReadWrite.MAX_ZIP_THREADS;
 		final int oldzl=ReadWrite.ZIPLEVEL;
 		Timer t=new Timer();
-		KmerSort2 ks=new KmerSort2(args);
-		ks.process(t);
+		KmerSort2 x=new KmerSort2(args);
+		x.process(t);
 		ReadWrite.USE_PIGZ=pigz;
 		ReadWrite.USE_UNPIGZ=unpigz;
 		ReadWrite.ZIP_THREAD_MULT=ztd;
 		ReadWrite.MAX_ZIP_THREADS=mzt;
 		ReadWrite.ZIPLEVEL=oldzl;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -64,20 +56,14 @@ public class KmerSort2 {
 	 */
 	public KmerSort2(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether it was explicitly set.
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -85,12 +71,8 @@ public class KmerSort2 {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(parser.parse(arg, a, b)){
-				//do nothing
-			}else if(a.equals("verbose")){
+			if(a.equals("verbose")){
 				verbose=KmerComparator.verbose=Tools.parseBoolean(b);
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
@@ -123,30 +105,19 @@ public class KmerSort2 {
 			else if(a.equals("dedupe")){
 				dedupe=Tools.parseBoolean(b);
 			}else if(a.equals("markduplicates")){
-				dedupe=ClumpList.markOnly=Tools.parseBoolean(b);
+				dedupe=Clump.markOnly=Tools.parseBoolean(b);
 			}else if(a.equals("markall")){
 				boolean x=Tools.parseBoolean(b);
 				if(x){
-					dedupe=ClumpList.markOnly=ClumpList.markAll=true;
+					dedupe=Clump.markOnly=Clump.markAll=true;
 				}else{
-					ClumpList.markAll=false;
+					Clump.markAll=false;
 				}
-			}else if(a.equals("removeallduplicates") || a.equals("allduplicates")){
-				ClumpList.markAll=Tools.parseBoolean(b);
-			}else if(a.equals("optical") || a.equals("opticalonly")){
-				ClumpList.opticalOnly=Tools.parseBoolean(b);
-			}else if(a.equals("dupesubs") || a.equals("duplicatesubs") || a.equals("dsubs") || a.equals("subs")){
-				ClumpList.maxSubstitutions=Integer.parseInt(b);
-			}else if(a.equals("dupedist") || a.equals("duplicatedistance") || a.equals("ddist") || a.equals("dist") || a.equals("opticaldist")){
-				ClumpList.maxOpticalDistance=Float.parseFloat(b);
-				ClumpList.opticalOnly=ClumpList.maxOpticalDistance>=0;
-			}else if(a.equals("scanlimit") || a.equals("scan")){
-				ClumpList.scanLimit=Integer.parseInt(b);
 			}
 			
 			else if(a.equals("prefilter")){
 				KmerReduce.prefilter=Tools.parseBoolean(b);
-			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){  
+			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){
 				groups=Integer.parseInt(b);
 				splitInput=(groups>1);
 			}else if(a.equals("seed")){
@@ -174,6 +145,8 @@ public class KmerSort2 {
 				//Do nothing
 			}else if(Clump.parseStatic(arg, a, b)){
 				//Do nothing
+			}else if(parser.parse(arg, a, b)){
+				//do nothing
 			}
 			
 			else{
@@ -182,8 +155,9 @@ public class KmerSort2 {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
-		Clump.rename=condense;
+		Clump.renameConsensus=condense;
 		if(dedupe){KmerComparator.compareSequence=true;}
+		assert(!(reorderMode==REORDER_PAIRED && dedupe)) : "REORDER_PAIRED and dedupe are incompatible.";
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -192,8 +166,6 @@ public class KmerSort2 {
 			
 			overwrite=ReadStats.overwrite=parser.overwrite;
 			append=ReadStats.append=parser.append;
-
-			setInterleaved=parser.setInterleaved;
 
 			in1=parser.in1;
 			in2=parser.in2;
@@ -215,10 +187,7 @@ public class KmerSort2 {
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -230,17 +199,17 @@ public class KmerSort2 {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+"\n");
 		}
 		
-		if(out1==null){ffout=null;}
+		if(out1==null){ffout1=null;}
 		else{
 			int g=out1.contains("%") ? groups : 1;
-			ffout=new FileFormat[g];
+			ffout1=new FileFormat[g];
 			if(g==1){
-				ffout[0]=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
+				ffout1[0]=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 			}else{
 				ReadWrite.ZIPLEVEL=2;
 				ReadWrite.setZipThreadMult(Tools.min(0.5f, 2f/(g+1)));
 				for(int i=0; i<g; i++){
-					ffout[i]=FileFormat.testOutput(out1.replaceFirst("%", ""+i), FileFormat.FASTQ, extout, (g<10), overwrite, append, false);
+					ffout1[i]=FileFormat.testOutput(out1.replaceFirst("%", ""+i), FileFormat.FASTQ, extout, (g<10), overwrite, append, false);
 				}
 			}
 		}
@@ -267,39 +236,19 @@ public class KmerSort2 {
 	/*--------------------------------------------------------------*/
 	/*----------------         Outer Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-
-	/** Count kmers */
-	void preprocess(){
-		if(minCount>1){
-			if(groups>1){
-				table=ClumpTools.table();
-				assert(table!=null);
-			}else{
-				Timer ctimer=new Timer();
-				if(verbose){ctimer.start("Counting pivots.");}
-				table=ClumpTools.getTable(in1, in2, k, minCount);
-				if(verbose){ctimer.stop("Count time: ");}
-			}
-		}
-	}
-
-	/** Create read streams and process all data */
+	
+	@Override
 	void process(Timer t){
 		
 		preprocess();
-		
-//		final ConcurrentReadInputStream[] cris=new ConcurrentReadInputStream[groups];
-//		for(int i=0; i<cris.length; i++){
-//			cris[i]=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1[i], ffin2[i], null, null);
-//		}
 
-		final ConcurrentReadOutputStream rosa[]=(ffout==null ? null : new ConcurrentReadOutputStream[ffout.length]);
+		final ConcurrentReadOutputStream[] rosa=(ffout1==null ? null : new ConcurrentReadOutputStream[ffout1.length]);
 		for(int i=0; rosa!=null && i<rosa.length; i++){
 			final int buff=1;
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
-			rosa[i]=ConcurrentReadOutputStream.getStream(ffout[i], null, null, null, buff, null, false);
+			rosa[i]=ConcurrentReadOutputStream.getStream(ffout1[i], null, null, null, buff, null, false);
 			rosa[i].start();
 		}
 		
@@ -308,49 +257,7 @@ public class KmerSort2 {
 		//Process the read stream
 		processInner(rosa);
 		
-		table=null;
-		ClumpTools.clearTable();
-		
-		errorState|=ReadStats.writeAll();
-		
-		t.stop();
-		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String rpstring2=readsProcessed+"";
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-		
-		String cpstring=""+(groups==1 ? clumpsProcessedThisPass : clumpsProcessedTotal);
-		String epstring=""+correctionsTotal;
-		String dpstring=""+duplicatesTotal;
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-		while(rpstring2.length()<10){rpstring2=" "+rpstring2;}
-		while(cpstring.length()<10){cpstring=" "+cpstring;}
-		while(epstring.length()<10){epstring=" "+epstring;}
-		while(dpstring.length()<10){dpstring=" "+dpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		outstream.println();
-
-		outstream.println("Reads In:         "+rpstring2);
-		outstream.println("Clumps Formed:    "+cpstring);
-		if(correct){
-			outstream.println("Errors Corrected: "+epstring);
-		}
-		if(dedupe){
-			outstream.println("Duplicates Found: "+dpstring);
-		}
-		
-		if(errorState){
-			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
-		}
+		printStats(t);
 	}
 	
 	/** Collect and sort the reads */
@@ -361,6 +268,11 @@ public class KmerSort2 {
 		ClumpList.UNRCOMP=(!rcomp && !condense);
 		Timer t=new Timer();
 		
+//		final int conservativePasses=Clump.conservativeFlag ? passes : Tools.max(1, passes/2);
+//		if(groups==1 && passes>1){Clump.setConservative(true);}
+
+		useSharedHeader=(ffin1[0].samOrBam() && ffout1!=null && ffout1[0]!=null && ffout1[0].samOrBam());
+		
 		for(int group=0; group<groups; group++){
 			if(verbose){outstream.println("Starting cris "+group+".");}
 			
@@ -368,7 +280,7 @@ public class KmerSort2 {
 			cris.start();
 			
 //			if(verbose){t.start("Fetching reads.");}
-			ArrayList<Read> reads=fetchReads(cris, kc);
+			ArrayList<Read> reads=fetchReads1(cris, kc);
 //			if(verbose){t.stop("Fetch time: ");}
 			
 			if(verbose){t.start("Sorting.");}
@@ -413,6 +325,10 @@ public class KmerSort2 {
 				}
 				
 				if(passes>1 && groups==1){
+					
+					FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=false;
+					FASTQ.ASCII_OFFSET=FASTQ.ASCII_OFFSET_OUT;
+					
 					if(verbose){outstream.println("Pass 1.");}
 					if(verbose){outstream.println("Reads:        \t"+readsProcessedThisPass);}
 					outstream.println("Clumps:       \t"+clumpsProcessedThisPass);
@@ -422,6 +338,9 @@ public class KmerSort2 {
 					outstream.println();
 					
 					for(int pass=1; pass<passes; pass++){
+						
+//						if(pass>=conservativePasses){Clump.setConservative(false);}
+						
 						kc=new KmerComparator(k, kc.seed<0 ? -1 : kc.seed+1, kc.border-1, kc.hashes, false, kc.rcompReads);
 						reads=runOnePass(reads, kc);
 
@@ -451,6 +370,11 @@ public class KmerSort2 {
 						reads=read1Only(reads);
 					}
 				}
+			}
+			
+			for(Read r : reads){
+				readsOut+=r.pairCount();
+				basesOut+=r.pairLength();
 			}
 			
 			if(doHashAndSplit || groups==0){
@@ -500,412 +424,24 @@ public class KmerSort2 {
 			rosa[i].add(array[i], 0);
 			array[i]=null;
 		}
-	}
-	
-	private ArrayList<Read> runOnePass(ArrayList<Read> reads, KmerComparator kc){
-//		for(Read r : reads){r.obj=null;}//No longer necessary
-		
-		Timer t=new Timer();
-		
-		table=null;
-		if(minCount>1){
-			if(verbose){t.start("Counting pivots.");}
-			table=ClumpTools.getTable(reads, k, minCount);
-			if(verbose){t.stop("Count time: ");}
-		}
-		
-		if(verbose){t.start("Hashing.");}
-		kc.hashThreaded(reads, table, minCount);
-		if(verbose){t.stop("Hash time: ");}
-		
-		if(verbose){t.start("Sorting.");}
-		Shared.sort(reads, kc);
-//		Shared.sort(reads, kc);
-		if(verbose){t.stop("Sort time: ");}
-		
-		if(verbose){t.start("Making clumps.");}
-		readsProcessedThisPass=reads.size();
-		ClumpList cl=new ClumpList(reads, k, false);
-		reads.clear();
-		clumpsProcessedThisPass=cl.size();
-		clumpsProcessedTotal+=clumpsProcessedThisPass;
-		if(verbose){t.stop("Clump time: ");}
-		
-		if(verbose){t.start("Correcting.");}
-		reads=processClumps(cl, ClumpList.CORRECT);
-		if(verbose){t.stop("Correct time: ");}
-		
-		return reads;
-	}
-	
-	public void hashAndSplit(ArrayList<Read> list, KmerComparator kc, ArrayList<Read>[] array){
-		int threads=Shared.threads();
-		ArrayList<HashSplitThread> alt=new ArrayList<HashSplitThread>(threads);
-		for(int i=0; i<threads; i++){alt.add(new HashSplitThread(i, threads, list, kc));}
-		for(HashSplitThread ht : alt){ht.start();}
-		
-		/* Wait for threads to die */
-		for(HashSplitThread ht : alt){
-			
-			/* Wait for a thread to die */
-			while(ht.getState()!=Thread.State.TERMINATED){
-				try {
-					ht.join();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-			for(int i=0; i<groups; i++){
-				array[i].addAll(ht.array[i]);
-				ht.array[i]=null;
-			}
-		}
-	}
-	
-	private class HashSplitThread extends Thread{
-		
-		@SuppressWarnings("unchecked")
-		HashSplitThread(int id_, int threads_, ArrayList<Read> list_, KmerComparator kc_){
-			id=id_;
-			threads=threads_;
-			list=list_;
-			kc=kc_;
-			array=new ArrayList[groups];
-			for(int i=0; i<groups; i++){
-				array[i]=new ArrayList<Read>();
-			}
-		}
-		
-		@Override
-		public void run(){
-			for(int i=id; i<list.size(); i+=threads){
-				Read r=list.get(i);
-				kc.hash(r, null, 0, true);
-				ReadKey key=(ReadKey)r.obj;
-				array[(int)(kc.hash(key.kmer)%groups)].add(r);
-			}
-		}
-		
-		final int id;
-		final int threads;
-		final ArrayList<Read> list;
-		final KmerComparator kc;
-		final ArrayList<Read>[] array;
-	}
-	
-	private ArrayList<Read> nameSort(ArrayList<Read> list, boolean pair){
-//		Shared.sort(list, ReadComparatorName.comparator);
-		Shared.sort(list, ReadComparatorName.comparator);
-		if(!pair){return list;}
-		
-		ArrayList<Read> list2=new ArrayList<Read>(1+list.size()/2);
-		
-		Read prev=null;
-		for(Read r : list){
-			if(prev==null){
-				prev=r;
-				assert(prev.mate==null);
-			}else{
-				if(prev.id.equals(r.id) || FASTQ.testPairNames(prev.id, r.id, true)){
-					prev.mate=r;
-					r.mate=prev;
-					prev.setPairnum(0);
-					r.setPairnum(1);
-					list2.add(prev);
-					prev=null;
-				}else{
-					list2.add(prev);
-					prev=r;
-				}
-			}
-		}
-		return list2;
-	}
-	
-	private ArrayList<Read> idSort(ArrayList<Read> list, boolean pair){
-		Shared.sort(list, ReadComparatorID.comparator);
-		if(!pair){return list;}
-		
-		ArrayList<Read> list2=new ArrayList<Read>(1+list.size()/2);
-		
-		Read prev=null;
-		for(Read r : list){
-			if(prev==null){
-				prev=r;
-				assert(prev.mate==null);
-			}else{
-				if(prev.numericID==r.numericID){
-					assert(prev.pairnum()==0 && r.pairnum()==1) : prev.id+"\n"+r.id;
-					prev.mate=r;
-					r.mate=prev;
-					prev.setPairnum(0);
-					r.setPairnum(1);
-					list2.add(prev);
-					prev=null;
-				}else{
-					list2.add(prev);
-					prev=r;
-				}
-			}
-		}
-		return list2;
-	}
-	
-	private ArrayList<Read> read1Only(ArrayList<Read> list){
-		ArrayList<Read> list2=new ArrayList<Read>(1+list.size()/2);
-		for(Read r : list){
-			assert(r.mate!=null);
-			if(r.pairnum()==0){list2.add(r);}
-		}
-		return list2;
-	}
-	
-	@Deprecated
-	//No longer needed
-	public int countClumps(ArrayList<Read> list){
-		int count=0;
-		long currentKmer=-1;
-		for(final Read r : list){
-			final ReadKey key=(ReadKey)r.obj;
-			if(key.kmer!=currentKmer){
-				currentKmer=key.kmer;
-				count++;
-			}
-		}
-		return count;
-	}
-	
-	public ArrayList<Read> fetchReads(final ConcurrentReadInputStream cris, final KmerComparator kc){
-		Timer t=new Timer();
-		if(verbose){t.start("Making fetch threads.");}
-		final int threads=Shared.threads();
-		ArrayList<FetchThread> alht=new ArrayList<FetchThread>(threads);
-		for(int i=0; i<threads; i++){alht.add(new FetchThread(i, cris, kc, unpair));}
-		
-		readsThisPass=memThisPass=0;
-		
-		if(verbose){outstream.println("Starting threads.");}
-		for(FetchThread ht : alht){ht.start();}
-		
-		
-		if(verbose){outstream.println("Waiting for threads.");}
-		/* Wait for threads to die */
-		for(FetchThread ht : alht){
-			
-			/* Wait for a thread to die */
-			while(ht.getState()!=Thread.State.TERMINATED){
-				try {
-					ht.join();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-			readsThisPass+=ht.readsProcessedT;
-			basesProcessed+=ht.basesProcessedT;
-			diskProcessed+=ht.diskProcessedT;
-			memThisPass+=ht.memProcessedT;
-		}
-		readsProcessed+=readsThisPass;
-		memProcessed+=memThisPass;
-
-		if(verbose){t.stop("Fetch time: ");}
-		if(verbose){System.err.println("Closing input stream.");}
-		errorState=ReadWrite.closeStream(cris)|errorState;
-		
-		if(verbose){t.start("Combining thread output.");}
-		assert(readsProcessed<=Integer.MAX_VALUE);
-		ArrayList<Read> list=new ArrayList<Read>((int)readsThisPass);
-		for(int i=0; i<threads; i++){
-			FetchThread ht=alht.set(i, null);
-			list.addAll(ht.storage);
-		}
-		if(verbose){t.stop("Combine time: ");}
-		
-		assert(list.size()==readsThisPass || (cris.paired() && list.size()*2==readsThisPass)) : list.size()+", "+readsThisPass+", "+cris.paired();
-		ecco=false;
-		return list;
-	}
-	
-	public ArrayList<Read> processClumps(ClumpList cl, int mode){
-		long[] rvector=new long[2];
-		ArrayList<Read> out=cl.process(Shared.threads(), mode, rvector);
-		correctionsThisPass=rvector[0];
-		correctionsTotal+=correctionsThisPass;
-		duplicatesThisPass=rvector[1];
-		duplicatesTotal+=duplicatesThisPass;
-		cl.clear();
-		return out;
+		if(verbose){System.err.println("Sent writable reads.");}
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private class FetchThread extends Thread{
-		
-		FetchThread(int id_, ConcurrentReadInputStream cris_, KmerComparator kc_, boolean unpair_){
-			id=id_;
-			cris=cris_;
-			kc=kc_;
-			storage=new ArrayList<Read>();
-			unpair=unpair_;
-		}
-		
-		@Override
-		public void run(){
-			ListNum<Read> ln=cris.nextList();
-			final boolean paired=cris.paired();
-			ArrayList<Read> reads=(ln!=null ? ln.list : null);
-			
-			while(reads!=null && reads.size()>0){
-				
-				for(Read r : reads){
-					if(!r.validated()){
-						r.validate(true);
-						if(r.mate!=null){r.mate.validate(true);}
-					}
-					readsProcessedT+=1+r.mateCount();
-					basesProcessedT+=r.length()+r.mateLength();
-//					diskProcessedT+=r.countFastqBytes()+r.countMateFastqBytes();
-//					memProcessedT+=r.countBytes()+r.countMateBytes();
-					if(shrinkName){
-						Clumpify.shrinkName(r);
-						Clumpify.shrinkName(r.mate);
-					}else if(shortName){
-						Clumpify.shortName(r);
-						Clumpify.shortName(r.mate);
-					}
-				}
-				
-				if(ecco){
-					for(Read r : reads){
-						Read r2=r.mate;
-						assert(r.obj==null) : "TODO: Pivot should not have been generated yet, though it may be OK.";
-						assert(r2!=null) : "ecco requires paired reads.";
-						if(r2!=null){
-							int x=BBMerge.findOverlapStrict(r, r2, true);
-							if(x>=0){
-								r.obj=null;
-								r2.obj=null;
-							}
-						}
-					}
-				}
-				
-				ArrayList<Read> hashList=reads;
-				if(paired && unpair){
-					hashList=new ArrayList<Read>(reads.size()*2);
-					for(Read r1 : reads){
-						Read r2=r1.mate;
-						assert(r2!=null);
-						hashList.add(r1);
-						hashList.add(r2);
-						if(groups>1 || !repair || namesort){
-							r1.mate=null;
-							r2.mate=null;
-						}
-					}
-				}
-				
-				kc.hash(hashList, table, minCount, true);
-				storage.addAll(hashList);
-				cris.returnList(ln.id, ln.list.isEmpty());
-				ln=cris.nextList();
-				reads=(ln!=null ? ln.list : null);
-			}
-			if(ln!=null){
-				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
-			}
-			
-			if(parallelSort){
-				storage.sort(kc);
-//				Shared.sort(storage, kc); //Already threaded; this is not needed.
-			}else{
-				Collections.sort(storage, kc);
-			}
-		}
-
-		final int id;
-		final ConcurrentReadInputStream cris;
-		final KmerComparator kc;
-		final ArrayList<Read> storage;
-		final boolean unpair;
-		
-		protected long readsProcessedT=0;
-		protected long basesProcessedT=0;
-		protected long diskProcessedT=0;
-		protected long memProcessedT=0;
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
-
-	private int k=31;
-	private int minCount=0;
-	
-	private int groups=1;
-	
-	KCountArray table=null;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------          I/O Fields          ----------------*/
 	/*--------------------------------------------------------------*/
-
-	private String in1=null;
-	private String in2=null;
-
-	private String out1=null;
-	
-	private String extin=null;
-	private String extout=null;
-	
-	/*--------------------------------------------------------------*/
-	
-	protected long readsProcessed=0;
-	protected long basesProcessed=0;
-	protected long diskProcessed=0;
-	protected long memProcessed=0;
-
-	protected long readsThisPass=0;
-	protected long memThisPass=0;
-
-	protected long readsProcessedThisPass=0;
-	protected long clumpsProcessedThisPass=0;
-	protected long correctionsThisPass=0;
-	
-	protected long duplicatesThisPass=0;
-	protected static long duplicatesTotal=0;
-	
-	protected long clumpsProcessedTotal=0;
-	protected static long correctionsTotal=0;
-	
-	protected int passes=1;
-	
-	private long maxReads=-1;
-	private boolean addName=false;
-	private boolean shortName=false;
-	private boolean shrinkName=false;
-	private boolean rcomp=false;
-	private boolean condense=false;
-	private boolean correct=false;
-	private boolean dedupe=false;
-	private boolean splitInput=false;
-	private boolean ecco=false;
-	private boolean unpair=false;
-	private boolean repair=false;
-	private boolean namesort=false;
-	
-	private final boolean parallelSort=Shared.parallelSort;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Final Fields         ----------------*/
@@ -914,17 +450,6 @@ public class KmerSort2 {
 	private final FileFormat ffin1[];
 	private final FileFormat ffin2[];
 
-	private final FileFormat ffout[];
-	
-	/*--------------------------------------------------------------*/
-	/*----------------        Common Fields         ----------------*/
-	/*--------------------------------------------------------------*/
-	
-	private PrintStream outstream=System.err;
-	public static boolean verbose=true;
-	public static boolean doHashAndSplit=true;
-	public boolean errorState=false;
-	private boolean overwrite=false;
-	private boolean append=false;
+	private final FileFormat ffout1[];
 	
 }

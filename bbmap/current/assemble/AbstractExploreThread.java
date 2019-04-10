@@ -1,6 +1,6 @@
 package assemble;
 
-import stream.ByteBuilder;
+import structures.ByteBuilder;
 import ukmer.Kmer;
 
 /**
@@ -17,6 +17,7 @@ abstract class AbstractExploreThread extends ShaveObject implements Runnable {
 	public AbstractExploreThread(int id_, int kbig_){
 		id=id_;
 		myKmer=new Kmer(kbig_);
+		myKmer2=new Kmer(kbig_);
 		thread=new Thread(this);
 	}
 
@@ -33,45 +34,45 @@ abstract class AbstractExploreThread extends ShaveObject implements Runnable {
 
 		//The number is lower than expected.  65k for 600k reads with errors.  Most are bubbles, but 40% should be dead ends, or 240k.
 
-		while(processNextTable(myKmer)){}
-		while(processNextVictims(myKmer)){}
+		while(processNextTable(myKmer, myKmer2)){}
+		while(processNextVictims(myKmer, myKmer2)){}
 		
 		for(int i=0; i<removeMatrixT.length; i++){
 			for(int j=0; j<removeMatrixT.length; j++){
-				if((i==FORWARD_BRANCH || i==BACKWARD_BRANCH) && (j==FORWARD_BRANCH || j==BACKWARD_BRANCH)){
+				if((i==F_BRANCH || i==B_BRANCH) && (j==F_BRANCH || j==B_BRANCH)){
 					bubblesFoundT+=removeMatrixT[i][j];
 				}
 			}
 		}
 	}
 
-	boolean processNextTable(){return processNextTable(myKmer);}
-	abstract boolean processNextTable(final Kmer kmer);
+	boolean processNextTable(){return processNextTable(myKmer, myKmer2);}
+	abstract boolean processNextTable(final Kmer kmer, Kmer temp);
 
-	boolean processNextVictims(){return processNextVictims(myKmer);}
-	abstract boolean processNextVictims(final Kmer kmer);
+	boolean processNextVictims(){return processNextVictims(myKmer, myKmer);}
+	abstract boolean processNextVictims(final Kmer kmer, Kmer temp);
 
-	/*--------------------------------------------------------------*/	
+	/*--------------------------------------------------------------*/
 
 	public final void start(){thread.start();}
 	public final Thread.State getState(){return thread.getState();}
 	public final void join() throws InterruptedException{thread.join();}
 
-	/*--------------------------------------------------------------*/	
+	/*--------------------------------------------------------------*/
 	
 	long kmersTestedT=0;
 	long deadEndsFoundT=0;
 	long bubblesFoundT=0;
 	
 	final int id;
-	final Kmer myKmer;
+	final Kmer myKmer, myKmer2;
 
 	final int[] leftCounts=new int[4];
 	final int[] rightCounts=new int[4];
 	final ByteBuilder builderT=new ByteBuilder();
 
-	long[][] countMatrixT=new long[8][8];
-	long[][] removeMatrixT=new long[8][8];
+	long[][] countMatrixT=new long[MAX_CODE+1][MAX_CODE+1];
+	long[][] removeMatrixT=new long[MAX_CODE+1][MAX_CODE+1];
 	
 	public final Thread thread;
 	

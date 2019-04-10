@@ -7,36 +7,39 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.KillSwitch;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import stream.SamLine;
-import structures.CoverageArray;
-import structures.CoverageArray2;
-import structures.CoverageArray3;
-import structures.IntList;
-import structures.ListNum;
 import dna.AminoAcid;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import stream.SamLine;
+import structures.CoverageArray;
+import structures.CoverageArray2;
+import structures.CoverageArray3;
+import structures.EntropyTracker;
+import structures.IntList;
+import structures.ListNum;
 
 /**
- * Masks a fasta file by inserting 'N' in place of low-complexity short repeats, 
+ * Masks a fasta file by inserting 'N' in place of low-complexity short repeats,
  * and anything covered by mapped reads in a sam file.
  * 
  * @author Brian Bushnell
@@ -47,29 +50,25 @@ public class BBMask{
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		BBMask masker=new BBMask(args);
-		masker.process(t);
+		BBMask x=new BBMask(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 
 	public BBMask(String[] args){
 		
-		if(args==null || args.length==0){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=16;
-		
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		
-		Parser parser=new Parser();
 		boolean setEntropyMode=false;
 		
 		for(int i=0; i<args.length; i++){
@@ -77,11 +76,8 @@ public class BBMask{
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -200,10 +196,8 @@ public class BBMask{
 
 		assert(FastaReadInputStream.settingsOK());
 
-		if(inRef==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(inRef==null){throw new RuntimeException("Error - at least one input file is required.");}
+		
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -213,8 +207,6 @@ public class BBMask{
 		if(!Tools.testOutputFiles(overwrite, append, false, outRef)){
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output file "+outRef+"\n");
 		}
-
-		FASTQ.PARSE_CUSTOM=parsecustom;
 		
 		ffoutRef=FileFormat.testOutput(outRef, FileFormat.FASTA, extoutRef, true, overwrite, append, false);
 
@@ -231,20 +223,7 @@ public class BBMask{
 		
 		SamLine.CONVERT_CIGAR_TO_MATCH=false;
 		
-
-		if(window>0){
-			entropy=new double[window+2];
-			double mult=1d/window;
-			for(int i=0; i<entropy.length; i++){
-				double pk=i*mult;
-				entropy[i]=pk*Math.log(pk);
-			}
-			entropyMult=-1/Math.log(window);
-		}else{
-			entropy=null;
-			entropyMult=0;
-		}
-		
+		EntropyTracker.verify=verify;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -291,8 +270,8 @@ public class BBMask{
 			while(bmstring.length()<12){bmstring=" "+bmstring;}
 	
 			outstream.println("Repeat Masking Time:          \t"+t);
-			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format("%.2fk scafs/sec", rpnano*1000000));
-			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format(Locale.ROOT, "%.2fk scafs/sec", rpnano*1000000));
+			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 			outstream.println("Repeat Bases Masked:    "+bmstring);
 		}
 
@@ -300,7 +279,6 @@ public class BBMask{
 			t.start();
 			if(entropyMode){
 				outstream.println("\nMasking low-entropy (to disable, set 'mle=f')");
-//				lowcomplexity=maskLowEntropy_ST(null);
 				lowcomplexity=maskLowEntropy();
 			}else{
 				outstream.println("\nMasking low-complexity (to disable, set 'mlc=f')");
@@ -320,8 +298,8 @@ public class BBMask{
 			while(bmstring.length()<12){bmstring=" "+bmstring;}
 	
 			outstream.println("Low Complexity Masking Time:  \t"+t);
-			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format("%.2fk scafs/sec", rpnano*1000000));
-			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format(Locale.ROOT, "%.2fk scafs/sec", rpnano*1000000));
+			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 			outstream.println("Low Complexity Bases:   "+bmstring);
 		}
 		
@@ -343,8 +321,8 @@ public class BBMask{
 			while(bmstring.length()<12){bmstring=" "+bmstring;}
 			
 			outstream.println("Sam Masking Time:             \t"+t);
-			outstream.println("Sam Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Sam Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println("Sam Reads Processed:    "+rpstring+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
+			outstream.println("Sam Bases Processed:    "+bpstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 			outstream.println("Sam Bases Masked:       "+bmstring);
 		}
 		long total=repeats+mapping+lowcomplexity, masked=0;
@@ -373,7 +351,7 @@ public class BBMask{
 			t0.stop();
 			String tstring=""+total;
 			while(tstring.length()<12){tstring=" "+tstring;}
-			outstream.println("\nTotal Bases Masked:     "+tstring+"/"+refBases+String.format("\t%.3f%%", total*100.0/refBases));
+			outstream.println("\nTotal Bases Masked:     "+tstring+"/"+refBases+String.format(Locale.ROOT, "\t%.3f%%", total*100.0/refBases));
 			outstream.println("Total Time:                   \t"+t0);
 		}
 		
@@ -386,7 +364,7 @@ public class BBMask{
 	
 	/*--------------------------------------------------------------*/
 	
-	private int setHighCoverage(BitSet bs, CoverageArray ca, int maxAllowedCoverage, int maxLen){
+	private static int setHighCoverage(BitSet bs, CoverageArray ca, int maxAllowedCoverage, int maxLen){
 		int numSet=0;
 		for(int i=0; i<maxLen; i++){
 			if(ca.get(i)>maxAllowedCoverage){
@@ -397,7 +375,7 @@ public class BBMask{
 		return numSet;
 	}
 	
-	private int setLowCoverage(BitSet bs, CoverageArray ca, int minAllowedCoverage, int maxLen){
+	private static int setLowCoverage(BitSet bs, CoverageArray ca, int minAllowedCoverage, int maxLen){
 		int numSet=0;
 		for(int i=0; i<maxLen; i++){
 			if(ca.get(i)<minAllowedCoverage){
@@ -411,35 +389,35 @@ public class BBMask{
 	private long maskFromBitsets(final boolean lowercase){
 		System.err.println("\nConverting masked bases to "+(lowercase ? "lower case" : "N")); //123
 		long sum=0;
+		for(Read r : map.values()){
+			sum+=maskRead(r, (BitSet)r.obj, lowercase);
+		}
+		System.err.println("Done Masking");
+		return sum;
+	}
+	
+	public static int maskRead(final Read r, final BitSet bs, final boolean lowercase){
+		final byte[] bases=r.bases;
+		int sum=0;
 		if(!lowercase){
-			for(Read r : map.values()){
-//				System.err.println(r.id); //123
-				BitSet bs=((BitSet)r.obj);
-				byte[] bases=r.bases;
-				for(int i=0; i<bases.length; i++){
-					if(bs.get(i)){
-						if(bases[i]!='N'){sum++;}
-						bases[i]='N';
-					}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
-						bases[i]='N';
-					}
+			for(int i=0; i<bases.length; i++){
+				if(bs.get(i)){
+					if(bases[i]!='N'){sum++;}
+					bases[i]='N';
+				}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
+					bases[i]='N';
 				}
 			}
 		}else{
-			for(Read r : map.values()){
-				BitSet bs=((BitSet)r.obj);
-				byte[] bases=r.bases;
-				for(int i=0; i<bases.length; i++){
-					if(bs.get(i)){
-						if(!Character.isLowerCase(bases[i]) && bases[i]!='N'){sum++;}
-						bases[i]=(byte)Character.toLowerCase(bases[i]);
-					}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
-						bases[i]='N';
-					}
+			for(int i=0; i<bases.length; i++){
+				if(bs.get(i)){
+					if(!Tools.isLowerCase(bases[i]) && bases[i]!='N'){sum++;}
+					bases[i]=(byte)Tools.toLowerCase(bases[i]);
+				}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
+					bases[i]='N';
 				}
 			}
 		}
-		System.err.println("Done Masking");
 		return sum;
 	}
 	
@@ -476,7 +454,7 @@ public class BBMask{
 							if(len>0){
 								byte[] bases2=KillSwitch.copyOfRange(bases, lastBad+1, i);
 								byte[] quals2=(quals==null ? null : KillSwitch.copyOfRange(quals, lastBad+1, i));
-								Read r2=new Read(bases2, -1, -1, -1, r.id+"_"+rnum, quals2, r.numericID, r.flags);
+								Read r2=new Read(bases2, quals2, r.id+"_"+rnum, r.numericID, r.flags);
 								Read old=map2.put(r2.id, r2);
 								assert(old==null) : "Duplicate id "+r2.id; //TODO:  This can easily be resolved by making a new ID string.
 							}
@@ -491,7 +469,7 @@ public class BBMask{
 					if(len>0){
 						byte[] bases2=KillSwitch.copyOfRange(bases, lastBad+1, i);
 						byte[] quals2=(quals==null ? null : KillSwitch.copyOfRange(quals, lastBad+1, i));
-						Read r2=new Read(bases2, -1, -1, -1, r.id+"_"+rnum, quals2, r.numericID, r.flags);
+						Read r2=new Read(bases2, quals2, r.id+"_"+rnum, r.numericID, r.flags);
 						Read old=map2.put(r2.id, r2);
 						assert(old==null) : "Duplicate id "+r2.id; //TODO:  This can easily be resolved by making a new ID string.
 					}
@@ -521,7 +499,7 @@ public class BBMask{
 			Read r=map.get(name);
 			ArrayList<Read> list=new ArrayList<Read>(1);
 			list.add(r);
-			ros.add(list, i);
+			if(ros!=null){ros.add(list, i);}
 			i++;
 		}
 		errorState|=ReadWrite.closeStream(ros);
@@ -634,7 +612,7 @@ public class BBMask{
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r=reads.get(idx);
@@ -670,7 +648,7 @@ public class BBMask{
 					}
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -707,7 +685,7 @@ public class BBMask{
 				numeric=true;
 			}else{
 				for(byte b : match){
-					if(Character.isDigit(b)){
+					if(Tools.isDigit(b)){
 						numeric=true;
 						break;
 					}
@@ -813,7 +791,7 @@ public class BBMask{
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r=reads.get(idx);
@@ -834,7 +812,7 @@ public class BBMask{
 					
 					if(MaskByLowercase){
 						for(int i=0; i<len; i++){
-							if(bases[i]=='N' || Character.isLowerCase(bases[i])){bs.set(i);}
+							if(bases[i]=='N' || Tools.isLowerCase(bases[i])){bs.set(i);}
 						}
 					}else{
 						for(int i=0; i<len; i++){
@@ -848,7 +826,7 @@ public class BBMask{
 					assert(old==null) : "Duplicate reference scaffold name "+r.id;
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -973,17 +951,6 @@ public class BBMask{
 	/*--------------------------------------------------------------*/
 	
 	
-	private long maskLowEntropy_ST(short[][] matrix){
-		long sum=0;
-		if(matrix==null){matrix=new short[maxk2+1][];}
-		short[] countCounts=new short[window+2];
-		countCounts[0]=(short)window;
-		for(Read r : map.values()){
-			sum+=maskLowEntropy(r, mink2, maxk2, window, entropyCutoff, matrix, countCounts);
-		}
-		return sum;
-	}
-	
 	private long maskLowEntropy(){
 		ArrayBlockingQueue<Read> queue=new ArrayBlockingQueue<Read>(map.size());
 		for(Read r : map.values()){queue.add(r);}
@@ -1011,161 +978,60 @@ public class BBMask{
 		
 		MaskLowEntropyThread(ArrayBlockingQueue<Read> queue_, int mink_, int maxk_, int window_, float cutoff_){
 			queue=queue_;
-			mink=mink_;
-			maxk=maxk_;
-			window=(short)window_;
+			minkT=mink_;
+			maxkT=maxk_;
+			windowT=(short)window_;
 			cutoff=cutoff_;
-			countCounts=new short[window+2];
-			matrix=new short[maxk+1][];
-			countCounts[0]=window;
+			trackers=new EntropyTracker[maxkT+1];
+			for(int i=minkT; i<=maxkT; i++){
+				trackers[i]=new EntropyTracker(i, windowT, false, cutoff, true);
+			}
 		}
 		
 		@Override
 		public void run(){
 			for(Read r=queue.poll(); r!=null; r=queue.poll()){
-				masked+=maskLowEntropy(r, mink, maxk, window, cutoff, matrix, countCounts);
+				masked+=maskLowEntropy(r, minkT, maxkT, trackers);
 			}
 		}
 		
 		final ArrayBlockingQueue<Read> queue;
-		final int mink;
-		final int maxk;
-		final short window;
+		final int minkT;
+		final int maxkT;
 		final float cutoff;
-		final short[] countCounts;
-		final short[][] matrix;
+		final int windowT;
+		final EntropyTracker[] trackers;
 		long masked=0;
 		
 	}
 	
-	private int maskLowEntropy(Read r, int mink, int maxk, int window, float cutoff, short[][] matrix, short[] countCounts){
+	private int maskLowEntropy(Read r, int mink, int maxk, EntropyTracker[] trackers){
 //		outstream.println("maskLowEntropy("+r.numericID+", "+mink+", "+maxk+", "+window+", "+cutoff+", "+matrix.length+", "+countCounts.length+")");
 //		System.err.println(new String(r.bases));
 		final byte[] bases=r.bases;
 		final BitSet bs=(BitSet)r.obj;
 		
 		int before=bs.cardinality();
-//		System.err.println("\nbefore="+before+"\n"+new String(bases)+"\n"+bs);
 		
 		for(int k=mink; k<=maxk; k++){
-			if(matrix[k]==null){matrix[k]=new short[(1<<(2*k))];}
-		}
-		
-		for(int k=mink; k<=maxk; k++){
-			final short[] counts=matrix[k];
-			final int kmerspace=(1<<(2*k));
-			maskLowEntropy(bases, bs, k, window, counts, countCounts, cutoff, kmerspace);
+			maskLowEntropy(bases, bs, trackers[k]);
 		}
 
 		int after=bs.cardinality();
-		
-//		System.err.println("before="+before+", after="+after+"\n"+new String(bases)+"\n"+bs);
 		
 		return after-before;
 	}
 	
 	
-	private void maskLowEntropy(final byte[] bases, final BitSet bs, final int k, final int window, final short[] counts, final short[] countCounts, float cutoff, int kmerspace){
-		assert(k>0) : "k must be greater than 0";
-//		Arrays.fill(counts, 0);
-
-		assert(countCounts[0]==window);
-		if(verify){
-			for(int c : counts){assert(c==0);}
-			for(int i=1; i<countCounts.length; i++){assert(countCounts[i]==0);}
-		}
+	private static void maskLowEntropy(final byte[] bases, final BitSet bs, final EntropyTracker et){
+		final int window=et.windowBases();
+		if(bases.length<window){return;}
 		
-		final int mask=(k>15 ? -1 : ~((-1)<<(2*k)));
-		int current=0, ns=0;
-		int kmer=0, kmer2=0;
-		
-		for(int i=0, i2=-window; i2<bases.length; i++, i2++){
-			
-//			System.err.println("\nStart: i="+i+", current="+current+", ns="+ns+"\n"+Arrays.toString(counts)+"\n"+Arrays.toString(countCounts));
-			
-			if(i<bases.length){
-				final byte b=bases[i];
-				final int n=Dedupe.baseToNumber[b];
-				kmer=((kmer<<2)|n)&mask;
-				
-				if(!AminoAcid.isFullyDefined(b)){ns++;}
-				if(counts[kmer]<1){
-					assert(counts[kmer]==0);
-					current++;
-				}
-				countCounts[counts[kmer]]--;
-				assert(countCounts[counts[kmer]]>=-1): i+", "+current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts)+"\n"+Arrays.toString(countCounts);
-				counts[kmer]++;
-				assert(counts[kmer]<=window+1) : Arrays.toString(counts)+"\n"+Arrays.toString(countCounts);
-				countCounts[counts[kmer]]++;
-				if(verify){
-					assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);
-					assert(Tools.sum(countCounts)>0 && (Tools.sum(countCounts)<=window+1)): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
-				}
-				
-//				System.err.println("Added "+kmer+"; counts["+kmer+"]="+counts[kmer]);
-			}
-			
-			if(i2>=0){
-				final byte b2=bases[i2];
-				final int n2=Dedupe.baseToNumber[b2];
-				kmer2=((kmer2<<2)|n2)&mask;
-
-				if(!AminoAcid.isFullyDefined(b2)){
-					ns--;
-					assert(ns>=0);
-				}
-				countCounts[counts[kmer2]]--;
-				assert(countCounts[counts[kmer2]]>=0);
-				counts[kmer2]--;
-				countCounts[counts[kmer2]]++;
-				if(counts[kmer2]<1){
-					assert(counts[kmer2]==0) : Arrays.toString(counts);
-					current--;
-				}
-				if(verify){
-					assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);
-					assert(Tools.sum(countCounts)>=0 && (Tools.sum(countCounts)<=window)): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
-				}
-				
-//				System.err.println("Removed "+kmer2+"; count="+counts[kmer2]);
-			}
-			
-			if(verify && i2>-1 && i<bases.length){
-				assert(Tools.sum(counts)==window);
-				assert(Tools.sum(countCounts)==window): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
-			}
-			
-			if(ns<1 && i2>=-1 && i<bases.length && calcEntropy(countCounts, window, kmerspace)<cutoff){
-//				System.err.println("Masked ("+(i2+1)+", "+(i+1)+")");
-				bs.set(i2+1, i+1);
-			}
+		et.clear();
+		for(int i=0, min=window-1; i<bases.length; i++){
+			et.add(bases[i]);
+			if(i>=min && et.ns()<1 && !et.passes()){bs.set(et.leftPos(), et.rightPos()+1);}
 		}
-		
-	}
-	
-	private float calcEntropy(int[] countCounts, int window, int kmerspace){
-		double sum=0;
-		for(int i=1; i<countCounts.length; i++){
-			int cc=countCounts[i];
-			double pklogpk=entropy[i];
-			sum+=(cc*pklogpk);
-		}
-//		System.err.println("sum = "+sum);
-//		System.err.println("entropy = "+(sum*entropyMult));
-		return (float)(sum*entropyMult);
-	}
-	
-	private float calcEntropy(short[] countCounts, int window, int kmerspace){
-		double sum=0;
-		for(int i=1; i<countCounts.length; i++){
-			int cc=countCounts[i];
-			double pklogpk=entropy[i];
-			sum+=(cc*pklogpk);
-		}
-//		System.err.println("sum = "+sum);
-//		System.err.println("entropy = "+(sum*entropyMult));
-		return (float)(sum*entropyMult);
 	}
 	
 	
@@ -1207,24 +1073,24 @@ public class BBMask{
 		
 		MaskRepeatThread(ArrayBlockingQueue<Read> queue_, int mink_, int maxk_, int mincount_, int minlen_){
 			queue=queue_;
-			mink=mink_;
-			maxk=maxk_;
-			mincount=mincount_;
-			minlen=minlen_;
+			minkT=mink_;
+			maxkT=maxk_;
+			mincountT=mincount_;
+			minlenT=minlen_;
 		}
 		
 		@Override
 		public void run(){
 			for(Read r=queue.poll(); r!=null; r=queue.poll()){
-				masked+=maskRepeats(r, mink, maxk, mincount, minlen);
+				masked+=maskRepeats(r, minkT, maxkT, mincountT, minlenT);
 			}
 		}
 		
 		final ArrayBlockingQueue<Read> queue;
-		final int mink;
-		final int maxk;
-		final int mincount;
-		final int minlen;
+		final int minkT;
+		final int maxkT;
+		final int mincountT;
+		final int minlenT;
 		long masked=0;
 		
 	}
@@ -1308,18 +1174,6 @@ public class BBMask{
 
 	/*--------------------------------------------------------------*/
 
-	private void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("java -ea -Xmx15g -cp <path> jgi.BBMask ref=<file> sam=<file,file,...file> out=<file>");
-		outstream.println("sam and out are optional.\n");
-		outstream.println("Other parameters and their defaults:\n");
-		outstream.println("overwrite=false  \tOverwrites files that already exist");
-		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
-		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-	}
-
 	/*--------------------------------------------------------------*/
 
 	/*--------------------------------------------------------------*/
@@ -1350,8 +1204,7 @@ public class BBMask{
 
 	private String extinRef=null;
 	private String extoutRef=null;
-
-	private boolean parsecustom=false;
+	
 	private boolean overwrite=false;
 	private boolean append=false;
 
@@ -1390,9 +1243,6 @@ public class BBMask{
 	private final FileFormat ffoutRef;
 
 	private PrintStream outstream=System.err;
-
-	private final double[] entropy;
-	private final double entropyMult;
 
 	/*--------------------------------------------------------------*/
 	

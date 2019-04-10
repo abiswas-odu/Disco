@@ -2,21 +2,22 @@ package sort;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 
-import stream.ConcurrentReadInputStream;
-import stream.Read;
-import structures.ListNum;
 import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadInputStream;
+import stream.Read;
+import structures.ByteBuilder;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -26,6 +27,12 @@ import shared.Tools;
 public class SortReadsByID {
 	
 	public static void main(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		Parser parser=new Parser();
 		String in1=null;
@@ -37,12 +44,8 @@ public class SortReadsByID {
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-//			System.err.println("Processing "+args[i]);
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -51,6 +54,7 @@ public class SortReadsByID {
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("i") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				in1=b;
 				if(b.indexOf('#')>=0){
 					in1=b.replaceFirst("#", "1");
@@ -113,7 +117,7 @@ public class SortReadsByID {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 
@@ -128,13 +132,13 @@ public class SortReadsByID {
 					b.add(r);
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ReadWrite.closeStream(cris);
 		}
 		
@@ -170,16 +174,16 @@ public class SortReadsByID {
 				ListNum<Read> ln=cris.nextList();
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					reads2.addAll(reads);
 					//System.err.println("returning list");
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					//System.err.println("fetching list");
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ReadWrite.closeStream(cris);
 			}
 			
@@ -201,11 +205,6 @@ public class SortReadsByID {
 		
 	}
 	
-	/**
-	 * @param in1
-	 * @param in2
-	 * @param covstats
-	 */
 	public SortReadsByID(String in1_, String in2_, String out_) {
 		in1=in1_;
 		in2=in2_;
@@ -248,8 +247,8 @@ public class SortReadsByID {
 			count++;
 			Read r2=r.mate;
 			
-			StringBuilder sb1=outText ? r.toText(true) : outFastq ? r.toFastq() : outFasta ? r.toFasta() : null;
-			StringBuilder sb2=r2==null ? null : outText ? r2.toText(true) : outFastq ? r2.toFastq() : outFasta ? r2.toFasta() : null;
+			ByteBuilder sb1=outText ? r.toText(true) : outFastq ? r.toFastq() : outFasta ? r.toFasta() : null;
+			ByteBuilder sb2=r2==null ? null : outText ? r2.toText(true) : outFastq ? r2.toFastq() : outFasta ? r2.toFasta() : null;
 			
 			tsw1.print(sb1.append('\n'));
 			if(sb2!=null){

@@ -1,11 +1,11 @@
 package driver;
 
-import stream.SamLine;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
 import shared.Shared;
 import shared.Tools;
+import stream.SamLine;
 
 /**
  * 
@@ -33,7 +33,7 @@ public final class SelectReads {
 		if(args.length>3){minlen=Integer.parseInt(args[3]);}
 		if(args.length>4){reads=Tools.parseKMG(args[4]);}
 		
-		symbol=Character.toUpperCase(symbol);
+		symbol=Tools.toUpperCase(symbol);
 		if(symbol=='='){symbol='M';}
 		if(symbol=='X'){symbol='S';}
 		if(symbol=='N'){symbol='D';}
@@ -42,7 +42,7 @@ public final class SelectReads {
 		final int index=Tools.indexOf(new char[] {'M','S','D','I','C'}, symbol);
 		assert(index>=0) : "Symbol (3rd argument) must be M, S, D, I, C (for match string symbols) or M, =, X, D, N, I, S, H, P (for cigar symbols).";
 		
-		TextFile tf=new TextFile(args[0], true, false);
+		TextFile tf=new TextFile(args[0], true);
 		TextStreamWriter tsw=new TextStreamWriter(args[1], false, false, true);
 		tsw.start();
 		

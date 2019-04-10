@@ -2,11 +2,10 @@ package align2;
 
 import java.io.File;
 import java.io.Serializable;
-import java.util.Arrays;
 
 import fileIO.LoadThread;
 import fileIO.ReadWrite;
-import stream.KillSwitch;
+import shared.KillSwitch;
 
 /**
  * @author Brian Bushnell

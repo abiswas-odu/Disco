@@ -1,23 +1,27 @@
 package align2;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Locale;
 
-import stream.KillSwitch;
-import stream.Read;
-import stream.SamLine;
-import stream.SiteScore;
-
-import dna.Parser;
 import fileIO.TextFile;
+import shared.PreParser;
 import shared.Timer;
 import shared.Tools;
+import stream.Header;
+import stream.Read;
+import stream.SamLine;
 
 public class MakeRocCurve {
 	
 	
 	public static void main(String[] args){
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		Timer t=new Timer();
 		String in=null;
@@ -28,11 +32,8 @@ public class MakeRocCurve {
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("in") || a.equals("in1")){
+			if(a.equals("in") || a.equals("in1")){
 				in=b;
 			}else if(a.equals("reads")){
 				reads=Tools.parseKMG(b);
@@ -46,11 +47,13 @@ public class MakeRocCurve {
 				USE_BITSET=Tools.parseBoolean(b);
 			}else if(a.equals("thresh")){
 				THRESH2=Integer.parseInt(b);
+			}else if(a.equals("allowspaceslash")){
+				allowSpaceslash=Tools.parseBoolean(b);
 			}else if(a.equals("outputerrors")){
 //				OUTPUT_ERRORS=true;
 			}else if(i==0 && args[i].indexOf('=')<0 && (a.startsWith("stdin") || new File(args[0]).exists())){
 				in=args[0];
-			}else if(i==1 && args[i].indexOf('=')<0 && Character.isDigit(a.charAt(0))){
+			}else if(i==1 && args[i].indexOf('=')<0 && Tools.isDigit(a.charAt(0))){
 				reads=Tools.parseKMG(a);
 			}
 		}
@@ -78,7 +81,7 @@ public class MakeRocCurve {
 	}
 	
 	public static void process(String samfile){
-		TextFile tf=new TextFile(samfile, false, false);
+		TextFile tf=new TextFile(samfile, false);
 		
 		String s=null;
 		for(s=tf.nextLine(); s!=null; s=tf.nextLine()){
@@ -155,23 +158,23 @@ public class MakeRocCurve {
 				StringBuilder sb=new StringBuilder();
 				sb.append(q);
 				sb.append('\t');
-				sb.append(String.format("%.4f", mappedB));
+				sb.append(String.format(Locale.ROOT, "%.4f", mappedB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", retainedB));
+				sb.append(String.format(Locale.ROOT, "%.4f", retainedB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", truePositiveStrictB));
+				sb.append(String.format(Locale.ROOT, "%.4f", truePositiveStrictB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", falsePositiveStrictB));
+				sb.append(String.format(Locale.ROOT, "%.4f", falsePositiveStrictB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", truePositiveLooseB));
+				sb.append(String.format(Locale.ROOT, "%.4f", truePositiveLooseB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", falsePositiveLooseB));
+				sb.append(String.format(Locale.ROOT, "%.4f", falsePositiveLooseB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", falseNegativeB));
+				sb.append(String.format(Locale.ROOT, "%.4f", falseNegativeB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", discardedB));
+				sb.append(String.format(Locale.ROOT, "%.4f", discardedB));
 				sb.append('\t');
-				sb.append(String.format("%.4f", ambiguousB));
+				sb.append(String.format(Locale.ROOT, "%.4f", ambiguousB));
 				
 				System.out.println(sb);
 			}else{
@@ -215,88 +218,119 @@ public class MakeRocCurve {
 			mappedRetainedA[q]++;
 
 			if(parsecustom){
-				SiteScore os=r.originalSite;
-				assert(os!=null);
-				if(os!=null){
-					int trueChrom=os.chrom;
-					byte trueStrand=os.strand;
-					int trueStart=os.start;
-					int trueStop=os.stop;
-					SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
-					byte[] originalContig=sl.originalContig();
-					if(BLASR){
-						originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig : 
-							KillSwitch.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
-					}
-					int cstart=sl.originalContigStart();
+				Header h=new Header(sl.qname, sl.pairnum());
+				boolean strict=isCorrectHit(sl, h);
+				boolean loose=isCorrectHitLoose(sl, h);
 
-					boolean strict=isCorrectHit(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH, originalContig, sl.rname(), cstart);
-					boolean loose=isCorrectHitLoose(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH+THRESH2, originalContig, sl.rname(), cstart);
+//				SiteScore os=r.originalSite;
+//				int trueChrom=os.chrom;
+//				byte trueStrand=os.strand;
+//				int trueStart=os.start;
+//				int trueStop=os.stop;
+//				SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
+//				byte[] originalContig=sl.originalContig();
+//				if(BLASR){
+//					originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig :
+//						KillSwitch.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
+//				}
+//				int cstart=sl.originalContigStart();
+//
+//				boolean strict=isCorrectHit(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH, originalContig, sl.rname(), cstart);
+//				boolean loose=isCorrectHitLoose(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH+THRESH2, originalContig, sl.rname(), cstart);
+//
+//				//				if(!strict){
+//				//					System.out.println(ss+", "+new String(originalContig)+", "+new String(sl.rname()));
+//				//					assert(false);
+//				//				}
+//
+//				//				System.out.println("loose = "+loose+" for "+r.toText());
 
-					//				if(!strict){
-					//					System.out.println(ss+", "+new String(originalContig)+", "+new String(sl.rname()));
-					//					assert(false);
-					//				}
+				if(loose){
+					//					System.err.println("TPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
+					//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
+					truePositiveLooseA[q]++;
+				}else{
+					//					System.err.println("FPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
+					//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
+					falsePositiveLooseA[q]++;
+				}
 
-					//				System.out.println("loose = "+loose+" for "+r.toText());
-
-					if(loose){
-						//					System.err.println("TPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
-						//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
-						truePositiveLooseA[q]++;
-					}else{
-						//					System.err.println("FPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
-						//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
-						falsePositiveLooseA[q]++;
-					}
-
-					if(strict){
-						//					System.err.println("TPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
-						truePositiveStrictA[q]++;
-					}else{
-						//					System.err.println("FPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
-						falsePositiveStrictA[q]++;
-					}
+				if(strict){
+					//					System.err.println("TPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
+					truePositiveStrictA[q]++;
+				}else{
+					//					System.err.println("FPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
+					falsePositiveStrictA[q]++;
 				}
 			}
 		}
-		
 	}
 	
+	public static boolean isCorrectHit(SamLine sl, Header h){
+		if(!sl.mapped()){return false;}
+		if(h.strand!=sl.strand()){return false;}
+		int start=sl.start(true, true);
+		int stop=sl.stop(start, true, true);
+		if(h.start!=start){return false;}
+		if(h.stop!=stop){return false;}
+		if(!h.rname.equals(sl.rnameS())){return false;}
+		return true;
+	}
 	
-	
-	public static boolean isCorrectHit(SiteScore ss, int trueChrom, byte trueStrand, int trueStart, int trueStop, int thresh,
-			byte[] originalContig, byte[] contig, int cstart){
-		if(ss.strand!=trueStrand){return false;}
-		if(originalContig!=null){
-			if(!Arrays.equals(originalContig, contig)){return false;}
-		}else{
-			if(ss.chrom!=trueChrom){return false;}
-		}
+	public static boolean isCorrectHitLoose(SamLine sl, Header h){
+		if(!sl.mapped()){return false;}
+		if(h.strand!=sl.strand()){return false;}
+		int start=sl.start(true, true);
+		int stop=sl.stop(start, true, true);
+		if(!h.rname.equals(sl.rnameS())){return false;}
 
-		assert(ss.stop>ss.start) : ss.toText()+", "+trueStart+", "+trueStop;
-		assert(trueStop>trueStart) : ss.toText()+", "+trueStart+", "+trueStop;
-		int cstop=cstart+trueStop-trueStart;
-//		return (absdif(ss.start, trueStart)<=thresh && absdif(ss.stop, trueStop)<=thresh);
-		return (absdif(ss.start, cstart)<=thresh && absdif(ss.stop, cstop)<=thresh);
+		if(h.start!=start){return false;}
+		if(h.stop!=stop){return false;}
+		return(absdif(h.start, start)<=THRESH2 || absdif(h.stop, stop)<=THRESH2);
 	}
 	
 	
-	public static boolean isCorrectHitLoose(SiteScore ss, int trueChrom, byte trueStrand, int trueStart, int trueStop, int thresh,
-			byte[] originalContig, byte[] contig, int cstart){
-		if(ss.strand!=trueStrand){return false;}
-		if(originalContig!=null){
-			if(!Arrays.equals(originalContig, contig)){return false;}
-		}else{
-			if(ss.chrom!=trueChrom){return false;}
-		}
-
-		assert(ss.stop>ss.start) : ss.toText()+", "+trueStart+", "+trueStop;
-		assert(trueStop>trueStart) : ss.toText()+", "+trueStart+", "+trueStop;
-		int cstop=cstart+trueStop-trueStart;
-//		return (absdif(ss.start, trueStart)<=thresh || absdif(ss.stop, trueStop)<=thresh);
-		return (absdif(ss.start, cstart)<=thresh || absdif(ss.stop, cstop)<=thresh);
-	}
+	
+	
+//	public static boolean isCorrectHit(SiteScore ss, int trueChrom, byte trueStrand, int trueStart, int trueStop, int thresh,
+//			byte[] originalContig, byte[] contig, int cstart){
+//		if(ss.strand!=trueStrand){return false;}
+//		if(originalContig!=null){
+//			if(!Arrays.equals(originalContig, contig)){
+//				if(allowSpaceslash && originalContig.length==contig.length+3 && Tools.startsWith(originalContig, contig) &&
+//						(Character.isWhitespace(originalContig[originalContig.length-3]))){
+//					//do nothing
+//				}else{
+//					return false;
+//				}
+//			}
+//		}else{
+//			if(ss.chrom!=trueChrom){return false;}
+//		}
+//
+//		assert(ss.stop>ss.start) : ss.toText()+", "+trueStart+", "+trueStop;
+//		assert(trueStop>trueStart) : ss.toText()+", "+trueStart+", "+trueStop;
+//		int cstop=cstart+trueStop-trueStart;
+////		return (absdif(ss.start, trueStart)<=thresh && absdif(ss.stop, trueStop)<=thresh);
+//		return (absdif(ss.start, cstart)<=thresh && absdif(ss.stop, cstop)<=thresh);
+//	}
+//	
+//	
+//	public static boolean isCorrectHitLoose(SiteScore ss, int trueChrom, byte trueStrand, int trueStart, int trueStop, int thresh,
+//			byte[] originalContig, byte[] contig, int cstart){
+//		if(ss.strand!=trueStrand){return false;}
+//		if(originalContig!=null){
+//			if(!Arrays.equals(originalContig, contig)){return false;}
+//		}else{
+//			if(ss.chrom!=trueChrom){return false;}
+//		}
+//
+//		assert(ss.stop>ss.start) : ss.toText()+", "+trueStart+", "+trueStop;
+//		assert(trueStop>trueStart) : ss.toText()+", "+trueStart+", "+trueStop;
+//		int cstop=cstart+trueStop-trueStart;
+////		return (absdif(ss.start, trueStart)<=thresh || absdif(ss.stop, trueStop)<=thresh);
+//		return (absdif(ss.start, cstart)<=thresh || absdif(ss.stop, cstop)<=thresh);
+//	}
 	
 	private static final int absdif(int a, int b){
 		return a>b ? a-b : b-a;
@@ -323,5 +357,6 @@ public class MakeRocCurve {
 	public static boolean BLASR=false;
 	public static boolean USE_BITSET=true;
 	public static BitSet seen=null;
+	public static boolean allowSpaceslash=true;
 	
 }

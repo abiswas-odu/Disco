@@ -21,6 +21,7 @@ public class Orf implements Comparable<Orf>{
 		assert(stop>start || (start==0 && stop==0));
 	}
 	
+	@Override
 	public String toString(){
 		return name+"\t"+start+"\t"+stop+"\t"+strand;
 	}

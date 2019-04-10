@@ -3,11 +3,17 @@ package var;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 
+import align2.MultiStateAligner9PacBio;
+import align2.MultiStateAligner9ts;
+import align2.TranslateColorspaceRead;
+import dna.Data;
+import fileIO.ReadWrite;
+import fileIO.TextFile;
 import pacbio.SiteR;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -18,13 +24,6 @@ import stream.SiteScore;
 import stream.SiteScoreR;
 import structures.CoverageArray;
 import structures.ListNum;
-import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
-import fileIO.TextFile;
-import align2.MultiStateAligner9PacBio;
-import align2.MultiStateAligner9ts;
-import align2.TranslateColorspaceRead;
 
 /** Splits output files across blocks for low memory usage.
  * Uses id-sorted site list for even lower memory usage. */
@@ -32,35 +31,32 @@ public class GenerateVarlets3 {
 	
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		Data.GENOME_BUILD=-1;
+		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		String reads1=args[0];
 		String reads2=args[1].equalsIgnoreCase("null") ?  null : args[1];
 		String outname=args[2];
 		String pcovFile=null;
 		String covFile=null;
-//		assert(outname.contains("#"));
-		
 		String sitesfile=null;
-		
 		int minChrom=-1;
 		int maxChrom=-1;
-		
 		int distFromDefined=-1;
-		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		for(int i=3; i<args.length; i++){
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(a.equals("condense")){
 				CONDENSE=Tools.parseBoolean(b);
@@ -130,7 +126,7 @@ public class GenerateVarlets3 {
 	
 	public GenerateVarlets3(RTextInputStream stream_, String outname_, long maxReads, String sitesfile_, String pcovFile, int distFromDefined_){
 		sitesfile=sitesfile_;
-		sitesTextFile=new TextFile(sitesfile, false, false);
+		sitesTextFile=new TextFile(sitesfile, false);
 		stream=stream_;
 		outname=outname_;
 		assert(outname==null || outname.contains("#")) : "Output file name must contain the character '#' to be used for key number.";
@@ -467,11 +463,11 @@ public class GenerateVarlets3 {
 				
 				while(!terminate && reads!=null && reads.size()>0){
 					if(processReads){processReads(reads);}
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 			}else{
 				ArrayList<Read> reads=stream.nextList();
 				while(!terminate && reads!=null && reads.size()>0){
@@ -652,7 +648,7 @@ public class GenerateVarlets3 {
 //				System.err.println(r.mate.toText(false));
 //				System.err.println(r.mate.copies);
 //				System.err.println();
-//				
+//
 //				for(Varlet v : vars){
 //					System.err.println(v.toText());
 //					System.err.println(v.numReads);
@@ -758,7 +754,7 @@ public class GenerateVarlets3 {
 		protected boolean finished(){return finished;}
 		protected void terminate(){terminate=true;}
 		
-		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ? 
+		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ?
 				new MultiStateAligner9PacBio(ALIGN_ROWS, ALIGN_COLUMNS) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS));
 		private boolean finished=false;
 		private boolean terminate=false;
@@ -835,7 +831,7 @@ public class GenerateVarlets3 {
 	
 	public static boolean USE_CRIS=true; //Similar speed either way.  "true" may be better with many threads.
 	
-	public static int THREADS=Data.LOGICAL_PROCESSORS;
+	public static int THREADS=Shared.LOGICAL_PROCESSORS;
 	public static int WRITE_BUFFER=16000; //Bigger number uses more memory, for less frequent writes.
 
 	public static boolean CONDENSE=true;

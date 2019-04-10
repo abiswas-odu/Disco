@@ -3,13 +3,14 @@ package server;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.Headers;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * @author Shijie Yao
@@ -27,11 +28,12 @@ public class SimpleHttpServer {
 	}
 
 	static class GetHandler implements HttpHandler {
+		@Override
 		public void handle(HttpExchange t) throws IOException {
 			Headers h = t.getResponseHeaders();
 			h.add("Content-Type", "application/json");
 			//String query = t.getRequestURI().getQuery(); //the KEY=VAL&KEY=VAL params in URL
-			String rparam = t.getRequestURI().toString();   //restful style params, KEY/VAL in URL 
+			String rparam = t.getRequestURI().toString();   //restful style params, KEY/VAL in URL
 			if (rparam.startsWith("/")){
 				rparam = rparam.substring(1);
 			}
@@ -60,7 +62,7 @@ public class SimpleHttpServer {
 			String response = "{";
 
 			for (Map.Entry<String, String> entry : map.entrySet()){
-				response += String.format("\"%s\":\"%s\"", entry.getKey(), entry.getValue());
+				response += String.format(Locale.ROOT, "\"%s\":\"%s\"", entry.getKey(), entry.getValue());
 			}
 			response += "}";
 

@@ -166,7 +166,7 @@ public class DedupeByMapping extends BBTool_ST{
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -184,7 +184,7 @@ public class DedupeByMapping extends BBTool_ST{
 					processReadPair(r1, null);
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -206,16 +206,16 @@ public class DedupeByMapping extends BBTool_ST{
 				
 				Read r2=r1.mate;
 				if(!r1.mapped() && !r1.mateMapped()){
-					unmappedReads+=1+r1.mateCount();
-					unmappedBases+=r1.length()+r1.mateLength();
+					unmappedReads+=r1.pairCount();
+					unmappedBases+=r1.pairLength();
 					if(keepUnmapped){
-						retainedReads+=1+r1.mateCount();
-						retainedBases+=r1.length()+r1.mateLength();
+						retainedReads+=r1.pairCount();
+						retainedBases+=r1.pairLength();
 						unmapped.add(r1);
 					}
 				}else if(keepSingletons && r2!=null && (r1.mapped()!=r1.mateMapped())){
-					retainedReads+=1+r1.mateCount();
-				retainedBases+=r1.length()+r1.mateLength();
+					retainedReads+=r1.pairCount();
+				retainedBases+=r1.pairLength();
 					unmapped.add(r1);
 				}else{
 //					System.err.println(r1.strandChar()+", "+r1.start+", "+r1.stop+", "+r2.strandChar()+", "+r2.start+", "+r2.stop);
@@ -224,15 +224,15 @@ public class DedupeByMapping extends BBTool_ST{
 					if(old1==null){quadToRead.put(q, r1);}
 					else{
 						Read old2=old1.mate;
-						float a=(r1.expectedErrors(true, 0)+(r2==null ? 0 : r2.expectedErrors(true, 0)))/(r1.length()+r1.mateLength());
+						float a=(r1.expectedErrors(true, 0)+(r2==null ? 0 : r2.expectedErrors(true, 0)))/r1.pairLength();
 						float b=old1.expectedErrors(true, 0)+(old2==null ? 0 : old2.expectedErrors(true, 0))/(old1.length()+old1.mateLength());
 						if(a<b){
-							quadToRead.put(q, r1);	
+							quadToRead.put(q, r1);
 							duplicateReads+=1+old1.mateCount();
 							duplicateBases+=old1.length()+old1.mateLength();
 						}else{
-							duplicateReads+=1+r1.mateCount();
-							duplicateBases+=r1.length()+r1.mateLength();
+							duplicateReads+=r1.pairCount();
+							duplicateBases+=r1.pairLength();
 						}
 					}
 				}
@@ -242,7 +242,7 @@ public class DedupeByMapping extends BBTool_ST{
 		}
 		
 		{
-			ArrayList<Read> list=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
+			ArrayList<Read> list=new ArrayList<Read>(Shared.bufferLen());
 			int num=0;
 			for(Quad q : quadToRead.keySet()){
 				Read r=quadToRead.get(q);
@@ -250,12 +250,12 @@ public class DedupeByMapping extends BBTool_ST{
 					retainedReads+=1+r.mateCount();
 					retainedBases+=r.length()+r.mateLength();
 					list.add(r);
-					if(list.size()>=Shared.READ_BUFFER_LENGTH){
+					if(list.size()>=Shared.bufferLen()){
 						if(ros!=null){
 							ros.add(list, num);
 							num++;
 						}
-						list=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
+						list=new ArrayList<Read>(Shared.bufferLen());
 					}
 				}
 			}
@@ -293,7 +293,7 @@ public class DedupeByMapping extends BBTool_ST{
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -311,7 +311,7 @@ public class DedupeByMapping extends BBTool_ST{
 					processReadPair(r1, null);
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -333,8 +333,8 @@ public class DedupeByMapping extends BBTool_ST{
 				
 				Read r2=r1.mate;
 				if(!r1.mapped() && !r1.mateMapped()){
-					unmappedReads+=1+r1.mateCount();
-					unmappedBases+=r1.length()+r1.mateLength();
+					unmappedReads+=r1.pairCount();
+					unmappedBases+=r1.pairLength();
 					if(keepUnmapped){unmapped.add(r1);}
 				}else{
 					Quad q=toQuad(r1, r2);
@@ -342,15 +342,15 @@ public class DedupeByMapping extends BBTool_ST{
 					if(old1==null){quadToRead.put(q, r1);}
 					else{
 						Read old2=old1.mate;
-						float a=(r1.expectedErrors(true, 0)+(r2==null ? 0 : r2.expectedErrors(true, 0)))/(r1.length()+r1.mateLength());
+						float a=(r1.expectedErrors(true, 0)+(r2==null ? 0 : r2.expectedErrors(true, 0)))/r1.pairLength();
 						float b=old1.expectedErrors(true, 0)+(old2==null ? 0 : old2.expectedErrors(true, 0))/(old1.length()+old1.mateLength());
 						if(a<b){
-							quadToRead.put(q, r1);	
+							quadToRead.put(q, r1);
 							duplicateReads+=1+old1.mateCount();
 							duplicateBases+=old1.length()+old1.mateLength();
 						}else{
-							duplicateReads+=1+r1.mateCount();
-							duplicateBases+=r1.length()+r1.mateLength();
+							duplicateReads+=r1.pairCount();
+							duplicateBases+=r1.pairLength();
 						}
 					}
 				}
@@ -360,18 +360,18 @@ public class DedupeByMapping extends BBTool_ST{
 		}
 		
 		{
-			ArrayList<Read> list=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
+			ArrayList<Read> list=new ArrayList<Read>(Shared.bufferLen());
 			int num=0;
 			for(Quad q : quadToRead.keySet()){
 				Read r=quadToRead.get(q);
 				if(keepUnmapped || r.mapped() || (r.mate!=null && r.mate.mapped())){
 					list.add(r);
-					if(list.size()>=Shared.READ_BUFFER_LENGTH){
+					if(list.size()>=Shared.bufferLen()){
 						if(ros!=null){
 							ros.add(list, num);
 							num++;
 						}
-						list=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
+						list=new ArrayList<Read>(Shared.bufferLen());
 					}
 				}
 			}
@@ -413,9 +413,9 @@ public class DedupeByMapping extends BBTool_ST{
 //			chr1=Tools.max(chr1_,chr2_);
 //			chr2=Tools.min(chr1_,chr2_);
 //		}
-//		
+//
 //		int pos1, pos2, chrom1, chrom2;
-//		
+//
 //		if()
 
 		final int s1=r1.strand(), a1=r1.start, b1=r1.stop, c1=r1.chrom;

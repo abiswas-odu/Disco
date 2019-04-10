@@ -3,18 +3,19 @@ package dna;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Tools;
 import stream.CrisWrapper;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
-import shared.Shared;
-import shared.Tools;
 
 /**
  * Replaces FastaToChromArrays with a more general solution that can handle fastq.
@@ -25,7 +26,7 @@ import shared.Tools;
 public class ChromArrayMaker {
 	
 //	Example:
-//	dna.ChromArrayMaker ecoli_K12.fa 1 writeinthread=false genscaffoldinfo=true retain waitforwriting=false 
+//	dna.ChromArrayMaker ecoli_K12.fa 1 writeinthread=false genscaffoldinfo=true retain waitforwriting=false
 //	gzip=true chromc=false maxlen=536670912 writechroms=true minscaf=1 midpad=300 startpad=8000 stoppad=8000 nodisk=false
 	
 	public static void main(String[] args){
@@ -33,14 +34,17 @@ public class ChromArrayMaker {
 	}
 	
 	public static ArrayList<ChromosomeArray> main2(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, null, false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		boolean oldWIT=WRITE_IN_THREAD;
 		WRITE_IN_THREAD=true;
 		
-//		assert(false) : ReadWrite.ZIPLEVEL;
-		
 		String name=null;
-		
 		int genome=-1;
 		int chroms=-1;
 		String infile=null;
@@ -50,74 +54,68 @@ public class ChromArrayMaker {
 		boolean scafprefixes=Data.scaffoldPrefixes;
 		
 		for(int i=0; i<args.length; i++){
+			
+			final String arg=args[i];
+			final String[] split=arg.split("=");
+			String a=split[0].toLowerCase();
+			String b=split.length>1 ? split[1] : null;
 
-			if(true){
-				final String arg=args[i];
-				final String[] split=arg.split("=");
-				String a=split[0].toLowerCase();
-				String b=split.length>1 ? split[1] : null;
-				if("null".equalsIgnoreCase(b)){b=null;}
-
-				if(Parser.isJavaFlag(arg)){
-					//jvm argument; do nothing
-				}else if(Parser.parseZip(arg, a, b)){
-					//do nothing
-				}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
-					Data.setPath(b);
-				}else if(a.equals("name") || a.equals("organism")){
-					name=b;
-				}else if(a.equals("in") || a.equals("input") || a.equals("ref") || a.equals("fasta")){
-					if(split.length<1 || "null".equalsIgnoreCase(b)){b=null;}
-					infile=b;
-				}else if(a.equals("build") || a.equals("genome")){
-					genome=Integer.parseInt(b);
-				}else if(a.equals("chroms")){
-					chroms=Integer.parseInt(b);
-				}else if(a.equals("writeinthread")){
-					WRITE_IN_THREAD=Tools.parseBoolean(b);
-				}else if(a.equals("nodisk")){
-					NODISK=Tools.parseBoolean(b);
-				}else if(a.equals("writeinfo")){
-					writeinfo=Tools.parseBoolean(b);
-				}else if(a.equals("padstart") || a.startsWith("startpad") || a.equals("padfront") || a.startsWith("frontpad")){
-					START_PADDING=Integer.parseInt(b);
-				}else if(a.equals("padstop") || a.startsWith("stoppad") || a.equals("padend") || a.startsWith("endpad")){
-					END_PADDING=Integer.parseInt(b);
-				}else if(a.equals("pad") || a.equals("padding")){
-					START_PADDING=END_PADDING=Integer.parseInt(b);
-				}else if(a.equals("midpad") || a.startsWith("padmid")){
-					MID_PADDING=Integer.parseInt(b);
-				}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
-					MIN_SCAFFOLD=Integer.parseInt(b);
-				}else if(a.equals("genscaffoldinfo")){
-					genScaffoldInfo=Tools.parseBoolean(b);
-					System.err.println("Set genScaffoldInfo="+genScaffoldInfo);
-				}else if(a.equals("append") || a.equals("app")){
-					append=Tools.parseBoolean(b);
-				}else if(a.equals("overwrite") || a.equals("ow")){
-					overwrite=Tools.parseBoolean(b);
-				}else if(a.equals("mergescaffolds") || a.equals("mergecontigs") || (a.equals("merge"))){
-					MERGE_SCAFFOLDS=Tools.parseBoolean(b);
-					System.err.println("Set MERGE_SCAFFOLDS="+MERGE_SCAFFOLDS);
-				}else if(a.startsWith("maxlen") || a.startsWith("chromlen")){
-					long len=Tools.parseKMG(b);
-					assert(len>0 && len<=Integer.MAX_VALUE);
-					MAX_LENGTH=(int)len;
-				}else if(a.equals("writechroms")){
-					writeChroms=Tools.parseBoolean(b);
-				}else if(a.equals("chromgz") || a.equals("gz")){
-					Data.CHROMGZ=Tools.parseBoolean(b);
-				}else if(a.equals("retain")){
-					RETAIN=Tools.parseBoolean(b);
-				}else if(a.equals("scafprefixes")){
-					scafprefixes=Tools.parseBoolean(b);
-				}else if(a.equals("waitforwriting")){
-					WAIT_FOR_WRITING=Tools.parseBoolean(b);
-				}else{
-					if(i>2){
-						System.err.println("Unknown parameter "+args[i]);
-//						throw new RuntimeException("Unknown parameter "+args[i]);
-					}
+			if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
+				Data.setPath(b);
+			}else if(a.equals("name") || a.equals("organism")){
+				name=b;
+			}else if(a.equals("in") || a.equals("input") || a.equals("ref") || a.equals("fasta")){
+				if(split.length<1 || "null".equalsIgnoreCase(b)){b=null;}
+				infile=b;
+			}else if(a.equals("build") || a.equals("genome")){
+				genome=Integer.parseInt(b);
+			}else if(a.equals("chroms")){
+				chroms=Integer.parseInt(b);
+			}else if(a.equals("writeinthread")){
+				WRITE_IN_THREAD=Tools.parseBoolean(b);
+			}else if(a.equals("nodisk")){
+				NODISK=Tools.parseBoolean(b);
+			}else if(a.equals("writeinfo")){
+				writeinfo=Tools.parseBoolean(b);
+			}else if(a.equals("padstart") || a.startsWith("startpad") || a.equals("padfront") || a.startsWith("frontpad")){
+				START_PADDING=Integer.parseInt(b);
+			}else if(a.equals("padstop") || a.startsWith("stoppad") || a.equals("padend") || a.startsWith("endpad")){
+				END_PADDING=Integer.parseInt(b);
+			}else if(a.equals("pad") || a.equals("padding")){
+				START_PADDING=END_PADDING=Integer.parseInt(b);
+			}else if(a.equals("midpad") || a.startsWith("padmid")){
+				MID_PADDING=Integer.parseInt(b);
+			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
+				MIN_SCAFFOLD=Integer.parseInt(b);
+			}else if(a.equals("genscaffoldinfo")){
+				genScaffoldInfo=Tools.parseBoolean(b);
+				System.err.println("Set genScaffoldInfo="+genScaffoldInfo);
+			}else if(a.equals("append") || a.equals("app")){
+				append=Tools.parseBoolean(b);
+			}else if(a.equals("overwrite") || a.equals("ow")){
+				overwrite=Tools.parseBoolean(b);
+			}else if(a.equals("mergescaffolds") || a.equals("mergecontigs") || (a.equals("merge"))){
+				MERGE_SCAFFOLDS=Tools.parseBoolean(b);
+				System.err.println("Set MERGE_SCAFFOLDS="+MERGE_SCAFFOLDS);
+			}else if(a.startsWith("maxlen") || a.startsWith("chromlen")){
+				long len=Tools.parseKMG(b);
+				assert(len>0 && len<=Integer.MAX_VALUE);
+				MAX_LENGTH=(int)len;
+			}else if(a.equals("writechroms")){
+				writeChroms=Tools.parseBoolean(b);
+			}else if(a.equals("chromgz") || a.equals("gz")){
+				Data.CHROMGZ=Tools.parseBoolean(b);
+			}else if(a.equals("retain")){
+				RETAIN=Tools.parseBoolean(b);
+			}else if(a.equals("scafprefixes")){
+				scafprefixes=Tools.parseBoolean(b);
+			}else if(a.equals("waitforwriting")){
+				WAIT_FOR_WRITING=Tools.parseBoolean(b);
+			}else{
+				if(i>2){
+					System.err.println("WARNING: Unknown parameter "+args[i]);
 				}
 			}
 		}
@@ -359,7 +357,7 @@ public class ChromArrayMaker {
 		}
 		
 		
-		for(ChromosomeArray ca=makeNextChrom(criswrapper, chrom, infoWriter, scafWriter, infolist, scaflist); ca!=null; 
+		for(ChromosomeArray ca=makeNextChrom(criswrapper, chrom, infoWriter, scafWriter, infolist, scaflist); ca!=null;
 				ca=makeNextChrom(criswrapper, chrom, infoWriter, scafWriter, infolist, scaflist)){
 			if(ca.array.length>ca.maxIndex+1){ca.resize(ca.maxIndex+1);}
 			if(RETAIN){r.add(ca);}
@@ -448,7 +446,7 @@ public class ChromArrayMaker {
 	
 	private ChromosomeArray makeNextChrom(CrisWrapper criswrapper, int chrom, TextStreamWriter infoWriter, TextStreamWriter scafWriter, ArrayList<String> infolist, ArrayList<String> scaflist){
 		assert(FastaReadInputStream.SPLIT_READS==false);
-		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING);
+		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Shared.PLUS, 0, 120000+START_PADDING);
 		ca.maxIndex=-1;
 		for(int i=0; i<START_PADDING; i++){ca.set(i, 'N');}
 		

@@ -1,17 +1,15 @@
 package structures;
-import java.io.Serializable;
+import java.util.Locale;
 
 import dna.Data;
-import dna.Gene;
-import stream.KillSwitch;
-
 import driver.Translator2;
-
 import fileIO.ReadWrite;
+import shared.KillSwitch;
+import shared.Shared;
 import shared.Timer;
 
 
-public class CoverageArray3 extends CoverageArray implements Serializable {
+public class CoverageArray3 extends CoverageArray {
 	
 	/**
 	 * 
@@ -45,7 +43,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		}
 		
 		System.out.println("minIndex="+ca.minIndex+", maxIndex="+ca.maxIndex+", length="+ca.array.length+
-				"; time="+String.format("%.3f seconds", (time2-time1)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time2-time1)/1000000000d));
 
 		long time3=System.nanoTime();
 		ReadWrite.write(ca, outfile, false);
@@ -55,7 +53,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		long time4=System.nanoTime();
 		
 		System.out.println("minIndex="+ca.minIndex+", maxIndex="+ca.maxIndex+", length="+ca.array.length+
-				"; time="+String.format("%.3f seconds", (time4-time3)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time4-time3)/1000000000d));
 		
 		
 	}
@@ -89,7 +87,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 			out[chrom]=new CoverageArray3(chrom, 500);
 		}
 		
-		final byte PLUS=Gene.PLUS;
+		final byte PLUS=Shared.PLUS;
 		
 		for(int chrom=1; chrom<=25; chrom++){
 			String infile=root+"coverage-chr"+chrom+"-build"+inBuild+".ca.zip";
@@ -120,7 +118,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 //	public CoverageArray3(){
 //		this((int)-1);
 //	}
-//	
+//
 //	public CoverageArray3(int chrom){
 //		this(chrom, 1<<24);
 //	}
@@ -141,6 +139,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	/**
 	 * @param loc
 	 */
+	@Override
 	public void increment(int loc) {
 		set(loc, get(loc)+1L);
 	}
@@ -148,6 +147,11 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	@Override
 	public void increment(int loc, int amt) {
 		increment(loc, (long)amt);
+	}
+
+	@Override
+	public synchronized void incrementRangeSynchronized(int min, int max, int amt) {
+		incrementRange(min, max, amt);
 	}
 	
 	@Override
@@ -178,6 +182,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		maxIndex=max(max, maxIndex);
 	}
 	
+	@Override
 	public void set(int loc, int val){
 		set(loc, (long)val);
 	}
@@ -204,10 +209,12 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		maxIndex=max(loc, maxIndex);
 	}
 	
+	@Override
 	public int get(int loc){
 		return loc>=array.length || loc<0 ? 0 : array[loc];
 	}
 	
+	@Override
 	public void resize(int newlen){
 //		System.err.println("Resized CoverageArray "+chromosome+" to "+newlen);
 		int[] temp=KillSwitch.allocInt1D(newlen);
@@ -219,6 +226,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		array=temp;
 	}
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
@@ -232,7 +240,9 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	
 	
 	public int[] array;
+	@Override
 	public int length(){return maxIndex-minIndex+1;}
+	@Override
 	public int arrayLength(){return array.length;}
 	
 	private static boolean OVERFLOWED=false;

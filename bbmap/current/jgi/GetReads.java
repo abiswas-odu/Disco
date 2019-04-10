@@ -3,25 +3,25 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
+import dna.Data;
+import fileIO.ByteFile1;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.ReadStats;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Data;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ByteFile1;
-import fileIO.ReadWrite;
-import fileIO.FileFormat;
-import fileIO.TextStreamWriter;
-import shared.ReadStats;
-import shared.Timer;
-import shared.Tools;
 
 /**
  * Grab reads with specified numbers from a file.
@@ -33,16 +33,19 @@ import shared.Tools;
 public class GetReads {
 	
 	public static void main(String[] args){
-		new GetReads(args);
+		GetReads x=new GetReads(args);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public GetReads(String[] args){
-		if(args==null || args.length==0){
-			throw new RuntimeException("No arguments.");
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
 
@@ -58,8 +61,7 @@ public class GetReads {
 
 		String qfout1=null;
 		String qfout2=null;
-
-		boolean parsecustom=false;
+		
 		boolean errorState=false;
 		long maxReads=-1;
 		int passes=1;
@@ -78,12 +80,9 @@ public class GetReads {
 			String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			String b=split.length>1 ? split[1] : null;
+			
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -94,9 +93,10 @@ public class GetReads {
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("id") || a.equals("number")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] b2=b.split(",");
 				for(String c : b2){
-					final long x, y; 
+					final long x, y;
 					if(c.indexOf('-')>=0){
 						String[] c2=c.split("-");
 						assert(c2.length==2) : c;
@@ -122,6 +122,7 @@ public class GetReads {
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				in1=b;
 				if(b.indexOf('#')>-1 && !new File(b).exists()){
 					in1=b.replace("#", "1");
@@ -130,6 +131,7 @@ public class GetReads {
 			}else if(a.equals("in2") || a.equals("input2")){
 				in2=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				out1=b;
 				if(b.indexOf('#')>-1){
 					out1=b.replace("#", "1");
@@ -178,14 +180,10 @@ public class GetReads {
 		assert(FastaReadInputStream.settingsOK());
 //		if(maxReads!=-1){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
 		
-		if(in1==null){
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		if(out1==null){
-			if(out2!=null){
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
+			if(out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 			out1="stdout";
 		}
 		
@@ -209,8 +207,6 @@ public class GetReads {
 		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
-		
-		FASTQ.PARSE_CUSTOM=parsecustom;
 		
 
 		FileFormat ffin=FileFormat.testInput(in1, 0, null, true, true);
@@ -257,10 +253,10 @@ public class GetReads {
 
 			if(reads!=null && !reads.isEmpty()){
 				Read r=reads.get(0);
-				assert(ffin.samOrBam() || (r.mate!=null)==cris.paired());
+				assert(ffin==null || ffin.samOrBam() || (r.mate!=null)==cris.paired());//ffin cannot be null
 			}
 
-			while(reads!=null && reads.size()>0 && !table.isEmpty()){
+			while(reads!=null && reads.size()>0 && !table.isEmpty() && ln!=null){//ln!=null is implied
 
 				for(Read r1 : reads){
 					{
@@ -280,11 +276,11 @@ public class GetReads {
 					}
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			errorState|=ReadWrite.closeStream(cris);
 		}
 
@@ -295,25 +291,14 @@ public class GetReads {
 		errorState|=(cris.errorState());
 		
 		t.stop();
-
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
+		
 		if(testsize){
 			long bytesProcessed=(new File(in1).length()+(in2==null ? 0 : new File(in2).length()))*passes;
 			double xpnano=bytesProcessed/(double)(t.elapsed);
 			String xpstring=(bytesProcessed<100000 ? ""+bytesProcessed : bytesProcessed<100000000 ? (bytesProcessed/1000)+"k" : (bytesProcessed/1000000)+"m");
 			while(xpstring.length()<8){xpstring=" "+xpstring;}
-			outstream.println("Bytes Processed:    "+xpstring+" \t"+String.format("%.2fm bytes/sec", xpnano*1000));
+			outstream.println("Bytes Processed:    "+xpstring+" \t"+String.format(Locale.ROOT, "%.2fm bytes/sec", xpnano*1000));
 		}
 		
 		if(errorState){

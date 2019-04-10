@@ -34,17 +34,17 @@ public class MultiCros {
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		ArrayListSet als=new ArrayListSet(false);
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 			for(Read r1 : reads){
 				als.add(r1, names);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(mcros!=null){mcros.add(als, ln.id);}
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		if(mcros!=null){mcros.add(als, ln.id);}
 		ReadWrite.closeStreams(cris);
 		ReadWrite.closeStreams(mcros);
@@ -54,7 +54,7 @@ public class MultiCros {
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public MultiCros(String pattern1_, String pattern2_, 
+	public MultiCros(String pattern1_, String pattern2_,
 			boolean ordered_, boolean overwrite_, boolean append_, boolean allowSubprocess_, boolean useSharedHeader_, int defaultFormat_, int maxSize_){
 		assert(pattern1_!=null && pattern1_.indexOf('%')>=0);
 		assert(pattern2_==null || pattern1_.indexOf('%')>=0);
@@ -66,7 +66,7 @@ public class MultiCros {
 			pattern2=pattern2_;
 		}
 		
-		ORDERED=ordered_;
+		ordered=ordered_;
 		overwrite= overwrite_;
 		append=append_;
 		allowSubprocess=allowSubprocess_;
@@ -136,8 +136,8 @@ public class MultiCros {
 	private ConcurrentReadOutputStream makeStream(String name){
 		String s1=pattern1.replaceFirst("%", name);
 		String s2=pattern2==null ? null : pattern2.replaceFirst("%", name);
-		final FileFormat ff1=FileFormat.testOutput(s1, defaultFormat, null, allowSubprocess, overwrite, append, ORDERED);
-		final FileFormat ff2=FileFormat.testOutput(s2, defaultFormat, null, allowSubprocess, overwrite, append, ORDERED);
+		final FileFormat ff1=FileFormat.testOutput(s1, defaultFormat, null, allowSubprocess, overwrite, append, ordered);
+		final FileFormat ff2=FileFormat.testOutput(s2, defaultFormat, null, allowSubprocess, overwrite, append, ordered);
 		ConcurrentReadOutputStream ros=ConcurrentReadOutputStream.getStream(ff1, ff2, maxSize, null, useSharedHeader);
 		return ros;
 	}
@@ -169,7 +169,7 @@ public class MultiCros {
 	public final String pattern1, pattern2;
 	public final ArrayList<ConcurrentReadOutputStream> streamList;
 	public final LinkedHashMap<String, ConcurrentReadOutputStream> streamMap;
-	public final boolean ORDERED;
+	public final boolean ordered;
 	
 	boolean errorState=false;
 	boolean started=false;

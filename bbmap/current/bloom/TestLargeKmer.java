@@ -3,14 +3,13 @@ package bloom;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-
+import dna.AminoAcid;
+import fileIO.ReadWrite;
+import shared.Timer;
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastqReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.AminoAcid;
-import fileIO.ReadWrite;
-import shared.Timer;
 
 /**
  * @author Brian Bushnell
@@ -19,7 +18,7 @@ import shared.Timer;
  */
 public class TestLargeKmer {
 	
-	public static void main(String args[]){		
+	public static void main(String args[]){
 		Timer t=new Timer();
 		
 		String fname1=args[0];
@@ -47,7 +46,7 @@ public class TestLargeKmer {
 	public static long[] countK2(String fname1, String fname2, int k, KCountArray2 counts1, int k2){
 		assert(k>=1 && k<20);
 		final int kbits=2*k;
-		final long mask=~((-1L)<<(kbits));
+		final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 		FastqReadInputStream fris1=new FastqReadInputStream(fname1, false);
 		FastqReadInputStream fris2=(fname2==null ? null : new FastqReadInputStream(fname2, false));
 		ConcurrentGenericReadInputStream cris=new ConcurrentGenericReadInputStream(fris1, fris2, KmerCount3.maxReads);
@@ -74,7 +73,7 @@ public class TestLargeKmer {
 				assert(paired==(r.mate!=null));
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 					
@@ -168,13 +167,13 @@ public class TestLargeKmer {
 					
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			System.err.println("Returned list");
 			ReadWrite.closeStreams(cris);
 			System.err.println("Closed stream");

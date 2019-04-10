@@ -1,7 +1,6 @@
 #!/bin/bash
-#fakereads in=<infile> out=<outfile>
 
-function usage(){
+usage(){
 echo "
 Written by Brian Bushnell
 Last modified February 17, 2015
@@ -11,7 +10,6 @@ Description:  Generates fake read pairs from ends of contigs or single reads.
 Usage:        bbfakereads.sh in=<file> out=<outfile> out2=<outfile2>
 
 Out2 is optional; if there is only one output file, it will be written interleaved.
-
 
 Standard parameters:
 ow=f                (overwrite) Overwrites files that already exist.
@@ -34,19 +32,18 @@ identifier=null     (id) Output read names are prefixed with this.
 addspace=t          Set to false to omit the  space before /1 and /2 of paired reads.
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
-
-Supported input formats are fastq, fasta, fast+qual, scarf, and bread (BBMap's native format)
-Supported output formats are fastq, fasta, fast+qual, bread
-Supported compression formats are gz, zip, and bz2
-To read from stdin, set 'in=stdin'.  The format should be specified with an extension, like 'in=stdin.fq.gz'
-To write to stdout, set 'out=stdout'.  The format should be specified with an extension, like 'out=stdout.fasta'
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+                    The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 
 Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -62,6 +59,7 @@ CP="$DIR""current/"
 
 z="-Xmx600m"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -77,12 +75,25 @@ calcXmx () {
 calcXmx "$@"
 
 function fakereads() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z -cp $CP jgi.FakeReads $@"
+	local CMD="java $EA $EOOM $z -cp $CP jgi.FakeReads $@"
 	echo $CMD >&2
 	eval $CMD
 }

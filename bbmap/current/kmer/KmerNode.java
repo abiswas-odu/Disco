@@ -3,9 +3,10 @@ package kmer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ByteBuilder;
 import fileIO.TextStreamWriter;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -23,30 +24,30 @@ public abstract class KmerNode extends AbstractKmerTable {
 	}
 	
 	public abstract KmerNode makeNode(long pivot_, int value_);
-	public abstract KmerNode makeNode(long pivot_, int[] values_);
+	public abstract KmerNode makeNode(long pivot_, int[] values_, int vlen_);
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Public Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final int increment(long kmer){
-		if(pivot<0){pivot=kmer; return set(1);} //Allows initializing empty nodes to -1
+	public final int increment(final long kmer, final int incr){
+		if(pivot<0){pivot=kmer; return set(incr);} //Allows initializing empty nodes to -1
 		if(kmer<pivot){
-			if(left==null){left=makeNode(kmer, 1); return 1;}
-			return left.increment(kmer);
+			if(left==null){left=makeNode(kmer, incr); return incr;}
+			return left.increment(kmer, incr);
 		}else if(kmer>pivot){
-			if(right==null){right=makeNode(kmer, 1); return 1;}
-			return right.increment(kmer);
+			if(right==null){right=makeNode(kmer, incr); return incr;}
+			return right.increment(kmer, incr);
 		}else{
-			if(value()<Integer.MAX_VALUE){set(value()+1);}
+			if(value()<Integer.MAX_VALUE){set(value()+incr);}
 			return value();
 		}
 	}
 	
 	@Override
-	public final int incrementAndReturnNumCreated(long kmer) {
-		int x=increment(kmer);
+	public final int incrementAndReturnNumCreated(final long kmer, final int incr) {
+		int x=increment(kmer, incr);
 		return x==1 ? 1 : 0;
 	}
 	
@@ -68,7 +69,7 @@ public abstract class KmerNode extends AbstractKmerTable {
 //		}
 //		return x;
 //	}
-//	
+//
 //	public final int setIfNotPresent_Test(long kmer, int v){
 //		assert(TESTMODE);
 //		final int x;
@@ -162,7 +163,7 @@ public abstract class KmerNode extends AbstractKmerTable {
 	protected abstract int[] values(int[] singleton);
 	/** Returns new value */
 	public abstract int set(int value_);
-	protected abstract int set(int[] values_);
+	protected abstract int set(int[] values_, int vlen);
 	
 	@Override
 	final KmerNode get(long kmer){
@@ -276,14 +277,14 @@ public abstract class KmerNode extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount) {
-		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount));
+	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount) {
+		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount, maxcount));
 		return true;
 	}
 	
-	protected abstract StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount);
+	protected abstract StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount, int maxcount);
 	
-	protected abstract ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount);
+	protected abstract ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount, int maxcount);
 	
 	@Override
 	public final void fillHistogram(long[] ca, int max){
@@ -292,6 +293,15 @@ public abstract class KmerNode extends AbstractKmerTable {
 		ca[Tools.min(value, max)]++;
 		if(left!=null){left.fillHistogram(ca, max);}
 		if(right!=null){right.fillHistogram(ca, max);}
+	}
+	
+	@Override
+	public final void fillHistogram(SuperLongList sll){
+		final int value=value();
+		if(value<1){return;}
+		sll.add(value);
+		if(left!=null){left.fillHistogram(sll);}
+		if(right!=null){right.fillHistogram(sll);}
 	}
 	
 	@Override

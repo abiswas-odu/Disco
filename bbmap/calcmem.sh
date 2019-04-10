@@ -1,13 +1,13 @@
 #!/bin/bash
-#calcmem
 
-#function usage(){
-#	echo "CalcMem v1.03"
+#usage(){
+#	echo "CalcMem v1.09"
 #	echo "Written by Brian Bushnell, Doug Jacobsen, Alex Copeland, Bryce Foster"
 #	echo "Calculates available memory in megabytes"
-#	echo "Last modified May 3, 2016"
+#	echo "Last modified December 4, 2018"
 #}
 
+#Also parses other Java flags
 function parseXmx () {
 	
 	local setxmx=0
@@ -15,11 +15,19 @@ function parseXmx () {
 	
 	for arg in "$@"
 	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
+		if [[ "$arg" == "Xmx="* ]] || [[ "$arg" == "xmx="* ]]; then
+			z="-Xmx"${arg:4}
 			setxmx=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
+		elif [[ "$arg" == "-Xmx="* ]] || [[ "$arg" == "-xmx="* ]]; then
+			z="-Xmx"${arg:5}
+			setxmx=1
+		elif [[ "$arg" == -Xmx* ]] || [[ "$arg" == -xmx* ]]; then
+			#z="$arg"
+			z="-X"${arg:2}
+			setxmx=1
+		elif [[ "$arg" == Xmx* ]] || [[ "$arg" == xmx* ]]; then
+			#z="-$arg"
+			z="-X"${arg:1}
 			setxmx=1
 		elif [[ "$arg" == -Xms* ]]; then
 			z2="$arg"
@@ -29,6 +37,16 @@ function parseXmx () {
 			setxms=1
 		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
 			EA="$arg"
+		elif [[ "$arg" == da ]] || [[ "$arg" == ea ]]; then
+			EA="-$arg"
+		elif [[ "$arg" == ExitOnOutOfMemoryError ]] || [[ "$arg" == exitonoutofmemoryerror ]] || [[ "$arg" == eoom ]]; then
+			EOOM="-XX:+ExitOnOutOfMemoryError"
+		elif [[ "$arg" == -ExitOnOutOfMemoryError ]] || [[ "$arg" == -exitonoutofmemoryerror ]] || [[ "$arg" == -eoom ]]; then
+			EOOM="-XX:+ExitOnOutOfMemoryError"
+		elif [[ "$arg" == json ]] || [[ "$arg" == "json=t" ]] || [[ "$arg" == "json=true" ]] || [[ "$arg" == "format=json" ]]; then
+			json=1
+		elif [[ "$arg" == silent ]] || [[ "$arg" == "silent=t" ]] || [[ "$arg" == "silent=true" ]]; then
+			silent=1
 		fi
 	done
 	
@@ -83,14 +101,14 @@ function freeRam(){
 	local x=$ulimit
 	#echo "x = ${x}" # normally ulimit -v
 	
-	# get cluster memory var: 2016-02-22 Bhupender says use SGE_HGR_RAMC
-	local sge_x=$(env | grep -i sge_hgr_ramc | perl -ne '$_ =~ s/[^0-9\.]//g; print $_ * 1024*1024')
-	
-	if [ "$sge_x" = "" ]; then sge_x=0; fi
-	#echo "sge = ${sge_x}"
+	local HOSTNAME=`hostname`
+	local sge_x=0
+	local slurm_x=$(( SLURM_MEM_PER_NODE * 1024 ))
 
-    
-	if [ -e /proc/meminfo ]; then
+	if [[ $RQCMEM -gt 0 ]]; then
+		#echo "branch for manual memory"
+		x=$(( RQCMEM * 1024 ));
+	elif [ -e /proc/meminfo ]; then
 		local vfree=$(cat /proc/meminfo | awk -F: 'BEGIN{total=-1;used=-1} /^CommitLimit:/ { total=$2 }; /^Committed_AS:/ { used=$2 } END{ print (total-used) }')
 		local pfree=$(cat /proc/meminfo | awk -F: 'BEGIN{free=-1;cached=-1;buffers=-1} /^MemFree:/ { free=$2 }; /^Cached:/ { cached=$2}; /^Buffers:/ { buffers=$2} END{ print (free+cached+buffers) }')
 		
@@ -108,15 +126,23 @@ function freeRam(){
 		elif [ $pfree -gt 0 ]; then x2=$pfree;
 		fi
 
-		
-		# set to SGE_HGR_RAMC value
+		#echo $sge_x
+		#echo $slurm_x
+		#echo $x
+		#echo $x2
+
+		# set to SGE_HGR_RAMC or SLURM_MEM_PER_NODE value
 		if [ $sge_x -gt 0 ]; then 
 			if [ $x2 -gt $sge_x ] || [ $x2 -eq 0 ]; then 
 				x=$sge_x;
 				x2=$x; 
 			fi
+		elif [ $slurm_x -gt 0 ]; then
+			if [ $x2 -gt $slurm_x ] || [ $x2 -eq 0 ]; then 
+				x=$slurm_x;
+				x2=$x; 
+			fi
 		fi
-
 		
 		#echo "x = ${x}"
 		#echo "x2 = ${x2}"
@@ -126,9 +152,6 @@ function freeRam(){
 		if [ "$x" = "unlimited" ] || (("$x" > $x2)); then x=$x2; fi
 		if [ $x -lt 1 ]; then x=$x2; fi
 	fi
-	
-
-	local HOSTNAME=`hostname`
 
 	if [ $x -lt 1 ] || [[ $HOSTNAME == genepool* ]]; then
 		#echo "branch for unknown memory"

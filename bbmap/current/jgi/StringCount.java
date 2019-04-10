@@ -12,6 +12,7 @@ class StringCount implements Comparable<StringCount>{
 		reads=reads_;
 		bases=bases_;
 	}
+	@Override
 	public final int compareTo(StringCount o){
 		if(bases!=o.bases){return o.bases>bases ? 1 : -1;}
 		if(reads!=o.reads){return o.reads>reads ? 1 : -1;}
@@ -24,6 +25,7 @@ class StringCount implements Comparable<StringCount>{
 	public final int hashCode(){
 		return name.hashCode();
 	}
+	@Override
 	public final String toString(){
 		return name+"\t"+length+"\t"+reads+"\t"+bases;
 	}

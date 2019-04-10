@@ -1,7 +1,6 @@
 package structures;
 
 import shared.Tools;
-import stream.ByteBuilder;
 import stream.Read;
 
 public class Quantizer {
@@ -30,7 +29,7 @@ public class Quantizer {
 			assert(quant>0 && quant<128);
 			if(quant==1){return false;}
 			ByteBuilder bb=new ByteBuilder();
-			for(int i=0; i<=Read.MAX_CALLED_QUALITY; i+=quant){
+			for(int i=0, max=Read.MAX_CALLED_QUALITY(); i<=max; i+=quant){
 				bb.append((byte)i);
 			}
 			array=bb.toBytes();

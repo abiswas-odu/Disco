@@ -3,28 +3,29 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import shared.TrimRead;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -35,25 +36,24 @@ public class FilterByCoverage {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		FilterByCoverage mb=new FilterByCoverage(args);
-		mb.process(t);
+		FilterByCoverage x=new FilterByCoverage(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public FilterByCoverage(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(20, Shared.READ_BUFFER_LENGTH);
+		Shared.capBufferLen(20);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -65,8 +65,6 @@ public class FilterByCoverage {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -88,7 +86,7 @@ public class FilterByCoverage {
 			}else if(a.equals("minp") || a.equals("minpercent")){
 				minCoveredPercent=Double.parseDouble(b);
 			}else if(a.equals("minr") || a.equals("minreads")){
-				minReads=Long.parseLong(b);
+				minReads=Tools.parseKMG(b);
 			}else if(a.equals("minratio") || a.equals("ratio")){
 				minRatio=Double.parseDouble(b);
 			}else if(a.equals("basesundermin")){
@@ -148,10 +146,7 @@ public class FilterByCoverage {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		name=ReadWrite.stripToCore(in1);
 		
 		if(!ByteFile.FORCE_MODE_BF2){
@@ -272,7 +267,7 @@ public class FilterByCoverage {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				final ArrayList<Read> cleanList=new ArrayList<Read>(reads.size());
 				final ArrayList<Read> dirtyList=new ArrayList<Read>(reads.size());
@@ -345,17 +340,17 @@ public class FilterByCoverage {
 					if(tsw!=null && (length>=minLength || PRINT_SHORT_CONTIG_RESULTS)){
 						if(csl1==null){
 							if(ffCov0==null){
-								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, r1.id, contam ? "1" : "0", length, 0, 0, 0));
+								tsw.print(String.format(Locale.ROOT, "%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, r1.id, contam ? "1" : "0", length, 0, 0, 0));
 							}else{
-								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", 
+								tsw.print(String.format(Locale.ROOT, "%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n",
 										name, r1.id, contam ? "1" : "0", length, 0, 0, 0, 0, 0, 0));
 							}
 							
 						}else if(csl0==null){
-							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
+							tsw.print(String.format(Locale.ROOT, "%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
 									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent()));
 						}else{
-							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
+							tsw.print(String.format(Locale.ROOT, "%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
 									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent(), csl0.avgFold, csl0.plusReads+csl0.minusReads, covRatio));
 						}
 					}
@@ -364,7 +359,7 @@ public class FilterByCoverage {
 				if(rosClean!=null){rosClean.add(cleanList, ln.id);}
 				if(rosDirty!=null){rosDirty.add(dirtyList, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -382,8 +377,8 @@ public class FilterByCoverage {
 		double bpnano=basesProcessed/(double)(t.elapsed);
 		
 		outstream.println("Time:               "+t);
-		outstream.println("Reads In:           "+readsProcessed+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases In:           "+basesProcessed+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println("Reads In:           "+readsProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
+		outstream.println("Bases In:           "+basesProcessed+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 		outstream.println("Reads Out:          "+readsOut);
 		outstream.println("Bases Out:          "+basesOut);
 		outstream.println("Reads Filtered:     "+readsFiltered);
@@ -398,22 +393,6 @@ public class FilterByCoverage {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
-	
 	
 	/*--------------------------------------------------------------*/
 	

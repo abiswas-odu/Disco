@@ -19,16 +19,18 @@ public class ScafMap {
 	
 	public ScafMap(){}
 
-	public static ScafMap loadHeader(String fname){return loadHeader(fname, null);}
-	public static ScafMap loadHeader(FileFormat ff){return loadHeader(ff, null);}
+	/*--------------------------------------------------------------*/
+
+	public static ScafMap loadSamHeader(String fname){return loadSamHeader(fname, null);}
+	public static ScafMap loadSamHeader(FileFormat ff){return loadSamHeader(ff, null);}
 	
-	public static ScafMap loadHeader(String fname, ScafMap scafMap){
+	public static ScafMap loadSamHeader(String fname, ScafMap scafMap){
 		FileFormat ff=FileFormat.testInput(fname, FileFormat.SAM, null, false, false);
-		return loadHeader(ff, scafMap);
+		return loadSamHeader(ff, scafMap);
 	}
 	
-	public static ScafMap loadHeader(FileFormat ff, ScafMap scafMap){
-		ByteFile bf=ByteFile.makeByteFile(ff, false);
+	public static ScafMap loadSamHeader(FileFormat ff, ScafMap scafMap){
+		ByteFile bf=ByteFile.makeByteFile(ff);
 		if(scafMap==null){scafMap=new ScafMap();}
 		byte[] line=bf.nextLine();
 		while(line!=null && line.length>0){
@@ -45,21 +47,67 @@ public class ScafMap {
 		return scafMap;
 	}
 
-	public static ScafMap loadReference(String fname){return loadReference(fname, null);}
-	public static ScafMap loadReference(FileFormat ff){return loadReference(ff, null);}
+	/*--------------------------------------------------------------*/
+
+	public static ScafMap loadVcfHeader(String fname){return loadVcfHeader(fname, null);}
+	public static ScafMap loadVcfHeader(FileFormat ff){return loadVcfHeader(ff, null);}
 	
-	public static ScafMap loadReference(String fname, ScafMap scafMap){
-		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, true, true);
-		return loadReference(ff, scafMap);
+	public static ScafMap loadVcfHeader(String fname, ScafMap scafMap){
+		FileFormat ff=FileFormat.testInput(fname, FileFormat.VCF, null, false, false);
+		return loadVcfHeader(ff, scafMap);
 	}
 	
-	public static ScafMap loadReference(FileFormat ff, ScafMap map){
+	public static ScafMap loadVcfHeader(FileFormat ff, ScafMap scafMap){
+		ByteFile bf=ByteFile.makeByteFile(ff);
+		if(scafMap==null){scafMap=new ScafMap();}
+		byte[] line=bf.nextLine();
+//		System.err.println(new String(line));
+//		assert(line!=null) : bf.name();
+//		assert(line.length>0) : bf.name();
+		while(line!=null && line.length>0){
+			//assert(false) : new String(line);
+			if(Tools.startsWith(line, "##contig=<ID=")){
+				scafMap.addFromVcf(line);
+			}else if(line[0]!='#'){
+				break;
+			}
+			line=bf.nextLine();
+//			System.err.println(new String(line));
+		}
+		bf.close();
+//		assert(false);
+		return scafMap;
+	}
+
+	/*--------------------------------------------------------------*/
+
+	public static ScafMap loadReference(String fname, boolean makeDefault){return loadReference(fname, null, null, makeDefault);}
+	public static ScafMap loadReference(FileFormat ff, boolean makeDefault){return loadReference(ff, null, null, makeDefault);}
+	
+	public static ScafMap loadReference(String fname, ScafMap scafMap, SamFilter samFilter, boolean makeDefault){
+		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, true, true);
+		return loadReference(ff, scafMap, samFilter, makeDefault);
+	}
+	
+	public static ScafMap loadReference(FileFormat ff, ScafMap map, SamFilter samFilter, boolean makeDefault){
+		if(defaultScafMapFile!=null && defaultScafMapFile.equals(ff.name())){return defaultScafMap;}
 		ArrayList<Read> reads=ReadInputStream.toReads(ff, -1);
 		if(map==null){map=new ScafMap();}
 		for(Read r : reads){
-			map.addScaffold(r);
+			if(samFilter==null || samFilter.passesFilter(r.id)){
+				map.addScaffold(r);
+			}
 		}
+		if(makeDefault){setDefaultScafMap(map, ff.name());}
 		return map;
+	}
+
+	public static ScafMap defaultScafMap(){return defaultScafMap;}
+	public static void setDefaultScafMap(ScafMap map, String fname){
+		SamLine.RNAME_AS_BYTES=false;
+		assert(fname==null || defaultScafMapFile==null || !fname.equals(defaultScafMapFile)) : fname;
+		defaultScafMap=map;
+		defaultScafMapFile=fname;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -108,6 +156,17 @@ public class ScafMap {
 		return add(scaf);
 	}
 	
+	//##contig=<ID=Escherichia_coli,length=4639675>
+	public Scaffold addFromVcf(byte[] line){
+		int comma=Tools.indexOf(line, (byte)',');
+		String name=new String(line, 13, comma-13);
+		int length=Tools.parseInt(line, comma+8, line.length-1);
+		Scaffold scaf=new Scaffold(name, size(), length);
+		Scaffold old=map.get(scaf.name);
+		if(old!=null){return old;}
+		return add(scaf);
+	}
+	
 	public Scaffold add(String s, int len){
 		Scaffold scaf=map.get(s);
 		if(scaf!=null){return scaf;}
@@ -136,7 +195,7 @@ public class ScafMap {
 			}
 		}
 		return scaf;
-	}	
+	}
 	
 	public void addCoverage(SamLine sl){
 		if(!sl.mapped()){return;}
@@ -158,7 +217,7 @@ public class ScafMap {
 	}
 	
 	public int getLength(int number){
-		return number>=size() ? null : list.get(number).length;
+		return number>=size() ? 0 : list.get(number).length;
 	}
 	
 	public Scaffold getScaffold(int number){
@@ -181,7 +240,7 @@ public class ScafMap {
 				value=alt.get(sub);
 				if(value==null){value=map.get(sub);}
 			}
-			assert(value!=null) : s+"\n"+index+"\n"+s.substring(0, Tools.max(1, index))
+			assert(value!=null) : "Scaffold not present in reference: "+s+"\n"+index+"\n"+s.substring(0, Tools.max(1, index))
 				+"\n"+keySet()+"\n"+altKeySet()+"\n";
 		}
 		assert(value!=null) : s+"\n"+keySet()+"\n"+altKeySet()+"\n";
@@ -209,6 +268,13 @@ public class ScafMap {
 		for(Scaffold scaf : list){scaf.clearCoverage();}
 	}
 	
+	@Override
+	public String toString(){
+		StringBuilder sb=new StringBuilder();
+		for(Scaffold sc : list){sb.append(sc).append('\n');}
+		return sb.toString();
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------           Fields             ----------------*/
 	/*--------------------------------------------------------------*/
@@ -221,7 +287,8 @@ public class ScafMap {
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static ScafMap defaultScafMap=null;
+	private static ScafMap defaultScafMap=null;
+	private static String defaultScafMapFile=null;
 	
 	/**
 	 * 

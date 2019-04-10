@@ -2,18 +2,16 @@ package pacbio;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 
-import stream.SiteScoreR;
 import dna.Data;
-import dna.Parser;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.SiteScoreR;
 
 /**
  * @author Brian Bushnell
@@ -24,7 +22,12 @@ public class SortSites {
 	
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		
 		String tempname=null;
@@ -35,9 +38,7 @@ public class SortSites {
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("genome") || a.equals("build")){
+			if(a.equals("genome") || a.equals("build")){
 				Data.setGenome(Integer.parseInt(b)); //Not needed
 			}else if(a.equals("tempname")){
 				tempname=b;
@@ -67,7 +68,7 @@ public class SortSites {
 	
 	public static void stack(String fname1, String outname, String tempname){
 
-		TextFile tf=new TextFile(fname1, false, false);
+		TextFile tf=new TextFile(fname1, false);
 
 		for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
 
@@ -172,7 +173,7 @@ public class SortSites {
 				assert(false);
 			}
 			
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			ArrayList<SiteScoreR> list=new ArrayList<SiteScoreR>(1000);
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){list.add(SiteScoreR.fromText(s));}
 			tf.close();
@@ -240,7 +241,7 @@ public class SortSites {
 				assert(false);
 			}
 			
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			ArrayList<SiteScoreR> list=new ArrayList<SiteScoreR>(1000);
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){list.add(SiteScoreR.fromText(s));}
 			tf.close();

@@ -2,6 +2,8 @@ package hiseq;
 
 import java.util.ArrayList;
 
+import structures.ByteBuilder;
+
 public class Tile {
 	
 	public Tile(int lane_, int tile_){
@@ -28,31 +30,20 @@ public class Tile {
 		return ylist;
 	}
 	
+	@Override
 	public String toString(){
-		StringBuilder sb=new StringBuilder();
+		ByteBuilder bb=new ByteBuilder();
 //		sb.append(">lane="+lane+"\ttile="+tile);
 		for(ArrayList<MicroTile> ylist : xlist){
 			if(ylist!=null){
 				for(MicroTile mt : ylist){
 					if(mt!=null){
-						sb.append(lane).append('\t');
-						sb.append(tile).append('\t');
-						sb.append(mt.x1).append('\t');
-						sb.append(mt.x2).append('\t');
-						sb.append(mt.y1).append('\t');
-						sb.append(mt.y2).append('\t');
-						sb.append(mt.qualityCount).append('\t');
-						
-						sb.append(String.format("%.3f", mt.uniquePercent())).append('\t');
-						sb.append(String.format("%.3f", mt.averageQuality())).append('\t');
-						sb.append(String.format("%.3f", mt.percentErrorFree())).append('\t');
-						sb.append(mt.discard);
-						sb.append('\n');
+						mt.toText(bb);
 					}
 				}
 			}
 		}
-		return sb.toString();
+		return bb.toString();
 	}
 	
 	public ArrayList<ArrayList<MicroTile>> xlist=new ArrayList<ArrayList<MicroTile>>();

@@ -1,22 +1,23 @@
 package jgi;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.KillSwitch;
-import stream.Read;
-import stream.SamLine;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.Read;
+import stream.SamLine;
+import structures.ListNum;
 
 /**
  * Uses two sam files defining primer mapping locations to cut the primed sequence out of the reference.
@@ -28,19 +29,20 @@ public class CutPrimers {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		CutPrimers as=new CutPrimers(args);
-		as.process(t);
+		CutPrimers x=new CutPrimers(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public CutPrimers(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -48,8 +50,6 @@ public class CutPrimers {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -98,7 +98,7 @@ public class CutPrimers {
 			
 			if(cris.paired() && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
@@ -119,7 +119,7 @@ public class CutPrimers {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				ArrayList<Read> readsOut=new ArrayList<Read>(reads.size());
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
@@ -165,19 +165,19 @@ public class CutPrimers {
 								new String(r.bases)+"\n"+sl1+"\n"+sl2+"\n";
 							final byte[] bases=KillSwitch.copyOfRange(r.bases, from, to);
 							final byte[] quals=(r.quality==null ? null : KillSwitch.copyOfRange(r.quality, from, to));
-							readsOut.add(new Read(bases, -1, (byte)0, -1, -1, r.id, quals, r.numericID));
+							readsOut.add(new Read(bases, quals, r.id, r.numericID));
 							readsSuccess++;
 						}
 					}
 					
 					if(oldSize==readsOut.size() && ADD_FAKE_READS){
-						readsOut.add(new Read(new byte[] {'N'}, -1, (byte)0, -1, -1, r.id, null, r.numericID));
+						readsOut.add(new Read(new byte[] {'N'}, null, r.id, r.numericID));
 					}
 				}
 				
 				if(ros!=null){ros.add(readsOut, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -191,7 +191,7 @@ public class CutPrimers {
 		
 		t.stop();
 		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:      "+readsProcessed+" \t"+String.format("%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
+		outstream.println("Reads Processed:      "+readsProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
 		outstream.println("Sequences Generated:  "+readsSuccess);
 	}
 	
@@ -209,10 +209,6 @@ public class CutPrimers {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	

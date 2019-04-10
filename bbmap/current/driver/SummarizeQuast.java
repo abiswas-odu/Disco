@@ -5,9 +5,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 
-import dna.Parser;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.Tools;
 
 /**
@@ -22,13 +23,6 @@ public class SummarizeQuast {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			assert(false);
-			System.exit(0);
-		}
-		
 		//Create a new SummarizeQuast instance
 		SummarizeQuast sq=new SummarizeQuast(args);
 		
@@ -39,10 +33,15 @@ public class SummarizeQuast {
 	}
 	
 	public SummarizeQuast(String[] args){
-		
-		Parser parser=new Parser();
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		ArrayList<String> names=new ArrayList<String>();
+		Parser parser=new Parser();
 		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
@@ -51,12 +50,8 @@ public class SummarizeQuast {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(a.equals("flag_goes_here")){
-				//Do something
-			}else if(a.equals("required")){
+			if(a.equals("required")){
 				requiredString=b;
 			}else if(a.equals("normalize")){
 				normalize=Tools.parseBoolean(b);
@@ -201,7 +196,7 @@ public class SummarizeQuast {
 			return map;
 		}
 		
-		private void normalize(){
+		void normalize(){
 			for(ArrayList<Entry> list : metrics.values()){
 				normalize(list);
 			}

@@ -3,22 +3,22 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * This class does nothing.
@@ -45,10 +45,13 @@ public class A_SampleMT {
 		Timer t=new Timer();
 		
 		//Create an instance of this class
-		A_SampleMT as=new A_SampleMT(args);
+		A_SampleMT x=new A_SampleMT(args);
 		
 		//Run the object
-		as.process(t);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -57,26 +60,65 @@ public class A_SampleMT {
 	 */
 	public A_SampleMT(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether interleaved was explicitly set.
-		
-		//Set some shared static variables regarding PIGZ
+		//Set shared static variables prior to parsing
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		
+		{//Parse the arguments
+			final Parser parser=parse(args);
+			Parser.processQuality();
+			
+			maxReads=parser.maxReads;
+			overwrite=ReadStats.overwrite=parser.overwrite;
+			append=ReadStats.append=parser.append;
+			setInterleaved=parser.setInterleaved;
+			
+			in1=parser.in1;
+			in2=parser.in2;
+			qfin1=parser.qfin1;
+			qfin2=parser.qfin2;
+			extin=parser.extin;
+
+			out1=parser.out1;
+			out2=parser.out2;
+			qfout1=parser.qfout1;
+			qfout2=parser.qfout2;
+			extout=parser.extout;
+		}
+
+		doPoundReplacement(); //Replace # with 1 and 2
+		adjustInterleaving(); //Make sure interleaving agrees with number of input and output files
+		fixExtensions(); //Add or remove .gz or .bz2 as needed
+		checkFileExistence(); //Ensure files can be read and written
+		checkStatics(); //Adjust file-related static fields as needed for this program 
+		
+		//Create output FileFormat objects
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
+
+		//Create input FileFormat objects
+		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
+		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------    Initialization Helpers    ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/** Parse arguments from the command line */
+	private Parser parse(String[] args){
+		
 		//Create a parser object
 		Parser parser=new Parser();
+		
+		//Set any necessary Parser defaults here
+		//parser.foo=bar;
 		
 		//Parse each argument
 		for(int i=0; i<args.length; i++){
@@ -86,9 +128,7 @@ public class A_SampleMT {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
+			if(b!=null && b.equalsIgnoreCase("null")){b=null;}
 			
 			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
@@ -105,68 +145,65 @@ public class A_SampleMT {
 			}
 		}
 		
-		{//Process parser fields
-			Parser.processQuality();
-			
-			maxReads=parser.maxReads;
-			
-			overwrite=ReadStats.overwrite=parser.overwrite;
-			append=ReadStats.append=parser.append;
-			setInterleaved=parser.setInterleaved;
-			
-			in1=parser.in1;
-			in2=parser.in2;
-			qfin1=parser.qfin1;
-			qfin2=parser.qfin2;
-
-			out1=parser.out1;
-			out2=parser.out2;
-			qfout1=parser.qfout1;
-			qfout2=parser.qfout2;
-			
-			extin=parser.extin;
-			extout=parser.extout;
-		}
-		
+		return parser;
+	}
+	
+	/** Replace # with 1 and 2 in headers */
+	private void doPoundReplacement(){
 		//Do input file # replacement
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
 			in2=in1.replace("#", "2");
 			in1=in1.replace("#", "1");
 		}
-		
+
 		//Do output file # replacement
 		if(out1!=null && out2==null && out1.indexOf('#')>-1){
 			out2=out1.replace("#", "2");
 			out1=out1.replace("#", "1");
 		}
 		
+		//Ensure there is an input file
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
+
+		//Ensure out2 is not set without out1
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
+	}
+	
+	/** Add or remove .gz or .bz2 as needed */
+	private void fixExtensions(){
+		in1=Tools.fixExtension(in1);
+		in2=Tools.fixExtension(in2);
+		qfin1=Tools.fixExtension(qfin1);
+		qfin2=Tools.fixExtension(qfin2);
+	}
+	
+	/** Ensure files can be read and written */
+	private void checkFileExistence(){
+		//Ensure output files can be written
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			outstream.println((out1==null)+", "+(out2==null)+", "+out1+", "+out2);
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		}
+		
+		//Ensure input files can be read
+		if(!Tools.testInputFiles(false, true, in1, in2)){
+			throw new RuntimeException("\nCan't read some input files.\n");  
+		}
+		
+		//Ensure that no file was specified multiple times
+		if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2)){
+			throw new RuntimeException("\nSome file names were specified multiple times.\n");
+		}
+	}
+	
+	/** Make sure interleaving agrees with number of input and output files */
+	private void adjustInterleaving(){
 		//Adjust interleaved detection based on the number of input files
 		if(in2!=null){
 			if(FASTQ.FORCE_INTERLEAVED){outstream.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
-		
-		assert(FastaReadInputStream.settingsOK());
-		
-		//Ensure there is an input file
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
-		
-		//Adjust the number of threads for input file reading
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
-			ByteFile.FORCE_MODE_BF2=true;
-		}
-		
-		//Ensure out2 is not set without out1
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
-		
+
 		//Adjust interleaved settings based on number of output files
 		if(!setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -181,30 +218,16 @@ public class A_SampleMT {
 				}
 			}
 		}
-		
-		//Ensure output files can be written
-		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
-			outstream.println((out1==null)+", "+(out2==null)+", "+out1+", "+out2);
-			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+	}
+	
+	/** Adjust file-related static fields as needed for this program */
+	private static void checkStatics(){
+		//Adjust the number of threads for input file reading
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
+			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		//Ensure input files can be read
-		if(!Tools.testInputFiles(false, true, in1, in2)){
-			throw new RuntimeException("\nCan't read to some input files.\n");
-		}
-		
-		//Ensure that no file was specified multiple times
-		if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2)){
-			throw new RuntimeException("\nSome file names were specified multiple times.\n");
-		}
-		
-		//Create output FileFormat objects
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, ordered);
-
-		//Create input FileFormat objects
-		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
-		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
+		assert(FastaReadInputStream.settingsOK());
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -219,33 +242,14 @@ public class A_SampleMT {
 		Read.VALIDATE_IN_CONSTRUCTOR=Shared.threads()<4;
 		
 		//Create a read input stream
-		final ConcurrentReadInputStream cris;
-		{
-			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, qfin1, qfin2);
-			cris.start(); //Start the stream
-			if(verbose){outstream.println("Started cris");}
-		}
-		boolean paired=cris.paired();
-		if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
+		final ConcurrentReadInputStream cris=makeCris();
 		
 		//Optionally create a read output stream
-		final ConcurrentReadOutputStream ros;
-		if(ffout1!=null){
-			//Select output buffer size based on whether it needs to be ordered
-			final int buff=(ordered ? Tools.mid(16, 128, (Shared.threads()*2)/3) : 8);
-			
-			//Notify user of output mode
-			if(cris.paired() && out2==null && (in1!=null && !ffin1.samOrBam() && !ffout1.samOrBam())){
-				outstream.println("Writing interleaved.");
-			}
-			
-			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
-			ros.start(); //Start the stream
-		}else{ros=null;}
+		final ConcurrentReadOutputStream ros=makeCros(cris.paired());
 		
 		//Reset counters
-		readsProcessed=0;
-		basesProcessed=0;
+		readsProcessed=readsOut=0;
+		basesProcessed=basesOut=0;
 		
 		//Process the reads in separate threads
 		spawnThreads(cris, ros);
@@ -261,30 +265,39 @@ public class A_SampleMT {
 		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		//Report timing and results
-		{
-			t.stop();
-			
-			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-			
-			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
+		t.stop();
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
+		outstream.println(Tools.readsBasesOut(readsProcessed, basesProcessed, readsOut, basesOut, 8, false));
 		
 		//Throw an exception of there was an error in a thread
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
+	}
+	
+	private ConcurrentReadInputStream makeCris(){
+		ConcurrentReadInputStream cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, qfin1, qfin2);
+		cris.start(); //Start the stream
+		if(verbose){outstream.println("Started cris");}
+		boolean paired=cris.paired();
+		if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
+		return cris;
+	}
+	
+	private ConcurrentReadOutputStream makeCros(boolean pairedInput){
+		if(ffout1==null){return null;}
+
+		//Select output buffer size based on whether it needs to be ordered
+		final int buff=(ordered ? Tools.mid(16, 128, (Shared.threads()*2)/3) : 8);
+
+		//Notify user of output mode
+		if(pairedInput && out2==null && (in1!=null && !ffin1.samOrBam() && !ffout1.samOrBam())){
+			outstream.println("Writing interleaved.");
+		}
+
+		final ConcurrentReadOutputStream ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
+		ros.start(); //Start the stream
+		return ros;
 	}
 	
 	/** Spawn process threads */
@@ -306,6 +319,15 @@ public class A_SampleMT {
 			pt.start();
 		}
 		
+		//Wait for threads to finish
+		waitForThreads(alpt);
+		
+		//Do anything necessary after processing
+		
+	}
+	
+	private void waitForThreads(ArrayList<ProcessThread> alpt){
+		
 		//Wait for completion of all threads
 		boolean success=true;
 		for(ProcessThread pt : alpt){
@@ -324,24 +346,18 @@ public class A_SampleMT {
 			//Accumulate per-thread statistics
 			readsProcessed+=pt.readsProcessedT;
 			basesProcessed+=pt.basesProcessedT;
+			readsOut+=pt.readsOutT;
+			basesOut+=pt.basesOutT;
 			success&=pt.success;
 		}
 		
 		//Track whether any threads failed
 		if(!success){errorState=true;}
-		
-		//Do anything necessary after processing
-		
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO"); //TODO
-	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
@@ -359,6 +375,7 @@ public class A_SampleMT {
 		}
 		
 		//Called by start()
+		@Override
 		public void run(){
 			//Do anything necessary prior to processing
 			
@@ -376,59 +393,69 @@ public class A_SampleMT {
 			
 			//Grab the first ListNum of reads
 			ListNum<Read> ln=cris.nextList();
-			//Grab the actual read list from the ListNum
-			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
 			//Check to ensure pairing is as expected
-			if(reads!=null && !reads.isEmpty()){
-				Read r=reads.get(0);
+			if(ln!=null && !ln.isEmpty()){
+				Read r=ln.get(0);
 //				assert(ffin1.samOrBam() || (r.mate!=null)==cris.paired()); //Disabled due to non-static access
 			}
 
 			//As long as there is a nonempty read list...
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && ln.size()>0){
 //				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");} //Disabled due to non-static access
-
-				//Loop through each read in the list
-				for(int idx=0; idx<reads.size(); idx++){
-					final Read r1=reads.get(idx);
-					final Read r2=r1.mate;
-					
-					//Validate reads in worker threads
-					if(!r1.validated()){r1.validate(true);}
-					if(r2!=null && !r2.validated()){r2.validate(true);}
-
-					//Track the initial length for statistics
-					final int initialLength1=r1.length();
-					final int initialLength2=r1.mateLength();
-
-					//Increment counters
-					readsProcessedT+=1+r1.mateCount();
-					basesProcessedT+=initialLength1+initialLength2;
-					
-					{
-						//Reads are processed in this block.
-						boolean keep=processReadPair(r1, r2);
-						if(!keep){reads.set(idx, null);}
-					}
-				}
-
-				//Output reads to the output stream
-				if(ros!=null){ros.add(reads, ln.id);}
-
-				//Notify the input stream that the list was used
-				cris.returnList(ln.id, ln.list.isEmpty());
-//				if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
+				
+				processList(ln);
 
 				//Fetch a new list
 				ln=cris.nextList();
-				reads=(ln!=null ? ln.list : null);
 			}
 
 			//Notify the input stream that the final list was used
 			if(ln!=null){
 				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
+		}
+		
+		void processList(ListNum<Read> ln){
+
+			//Grab the actual read list from the ListNum
+			final ArrayList<Read> reads=ln.list;
+			
+			//Loop through each read in the list
+			for(int idx=0; idx<reads.size(); idx++){
+				final Read r1=reads.get(idx);
+				final Read r2=r1.mate;
+				
+				//Validate reads in worker threads
+				if(!r1.validated()){r1.validate(true);}
+				if(r2!=null && !r2.validated()){r2.validate(true);}
+
+				//Track the initial length for statistics
+				final int initialLength1=r1.length();
+				final int initialLength2=r1.mateLength();
+
+				//Increment counters
+				readsProcessedT+=r1.pairCount();
+				basesProcessedT+=initialLength1+initialLength2;
+				
+				{
+					//Reads are processed in this block.
+					boolean keep=processReadPair(r1, r2);
+					
+					if(!keep){reads.set(idx, null);}
+					else{
+						readsOutT+=r1.pairCount();
+						basesOutT+=r1.pairLength();
+					}
+				}
+			}
+
+			//Output reads to the output stream
+			if(ros!=null){ros.add(reads, ln.id);}
+
+			//Notify the input stream that the list was used
+			cris.returnList(ln);
+//			if(verbose){outstream.println("Returned a list.");} //Disabled due to non-static access
 		}
 		
 		/**
@@ -446,6 +473,11 @@ public class A_SampleMT {
 		protected long readsProcessedT=0;
 		/** Number of bases processed by this thread */
 		protected long basesProcessedT=0;
+		
+		/** Number of reads retained by this thread */
+		protected long readsOutT=0;
+		/** Number of bases retained by this thread */
+		protected long basesOutT=0;
 		
 		/** True only if this thread has completed successfully */
 		boolean success=false;
@@ -483,12 +515,20 @@ public class A_SampleMT {
 	/** Override output file extension */
 	private String extout=null;
 	
+	/** Whether interleaved was explicitly set. */
+	private boolean setInterleaved=false;
+	
 	/*--------------------------------------------------------------*/
 
 	/** Number of reads processed */
 	protected long readsProcessed=0;
 	/** Number of bases processed */
 	protected long basesProcessed=0;
+
+	/** Number of reads retained */
+	protected long readsOut=0;
+	/** Number of bases retained */
+	protected long basesOut=0;
 
 	/** Quit after processing this many input reads; -1 means no limit */
 	private long maxReads=-1;

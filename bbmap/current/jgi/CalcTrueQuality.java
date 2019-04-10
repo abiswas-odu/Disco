@@ -4,6 +4,24 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
+
+import align2.QualityTools;
+import dna.AminoAcid;
+import dna.Data;
+import fileIO.ByteFile;
+import fileIO.ByteFile1;
+import fileIO.ByteFile2;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextFile;
+import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
+import shared.ReadStats;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
@@ -14,25 +32,9 @@ import stream.SamReadStreamer;
 import structures.ListNum;
 import var2.CallVariants;
 import var2.ScafMap;
-import var2.Var;
 import var2.VarFilter;
 import var2.VarMap;
-import align2.QualityTools;
-import dna.AminoAcid;
-import dna.Data;
-import dna.Gene;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ByteFile1;
-import fileIO.ByteFile2;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import fileIO.TextFile;
-import fileIO.TextStreamWriter;
-import shared.ReadStats;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
+import var2.VcfLoader;
 
 /**
  * @author Brian Bushnell
@@ -48,16 +50,19 @@ public class CalcTrueQuality {
 	public static void main(String[] args){
 		ReadStats.COLLECT_QUALITY_STATS=true;
 		FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
-		CalcTrueQuality ctq=new CalcTrueQuality(args);
+		CalcTrueQuality x=new CalcTrueQuality(args);
 		ReadStats.overwrite=overwrite;
-		ctq.process();
+		x.process();
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/** Calls main() but restores original static variable values. */
 	public static void main2(String[] args){
 		final boolean oldCOLLECT_QUALITY_STATS=ReadStats.COLLECT_QUALITY_STATS;
 		final boolean oldoverwrite=ReadStats.overwrite;
-		final int oldREAD_BUFFER_LENGTH=Shared.READ_BUFFER_LENGTH;
+		final int oldREAD_BUFFER_LENGTH=Shared.bufferLen();;
 		final boolean oldPIGZ=ReadWrite.USE_PIGZ;
 		final boolean oldUnPIGZ=ReadWrite.USE_UNPIGZ;
 		final int oldZL=ReadWrite.ZIPLEVEL;
@@ -70,7 +75,7 @@ public class CalcTrueQuality {
 		
 		ReadStats.COLLECT_QUALITY_STATS=oldCOLLECT_QUALITY_STATS;
 		ReadStats.overwrite=oldoverwrite;
-		Shared.READ_BUFFER_LENGTH=oldREAD_BUFFER_LENGTH;
+		Shared.setBufferLen(oldREAD_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=oldPIGZ;
 		ReadWrite.USE_UNPIGZ=oldUnPIGZ;
 		ReadWrite.ZIPLEVEL=oldZL;
@@ -80,11 +85,13 @@ public class CalcTrueQuality {
 		FASTQ.FORCE_INTERLEAVED=oldForceInterleaved;
 	}
 	
-	public static void printOptions(){
-		assert(false) : "No help available.";
-	}
-	
 	public CalcTrueQuality(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		SamLine.PARSE_0=false;
 //		SamLine.PARSE_6=false;
@@ -94,17 +101,6 @@ public class CalcTrueQuality {
 //		SamLine.PARSE_OPTIONAL=false;
 		SamLine.PARSE_OPTIONAL_MD_ONLY=true; //I only need the MD tag..
 		
-		if(args==null || args.length==0){
-			printOptions();
-			System.exit(0);
-		}
-		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=false;
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.ZIPLEVEL=8;
@@ -115,7 +111,6 @@ public class CalcTrueQuality {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(a.equals("showstats")){
 				showStats=Tools.parseBoolean(b);
@@ -135,6 +130,7 @@ public class CalcTrueQuality {
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1") || a.equals("sam")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				in=b.split(",");
 			}else if(a.equals("hist") || a.equals("qhist")){
 				qhist=b;
@@ -152,7 +148,7 @@ public class CalcTrueQuality {
 			}else if(a.equals("writematrices") || a.equals("write") || a.equals("wm")){
 				writeMatrices=Tools.parseBoolean(b);
 			}else if(a.equals("ss") || a.equals("samstreamer")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
+				if(b!=null && Tools.isDigit(b.charAt(0))){
 					useStreamer=true;
 					streamerThreads=Tools.max(1, Integer.parseInt(b));
 				}else{
@@ -160,12 +156,17 @@ public class CalcTrueQuality {
 				}
 			}else if(a.equals("passes") || a.equals("recalpasses")){
 				passes=Integer.parseInt(b);
-			}else if(a.equals("ploidy")){
+			}
+			
+			
+			else if(a.equals("ploidy")){
 				ploidy=Integer.parseInt(b);
 			}else if(a.equals("ref")){
 				ref=b;
 			}else if(a.equals("realign")){
 				realign=Tools.parseBoolean(b);
+			}else if(a.equals("prefilter")){
+				prefilter=Tools.parseBoolean(b);
 			}
 			
 			else if(a.equals("vars") || a.equals("variants") || a.equals("variations") || a.equals("varfile") || a.equals("inv")){
@@ -176,15 +177,13 @@ public class CalcTrueQuality {
 				//do nothing
 			}
 			
-			else if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseQualityAdjust(arg, a, b)){
 				//do nothing
-			} 
+			}
 			
 			else if(in==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in=arg.split(",");
@@ -198,10 +197,8 @@ public class CalcTrueQuality {
 		assert(FastaReadInputStream.settingsOK());
 //		if(maxReads!=-1){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
 		
-		if(in==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in==null){throw new RuntimeException("Error - at least one input file is required.");}
+		
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
@@ -243,17 +240,22 @@ public class CalcTrueQuality {
 			}
 			CallVariants cv=new CallVariants(new String[] {inString, "ref="+ref, "realign="+realign});
 			cv.ploidy=ploidy;
-			cv.filter.setFrom(filter);
+			cv.prefilter=prefilter;
+			cv.varFilter.setFrom(filter);
 			
 			varMap=cv.process(new Timer());
 			scafMap=cv.scafMap;
 		}else if(varFile!=null || vcfFile!=null){
-			scafMap=ScafMap.loadHeader(in[0]);
+			if(ref!=null){
+				scafMap=ScafMap.loadReference(ref, true);
+			}else{
+				scafMap=ScafMap.loadSamHeader(in[0]);
+			}
 			assert(scafMap!=null && scafMap.size()>0) : "No scaffold names were loaded.";
 			if(varFile!=null){
-				varMap=VarMap.loadVars(varFile, scafMap);
+				varMap=VcfLoader.loadVars(varFile, scafMap);
 			}else{
-				varMap=VarMap.loadVcf(vcfFile, scafMap);
+				varMap=VcfLoader.loadVcf(vcfFile, scafMap, false, false);
 			}
 		}
 		
@@ -277,28 +279,13 @@ public class CalcTrueQuality {
 			varsFound/=passes;
 			varsTotal/=passes;
 
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
 			if(varMap!=null){
-				outstream.println(String.format("Ignored "+varsFound+" variant substitutions out of "+varsTotal+" mismatches (%.2f%%).\n", varsFound*100.0/varsTotal));
+				outstream.println(String.format(Locale.ROOT, "Ignored "+varsFound+" variant substitutions out of "+varsTotal+" mismatches (%.2f%%).\n", varsFound*100.0/varsTotal));
 			}
-			
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 
-			rpstring=(readsUsed<100000 ? ""+readsUsed : readsUsed<100000000 ? (readsUsed/1000)+"k" : (readsUsed/1000000)+"m");
-			bpstring=(basesUsed<100000 ? ""+basesUsed : basesUsed<100000000 ? (basesUsed/1000)+"k" : (basesUsed/1000000)+"m");
-			
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
+			String rpstring=Tools.padKM(readsUsed, 8);
+			String bpstring=Tools.padKM(basesUsed, 8);
 
 			outstream.println("Reads Used:    "+rpstring);
 			outstream.println("Bases Used:    "+bpstring);
@@ -315,8 +302,10 @@ public class CalcTrueQuality {
 			initializeMatrices(pass-1);
 		}
 		
+		int fnum=0;
 		for(String s : in){
-			process_MT(s, pass);
+			process_MT(s, pass, fnum);
+			fnum++;
 		}
 		
 		if(writeMatrices){
@@ -332,9 +321,9 @@ public class CalcTrueQuality {
 	}
 	
 	
-	public void process_MT(String fname, int pass){
+	public void process_MT(String fname, int pass, int fnum){
 		
-		assert(gbmatrices.size()==pass);
+		assert(gbmatrices.size()==pass || fnum>0) : gbmatrices.size()+", "+pass;
 		
 		final SamReadStreamer ss;
 		final ConcurrentReadInputStream cris;
@@ -342,7 +331,7 @@ public class CalcTrueQuality {
 			FileFormat ff=FileFormat.testInput(fname, FileFormat.SAM, null, true, false);
 			if(useStreamer && (maxReads<0 || maxReads==Long.MAX_VALUE) && Shared.threads()>1 && ff.samOrBam()){
 				cris=null;
-				ss=new SamReadStreamer(ff, streamerThreads);
+				ss=new SamReadStreamer(ff, streamerThreads, false);
 				ss.start();
 			}else{
 				ss=null;
@@ -358,8 +347,15 @@ public class CalcTrueQuality {
 		for(int i=0; i<wthreads; i++){alpt.add(new Worker(cris, ss, pass));}
 		for(Worker pt : alpt){pt.start();}
 		
-		GBMatrixSet gbmatrix=new GBMatrixSet(pass);
-		gbmatrices.add(gbmatrix);
+		GBMatrixSet gbmatrix;
+		if(fnum==0){
+			gbmatrix=new GBMatrixSet(pass);
+			gbmatrices.add(gbmatrix);
+		}else{
+			gbmatrix=gbmatrices.get(pass);
+			assert(gbmatrix)!=null;
+		}
+		assert(gbmatrices.size()==pass+1) : gbmatrices.size()+", "+pass;
 		
 		/* Wait for threads to die, and gather statistics */
 		for(int i=0; i<alpt.size(); i++){
@@ -689,7 +685,7 @@ public class CalcTrueQuality {
 		
 //		assert(OBSERVATION_CUTOFF==0);
 //		assert(false) : pass0+", "+pass1;
-//		
+//
 //		System.err.println(Arrays.toString(r.quality));
 //		System.err.println(r.obj);
 //		assert(false);
@@ -733,7 +729,7 @@ public class CalcTrueQuality {
 //		double modified=Math.pow(measured*measured*measured*expected, 0.25);
 ////		double modified=Math.sqrt(measured*expected);
 ////		double modified=(measured+expected)*.5;
-//		
+//
 //		return modified;
 	}
 	
@@ -824,7 +820,7 @@ public class CalcTrueQuality {
 		try{
 			long[][] matrix=new long[2][d0];
 
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				assert(split.length==3) : Arrays.toString(split);
@@ -849,7 +845,7 @@ public class CalcTrueQuality {
 		try{
 			long[][][] matrix=new long[2][d0][d1];
 
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				assert(split.length==4) : Arrays.toString(split);
@@ -875,7 +871,7 @@ public class CalcTrueQuality {
 		try{
 			long[][][][] matrix=new long[2][d0][d1][d2];
 
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				assert(split.length==5) : Arrays.toString(split);
@@ -902,7 +898,7 @@ public class CalcTrueQuality {
 		try{
 			long[][][][][] matrix=new long[2][d0][d1][d2][d3];
 
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				assert(split.length==6) : Arrays.toString(split);
@@ -930,7 +926,7 @@ public class CalcTrueQuality {
 		try{
 			long[][][][][][] matrix=new long[2][d0][d1][d2][d3][d4];
 
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 				String[] split=line.split("\t");
 				assert(split.length==7) : Arrays.toString(split);
@@ -989,7 +985,7 @@ public class CalcTrueQuality {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					Read r1=reads.get(idx);
@@ -1001,7 +997,7 @@ public class CalcTrueQuality {
 					processLocal(r1);
 					processLocal(r2);
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -1011,9 +1007,10 @@ public class CalcTrueQuality {
 		}
 		
 		public void runStreamer(){
-			ArrayList<Read> reads=ss.nextList();
+			ListNum<Read> ln=ss.nextList();
+			ArrayList<Read> reads=(ln==null ? null : ln.list);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					Read r1=reads.get(idx);
@@ -1025,38 +1022,40 @@ public class CalcTrueQuality {
 					processLocal(r1);
 					processLocal(r2);
 				}
-				reads=ss.nextList();
+				ln=ss.nextList();
+				reads=(ln==null ? null : ln.list);
 			}
 		}
 		
-		private void fixVars(Read r, SamLine sl){
-
-			final byte[] match=r.match;
-			final byte[] bases=r.bases;
-			
-			if(r.strand()==Gene.MINUS){r.reverseComplement();}
-			
-			int rpos=sl.pos-1-SamLine.countLeadingClip(sl.cigar, true, true);
-			int scafnum=scafMap.getNumber(sl.rnameS());
-
-			for(int qpos=0, mpos=0; mpos<match.length; mpos++){
-				final byte m=match[mpos];
-				final byte b=bases[qpos];
-				
-				if(m=='S' && scafnum>=0){
-					Var v=new Var(scafnum, rpos, rpos+1, b);
-					varsTotalT++;
-					if(varMap.containsKey(v)){
-						varsFoundT++;
-						match[mpos]='V';
-					}
-				}
-				
-				if(m!='D'){qpos++;}
-				if(m!='I'){rpos++;}
-			}
-			if(r.strand()==Gene.MINUS){r.reverseComplement();}
-		}
+//		private void fixVars(Read r, SamLine sl){
+//
+//			final byte[] match=r.match;
+//			final byte[] bases=r.bases;
+//			
+//			final boolean rcomp=(r.strand()==Shared.MINUS);
+//			if(rcomp){r.reverseComplement();}
+//			
+//			int rpos=sl.pos-1-SamLine.countLeadingClip(sl.cigar, true, true);
+//			int scafnum=scafMap.getNumber(sl.rnameS());
+//
+//			for(int qpos=0, mpos=0; mpos<match.length; mpos++){
+//				final byte m=match[mpos];
+//				final byte b=bases[qpos];
+//				
+//				if(m=='S' && scafnum>=0){
+//					Var v=new Var(scafnum, rpos, rpos+1, b, Var.SUB);
+//					varsTotalT++;
+//					if(varMap.containsKey(v)){
+//						varsFoundT++;
+//						match[mpos]='V';
+//					}
+//				}
+//				
+//				if(m!='D'){qpos++;}
+//				if(m!='I'){rpos++;}
+//			}
+//			if(rcomp){r.reverseComplement();}
+//		}
 		
 		private void processLocal(Read r){
 			
@@ -1084,23 +1083,23 @@ public class CalcTrueQuality {
 			if(verbose){outstream.println(r+"\n");}
 			
 			if(verbose){outstream.println("A");}
-			if(r.match!=null && r.shortmatch()){
+			final byte[] quals=r.quality, bases=r.bases;
+			if(quals==null || bases==null || r.match==null){return;}
+			final boolean needsFixing=(varMap!=null && Read.containsVars(r.match));
+			
+			if(r.shortmatch()){
 				r.toLongMatchString(false);
-				r.setShortMatch(false);
 			}
-			final byte[] quals=r.quality, bases=r.bases, match=r.match;
-			if(quals==null || bases==null || match==null){return;}
+			final byte[] match=r.match;
 			if(verbose){outstream.println("B");}
 //			if(r.containsNonNMS() || r.containsConsecutiveS(8)){
 //				if(verbose){System.err.println("*************************************************** "+new String(match));}
 //				return;
 //			}
 			
-			if(varMap!=null){
-				fixVars(r, sl);
-			}
+			if(needsFixing){CallVariants.fixVars(r, sl, varMap, scafMap);}
 			
-			if(r.strand()==Gene.MINUS){
+			if(r.strand()==Shared.MINUS){
 //				r.reverseComplement();
 				Tools.reverseInPlace(match);
 			}
@@ -1220,7 +1219,7 @@ public class CalcTrueQuality {
 //						matrixT.qGoodMatrix[pairnum][q1]+=incr;
 //						matrixT.pGoodMatrix[pairnum][pos]+=incr;
 					}else if(m=='S' || m=='I'){
-						
+					
 //						if(!skip){
 							if(incrQ102) matrixT.q102BadMatrix[pairnum][q1][q0][q2]+=2;
 							if(incrQap) matrixT.qapBadMatrix[pairnum][q1][aq][pos]+=2;
@@ -1253,11 +1252,15 @@ public class CalcTrueQuality {
 //						matrixT.pBadMatrix[pairnum][pos]+=2;
 					}else if(m=='V'){
 						match[mpos]='S';
+					}else if(m=='i'){
+						match[mpos]='I';
+					}else if(m=='d'){
+						match[mpos]='D';
 					}else{
 						throw new RuntimeException("Bad symbol m='"+((char)m)+"'\n"+new String(match)+"\n"+new String(bases)+"\n");
 					}
 				}
-				if(m!='D'){qpos++;}
+				if(m!='D' && m!='d'){qpos++;}
 			}
 			
 		}
@@ -1383,14 +1386,14 @@ public class CalcTrueQuality {
 		 * @param bases
 		 * @param quals
 		 * @param pairnum
-		 * @return
+		 * @return recalibrated quality scores
 		 */
 		public byte[] recalibrate(byte[] bases, byte[] quals, int pairnum) {
 			final byte[] quals2;
 			final boolean round=(pass<passes-1);
 			final int aq=Tools.sumInt(quals)/quals.length;
 			if(quals!=null){
-				assert(quals.length<=LENMAX || !(use_qp[pass] || use_qbp[pass] || use_qap[pass])) : 
+				assert(quals.length<=LENMAX || !(use_qp[pass] || use_qbp[pass] || use_qap[pass])) :
 					"\nThese reads are too long ("+quals.length+"bp) for recalibration using position.  Please select different matrices.\n";
 				quals2=new byte[quals.length];
 				for(int i=0; i<bases.length; i++){
@@ -1568,7 +1571,7 @@ public class CalcTrueQuality {
 				x++;
 			}
 //			System.err.println("result: "+sum+", "+x+", "+sum/(double)x);
-//			
+//
 //			assert(pos<149) : sum+", "+x+", "+sum/(double)x;
 			
 			if(x<1){
@@ -1900,7 +1903,7 @@ public class CalcTrueQuality {
 	private long varsTotal=0;
 	private boolean errorState=false;
 	
-	private final int threads;	
+	private final int threads;
 	
 	final boolean incrQ102;
 	final boolean incrQap;
@@ -1922,6 +1925,7 @@ public class CalcTrueQuality {
 	final VarFilter filter=new VarFilter();
 
 	int ploidy=1;
+	boolean prefilter=true;
 	String ref=null;
 	boolean realign=false;
 	
@@ -1930,7 +1934,7 @@ public class CalcTrueQuality {
 	/*--------------------------------------------------------------*/
 	
 	public static boolean showStats=true;
-	private static boolean verbose=false;	
+	private static boolean verbose=false;
 	private static boolean overwrite=true;
 	private static final boolean append=false;
 	public static int passes=2;
@@ -1966,6 +1970,10 @@ public class CalcTrueQuality {
 	private static final byte[] numToBase={'A', 'C', 'G', 'T', 'E', 'N'};
 	private static final float[] PROB_ERROR=QualityTools.PROB_ERROR;
 	private static final float[] INV_PROB_ERROR=Tools.inverse(PROB_ERROR);
+	static{
+		PROB_ERROR[0]=0.8f;
+		INV_PROB_ERROR[0]=1.25f;
+	}
 	
 	private static final CountMatrixSet[] cmatrices=new CountMatrixSet[2];
 	

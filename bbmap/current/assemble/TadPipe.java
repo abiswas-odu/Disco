@@ -4,15 +4,14 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 
 import clump.Clumpify;
 import dna.Data;
-import dna.Parser;
 import fileIO.ReadWrite;
-import jgi.BBDukF;
+import jgi.BBDuk;
 import jgi.BBMerge;
+import shared.PreParser;
 import shared.Shared;
 import shared.Tools;
 import stream.FASTQ;
@@ -34,8 +33,11 @@ public class TadPipe {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args){
-		TadPipe as=new TadPipe(args);
-		as.process();
+		TadPipe x=new TadPipe(args);
+		x.process();
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -44,16 +46,11 @@ public class TadPipe {
 	 */
 	public TadPipe(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			System.exit(1);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		//Set some shared static variables
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -68,12 +65,8 @@ public class TadPipe {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
 			
-			if(Parser.isJavaFlag(arg)){
-				//do nothing
-			}else if(a.equals("in") || a.equals("in1")){
+			if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
 				in2=b;
@@ -123,7 +116,7 @@ public class TadPipe {
 		if(tmpfile!=null && !tmpfile.exists()){tmpfile.mkdirs();}
 		
 //		String outFilter=null;
-//		
+//
 //		String outAdapter=null;
 
 		String outTrimmed=null;
@@ -176,25 +169,25 @@ public class TadPipe {
 //			filterArgs.add("out="+outFilter);
 //			filterArgs.add("ftm="+5);
 //			filterArgs.add("ow");
-//			
+//
 //			if(phix!=null){
 //				filterArgs.add("ref="+phix);
 //				filterArgs.add("k="+31);
 //			}
-//			
+//
 //			Collections.reverse(filterArgs);
-//			
+//
 //			BBDukF.main(filterArgs.toArray(new String[0]));
 //		}
-//		
+//
 //		{
 //			adapterArgs.add("in="+outFilter);
 //			adapterArgs.add("outa="+outAdapter);
-//			
+//
 //			adapterArgs.add("ow");
-//			
+//
 //			Collections.reverse(adapterArgs);
-//			
+//
 //			BBMerge.main(adapterArgs.toArray(new String[0]));
 //		}
 		
@@ -234,7 +227,7 @@ public class TadPipe {
 			
 			Collections.reverse(trimArgs);
 			
-			BBDukF.main(trimArgs.toArray(new String[0]));
+			BBDuk.main(trimArgs.toArray(new String[0]));
 //			if(deleteTemp){delete(outFilter);}
 		}else{
 			outTrimmed=in1;
@@ -390,9 +383,9 @@ public class TadPipe {
 //			assembleArgs.add("out="+out);
 //
 //			assembleArgs.add("k=250");
-//			
+//
 //			Collections.reverse(assembleArgs);
-//			
+//
 //			Tadpole.main(assembleArgs.toArray(new String[0]));
 //			if(deleteTemp){delete(outMergedExtended, outUnmergedExtended);}
 //		}
@@ -408,7 +401,7 @@ public class TadPipe {
 		for(String s : names){
 			if(s!=null){
 				assert(!s.equals(in1)) : s;
-				if(verbose){System.err.println("Trying to delete "+s);}
+				if(verbose){outstream.println("Trying to delete "+s);}
 				File f=new File(s);
 				if(f.exists()){
 					f.delete();
@@ -422,7 +415,7 @@ public class TadPipe {
 	/*--------------------------------------------------------------*/
 	
 //	private ArrayList<String> filterArgs=new ArrayList<String>();
-//	
+//
 //	private ArrayList<String> adapterArgs=new ArrayList<String>();
 	
 	private ArrayList<String> trimArgs=new ArrayList<String>();

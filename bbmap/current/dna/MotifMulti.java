@@ -11,6 +11,7 @@ public class MotifMulti extends Motif {
 	}
 	
 	
+	@Override
 	public boolean matchesExactly(byte[] source, int a){
 		for(int i=0; i<sub.length; i++){
 			Motif m=sub[i];
@@ -22,6 +23,7 @@ public class MotifMulti extends Motif {
 	}
 	
 	
+	@Override
 	public boolean matchesExtended(byte[] source, int a){
 		for(int i=0; i<sub.length; i++){
 			Motif m=sub[i];
@@ -32,12 +34,14 @@ public class MotifMulti extends Motif {
 		return false;
 	}
 	
+	@Override
 	public float normalize(double strength){
 		return (float)strength;
 //		throw new RuntimeException("MotifMulti can't normalize without knowing the submotif.");
 	}
 	
 	
+	@Override
 	public float matchStrength(byte[] source, int a){
 		float max=0;
 		for(int i=0; i<sub.length; i++){

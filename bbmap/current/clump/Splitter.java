@@ -438,7 +438,7 @@ class Splitter {
 	static boolean FIND_CORRELATIONS=true;
 	static int MAX_CORRELATIONS=12;
 	
-//	private static final ThreadLocal<LinkedHashMap<Integer, ArrayList<Read>>> localMap=new ThreadLocal<LinkedHashMap<Integer, ArrayList<Read>>>(); 
+//	private static final ThreadLocal<LinkedHashMap<Integer, ArrayList<Read>>> localMap=new ThreadLocal<LinkedHashMap<Integer, ArrayList<Read>>>();
 //	private static final Integer[] mapKeys=new Integer[2000];
 //	static{
 //		for(int i=0; i<mapKeys.length; i++){mapKeys[i]=i;}

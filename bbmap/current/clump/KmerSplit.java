@@ -3,25 +3,26 @@ package clump;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import structures.Quantizer;
-import dna.Parser;
+import bloom.KCountArray;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import jgi.BBMerge;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
-import bloom.KCountArray;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
+import structures.Quantizer;
 
 /**
  * @author Brian Bushnell
@@ -40,18 +41,24 @@ public class KmerSplit {
 	 */
 	public static void main(String[] args){
 		final boolean pigz=ReadWrite.USE_PIGZ, unpigz=ReadWrite.USE_UNPIGZ;
+		final boolean oldFInt=FASTQ.FORCE_INTERLEAVED, oldTInt=FASTQ.TEST_INTERLEAVED;
 		final int zl=ReadWrite.ZIPLEVEL;
 		final float ztd=ReadWrite.ZIP_THREAD_MULT;
 		final int mzt=ReadWrite.MAX_ZIP_THREADS;
 		Timer t=new Timer();
-		KmerSplit ks=new KmerSplit(args);
+		KmerSplit x=new KmerSplit(args);
 		ReadWrite.ZIPLEVEL=Tools.min(ReadWrite.ZIPLEVEL, maxZipLevel);
-		ks.process(t);
+		x.process(t);
 		ReadWrite.USE_PIGZ=pigz;
 		ReadWrite.USE_UNPIGZ=unpigz;
 		ReadWrite.ZIPLEVEL=zl;
 		ReadWrite.ZIP_THREAD_MULT=ztd;
 		ReadWrite.MAX_ZIP_THREADS=mzt;
+		FASTQ.FORCE_INTERLEAVED=oldFInt;
+		FASTQ.TEST_INTERLEAVED=oldTInt;
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -60,32 +67,24 @@ public class KmerSplit {
 	 */
 	public KmerSplit(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		boolean setInterleaved=false; //Whether it was explicitly set.
-
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		ReadWrite.USE_PIGZ=false;
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
-		
+
+		boolean setInterleaved=false; //Whether it was explicitly set.
 		Parser parser=new Parser();
+		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -98,7 +97,7 @@ public class KmerSplit {
 				assert(k>0 && k<32);
 			}else if(a.equals("mincount") || a.equals("mincr")){
 				minCount=Integer.parseInt(b);
-			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){  
+			}else if(a.equals("groups") || a.equals("g") || a.equals("sets") || a.equals("ways")){
 				groups=Integer.parseInt(b);
 			}else if(a.equals("rename") || a.equals("addname")){
 				//Do nothing
@@ -127,15 +126,29 @@ public class KmerSplit {
 				//ignore
 			}else if(a.equals("markall")){
 				//ignore
+			}else if(a.equals("addcount") || a.equals("renamebycount")){
+				//ignore
 			}else if(a.equals("optical") || a.equals("opticalonly")){
 				//ignore
-			}else if(a.equals("dupesubs") || a.equals("duplicatesubs") || a.equals("dsubs") || a.equals("subs")){
+			}else if(a.equals("dupesubs") || a.equals("duplicatesubs") || a.equals("dsubs") || a.equals("subs") || a.equals("s")){
 				//ignore
-			}else if(a.equals("dupedist") || a.equals("duplicatedistance") || a.equals("ddist") || a.equals("dist") || a.equals("opticaldist")){
+			}else if(a.equals("dupedist") || a.equals("duplicatedistance") || a.equals("ddist") || a.equals("dist") || a.equals("opticaldist") || a.equals("distance")){
 				//ignore
 			}else if(a.equals("scanlimit") || a.equals("scan")){
 				//ignore
 			}else if(a.equals("removeallduplicates") || a.equals("allduplicates")){
+				//ignore
+			}else if(a.equals("allowns")){
+				//ignore
+			}else if(a.equals("containment") || a.equals("absorbcontainment") || a.equals("ac") || a.equals("contains")){
+				//ignore
+			}else if(a.equalsIgnoreCase("prefixOrSuffix") || a.equalsIgnoreCase("suffixOrPrefix") || a.equals("affix") || a.equals("pos")){
+				//ignore
+			}else if(a.equals("printduplicates")){
+				//ignore
+			}else if(a.equals("dupeidentity")){
+				//ignore
+			}else if(a.equals("dupesubrate") || a.equals("dsr") || a.equals("subrate")){
 				//ignore
 			}
 			
@@ -209,10 +222,7 @@ public class KmerSplit {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -281,13 +291,17 @@ public class KmerSplit {
 		}
 
 		final ConcurrentReadOutputStream ros[]=new ConcurrentReadOutputStream[groups];
-		for(int i=0; i<groups; i++){
-			final int buff=8;
+		try {
+			for(int i=0; i<groups; i++){
+				final int buff=8;
 
-			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
-			
-			ros[i]=ConcurrentReadOutputStream.getStream(ffout[i], null, null, null, buff, null, false);
-			ros[i].start();
+				assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
+				
+				ros[i]=ConcurrentReadOutputStream.getStream(ffout[i], null, null, null, buff, null, false);
+				ros[i].start();
+			}
+		} catch (OutOfMemoryError e) {
+			KillSwitch.memKill(e);
 		}
 		
 		readsProcessed=0;
@@ -300,20 +314,10 @@ public class KmerSplit {
 		
 		t.stop();
 		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(errorState){
+			Clumpify.sharedErrorState=true;
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
@@ -369,11 +373,6 @@ public class KmerSplit {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
 	/*--------------------------------------------------------------*/
@@ -399,7 +398,7 @@ public class KmerSplit {
 				array[i]=new ArrayList<Read>(buffer);
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				for(Read r : reads){
 					if(!r.validated()){
@@ -453,7 +452,7 @@ public class KmerSplit {
 						array[code2]=new ArrayList<Read>(buffer);
 					}
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -484,8 +483,8 @@ public class KmerSplit {
 	/*--------------------------------------------------------------*/
 	
 	private int k=31;
-	private int groups=16;
-	private int minCount=0;
+	int groups=16;
+	int minCount=0;
 	
 	KCountArray table=null;
 	
@@ -513,10 +512,10 @@ public class KmerSplit {
 	
 	private long maxReads=-1;
 //	private boolean addName=false;
-	private boolean shortName=false;
-	private boolean shrinkName=false;
-	private boolean ecco=false;
-	private boolean unpair=false;
+	boolean shortName=false;
+	boolean shrinkName=false;
+	boolean ecco=false;
+	boolean unpair=false;
 	
 	static int maxZipLevel=2;
 

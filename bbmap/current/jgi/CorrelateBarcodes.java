@@ -3,26 +3,27 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -33,26 +34,23 @@ public class CorrelateBarcodes {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		CorrelateBarcodes mb=new CorrelateBarcodes(args);
-		mb.process(t);
+		CorrelateBarcodes x=new CorrelateBarcodes(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public CorrelateBarcodes(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -64,8 +62,6 @@ public class CorrelateBarcodes {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -136,20 +132,12 @@ public class CorrelateBarcodes {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(out1==null){
-			if(out2!=null){
-				printOptions();
-				throw new RuntimeException("Error - cannot define out2 without defining out1.");
-			}
-		}
+		if(out1==null && out2!=null){throw new RuntimeException("Error - cannot define out2 without defining out1.");}
 		
 		if(!setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
@@ -204,7 +192,7 @@ public class CorrelateBarcodes {
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
@@ -240,7 +228,7 @@ public class CorrelateBarcodes {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -259,7 +247,7 @@ public class CorrelateBarcodes {
 						}
 					}
 					
-					final int qbar=Read.avgQualityByProbability(barbases, barquals, true, 0);
+					final int qbar=Read.avgQualityByProbabilityInt(barbases, barquals, true, 0);
 					final int minqbar=Tools.min(barquals);
 					aqhistArray[qbar]++;
 					mqhistArray[minqbar]++;
@@ -276,13 +264,13 @@ public class CorrelateBarcodes {
 					{
 						readsProcessed++;
 						basesProcessed+=initialLength1;
-						final int q1=r1.avgQualityByProbability(true, 0);
+						final int q1=r1.avgQualityByProbabilityInt(true, 0);
 						qualCor1[q1][qbar]++;
 					}
 					if(r2!=null){
 						readsProcessed++;
 						basesProcessed+=initialLength2;
-						final int q2=r2.avgQualityByProbability(true, 0);
+						final int q2=r2.avgQualityByProbabilityInt(true, 0);
 						qualCor2[q2][qbar]++;
 					}
 					
@@ -304,7 +292,7 @@ public class CorrelateBarcodes {
 					ros.add(listOut, ln.id);
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -322,7 +310,7 @@ public class CorrelateBarcodes {
 				long sum1=Tools.sum(array1), sum2=Tools.sum(array2);
 				double avg1=Tools.averageHistogram(array1), avg2=Tools.averageHistogram(array2);
 				double dev1=Tools.standardDeviationHistogram(array1), dev2=Tools.standardDeviationHistogram(array2);
-				tsw.print(String.format("%d\t%.1f\t%.1f\t%d\t%d\t%.1f\t%.1f\t%d\n", i, avg1, dev1, sum1, i, avg2, dev2, sum2));
+				tsw.print(String.format(Locale.ROOT, "%d\t%.1f\t%.1f\t%d\t%d\t%.1f\t%.1f\t%d\n", i, avg1, dev1, sum1, i, avg2, dev2, sum2));
 			}
 			tsw.poisonAndWait();
 			errorState|=tsw.errorState;
@@ -337,7 +325,7 @@ public class CorrelateBarcodes {
 			long y=0;
 			for(int i=0; i<aqhistArray.length; i++){
 				long x=aqhistArray[i];
-				tsw.print(String.format("%d\t%d\t%.5f\n", i, x, x*mult));
+				tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.5f\n", i, x, x*mult));
 				y+=x;
 				if(y==sum){break;}
 			}
@@ -354,7 +342,7 @@ public class CorrelateBarcodes {
 			long y=0;
 			for(int i=0; i<mqhistArray.length; i++){
 				long x=mqhistArray[i];
-				tsw.print(String.format("%d\t%d\t%.5f\n", i, x, x*mult));
+				tsw.print(String.format(Locale.ROOT, "%d\t%d\t%.5f\n", i, x, x*mult));
 				y+=x;
 				if(y==sum){break;}
 			}
@@ -370,24 +358,12 @@ public class CorrelateBarcodes {
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
-		
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
-		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
 		if(minBarcodeAverageQuality>0){
 			outstream.println();
-			outstream.println("Reads Discarded:    "+readsTossed+" \t"+String.format("%.3f%%",readsTossed*100.0/readsProcessed));
-			outstream.println("Reads Discarded:    "+basesTossed+" \t"+String.format("%.3f%%",basesTossed*100.0/basesProcessed));
+			outstream.println("Reads Discarded:    "+readsTossed+" \t"+String.format(Locale.ROOT, "%.3f%%",readsTossed*100.0/readsProcessed));
+			outstream.println("Reads Discarded:    "+basesTossed+" \t"+String.format(Locale.ROOT, "%.3f%%",basesTossed*100.0/basesProcessed));
 		}
 		
 		if(errorState){
@@ -396,21 +372,6 @@ public class CorrelateBarcodes {
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
 	
 	
 	/*--------------------------------------------------------------*/
@@ -432,7 +393,7 @@ public class CorrelateBarcodes {
 	private String aqhist=null;
 	private String mqhist=null;
 
-	private int minBarcodeAverageQuality=0;
+	private float minBarcodeAverageQuality=0;
 	private int minBarcodeMinQuality=0;
 
 	private long[][] qualCor1=new long[50][50];

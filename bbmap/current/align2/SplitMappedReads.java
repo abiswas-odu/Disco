@@ -6,14 +6,14 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.zip.ZipOutputStream;
 
+import dna.Data;
+import fileIO.ReadWrite;
+import shared.Timer;
 import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
 import structures.ListNum;
-import dna.Data;
-import fileIO.ReadWrite;
-import shared.Timer;
 
 public class SplitMappedReads {
 	
@@ -125,13 +125,13 @@ public class SplitMappedReads {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				processReads(reads);
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 		}else{
 			ArrayList<Read> reads=stream.nextList();
 			while(reads!=null && reads.size()>0){
@@ -210,8 +210,7 @@ public class SplitMappedReads {
 	}
 	
 	
-	private void writeList(ArrayList<Read> list, PrintWriter writer){
-		
+	private static void writeList(ArrayList<Read> list, PrintWriter writer){
 		synchronized(writer){
 			for(Read r : list){
 				writer.println(r.toText(true));

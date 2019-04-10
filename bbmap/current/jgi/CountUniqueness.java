@@ -2,14 +2,14 @@ package jgi;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.Read;
-import structures.ListNum;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import shared.Timer;
+import stream.ConcurrentReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * TODO
@@ -38,8 +38,8 @@ public class CountUniqueness {
 		while(bpstring.length()<8){bpstring=" "+bpstring;}
 		
 		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", rpnano*1000000));
+		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", bpnano*1000));
 		
 		if(errorState){
 			throw new RuntimeException(this.getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -65,11 +65,11 @@ public class CountUniqueness {
 			cris.start(); //4567
 		}
 		
-		{	
+		{
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 				for(int idx=0; idx<reads.size(); idx++){
 					Read r1=reads.get(idx);
@@ -77,7 +77,7 @@ public class CountUniqueness {
 					assert(false);
 					process(r1, r2);
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}

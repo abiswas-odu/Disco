@@ -4,19 +4,19 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadInputStream;
+import stream.FASTQ;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -27,7 +27,12 @@ public class MergeFastaContigs {
 	
 	
 	public static void main(String[] args){
-		System.out.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName()+" "+Arrays.toString(args)));
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		Timer t=new Timer();
 		String infile=null;
@@ -40,11 +45,9 @@ public class MergeFastaContigs {
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
+			String b=split.length>1 ? split[1] : null;
 
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(a.equals("in") && split.length>0){
 				infile=b;
@@ -128,7 +131,7 @@ public class MergeFastaContigs {
 	 */
 	public static void merge(String infile, String outfile, String outindex) {
 		StringBuilder temp=new StringBuilder(MIN_CONTIG_TO_ADD);
-		TextFile tf=new TextFile(infile, false, false);
+		TextFile tf=new TextFile(infile, false);
 		
 //		OutputStream cos=ReadWrite.getOutputStream(outfile, false);
 //		PrintWriter cpw=new PrintWriter(cos);
@@ -188,10 +191,8 @@ public class MergeFastaContigs {
 		System.out.println();
 	}
 	
-	
-	
 	/**
-	 * @param infile
+	 * @param infiles
 	 * @param outfile
 	 * @param outindex
 	 */
@@ -228,7 +229,7 @@ public class MergeFastaContigs {
 //		assert(false) : PAD_START+", "+np2;
 		
 		for(String fname : infiles){
-			tf=new TextFile(fname, false, false);
+			tf=new TextFile(fname, false);
 			String s=null;
 			String label=null;
 			if(verbose){System.err.println("Processing file "+fname);}
@@ -370,7 +371,7 @@ public class MergeFastaContigs {
 
 
 
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			//System.err.println("reads.size()="+reads.size());
 			for(Read r : reads){
 
@@ -409,14 +410,14 @@ public class MergeFastaContigs {
 
 			}
 			//System.err.println("returning list");
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			//System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 
 		
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		
 		assert(temp.length()==0) : temp.length();
 		printAsLines(npad2, (int)(loc%lineBreak), cout);
@@ -504,6 +505,7 @@ public class MergeFastaContigs {
 	}
 	
 	private static final int min(int x, int y){return x<y ? x : y;}
+	@SuppressWarnings("unused")
 	private static final int max(int x, int y){return x>y ? x : y;}
 	
 	static long definedBasesIn=0;

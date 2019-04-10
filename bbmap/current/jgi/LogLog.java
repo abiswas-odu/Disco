@@ -7,16 +7,15 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
+import dna.AminoAcid;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
 import shared.Primes;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import dna.AminoAcid;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
@@ -42,14 +41,14 @@ public class LogLog {
 		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 	}
 	
-	public final long cardinality(boolean weighted){
-		double mult=0.7947388;
-		if(weighted){mult=0.7600300;}
-		return cardinality(mult);
-	}
+//	public final long cardinality(boolean weighted){
+//		double mult=0.7947388;
+//		if(weighted){mult=0.7600300;}
+//		return cardinality(mult);
+//	}
 	
 	public final long cardinality(){
-		return cardinality(false);
+		return cardinality(0.7947388);
 	}
 	
 	public final long cardinality(double mult){
@@ -86,8 +85,10 @@ public class LogLog {
 	
 	public LogLog(int buckets_, int bits_, int k_, long seed, float minProb_){
 //		hashes=hashes_;
-		if((buckets_&1)==0){buckets_=(int)Primes.primeAtLeast(buckets_);}
+//		if((buckets_&1)==0){buckets_=(int)Primes.primeAtLeast(buckets_);}
 		buckets=buckets_;
+		assert(Integer.bitCount(buckets)==1) : "Buckets must be a power of 2: "+buckets;
+		bucketMask=buckets-1;
 		bits=bits_;
 		k=Kmer.getKbig(k_);
 		minProb=minProb_;
@@ -103,16 +104,28 @@ public class LogLog {
 //		assert(false) : "steps="+steps+", "+tables.length+", "+tables[0].length+", "+tables[0][0].length;
 	}
 	
+//	public long hashOld(final long value0, final long[][] table){
+//		long value=value0, code=value0;
+//		long mask=(bits>63 ? -1L : ~((-1L)<<bits));
+//		
+//		for(int i=0; i<steps; i++){
+//			int x=(int)(value&mask);
+//			value>>=bits;
+//			code=Long.rotateLeft(code^table[i][x], 3);
+//		}
+//		return Long.rotateLeft(code, (int)(value0&31));
+//	}
+	
 	public long hash(final long value0, final long[][] table){
-		long value=value0, code=value0;
-		long mask=~((-1L)<<bits);
-		
-		for(int i=0; i<steps; i++){
+		long value=value0, code=0;
+		long mask=(bits>63 ? -1L : ~((-1L)<<bits));
+
+		for(int i=0; i<steps; i++){//I could also do while value!=0
 			int x=(int)(value&mask);
 			value>>=bits;
-			code=Long.rotateLeft(code^table[i][x], 3);
+			code=code^table[i][x];
 		}
-		return Long.rotateLeft(code, (int)(value0&31));
+		return code;
 	}
 	
 	public void add(long number){
@@ -120,8 +133,9 @@ public class LogLog {
 	}
 	
 	public void hash(Read r){
-		if(r!=null && r.length()>=k){hash(r.bases, r.quality);}
-		if(r.mateLength()>=k){hash(r.mate.bases, r.quality);}
+		if(r==null){return;}
+		if(r.length()>=k){hash(r.bases, r.quality);}
+		if(r.mateLength()>=k){hash(r.mate.bases, r.mate.quality);}
 	}
 	
 	public void hash(byte[] bases, byte[] quals){
@@ -132,33 +146,58 @@ public class LogLog {
 	public void hashSmall(byte[] bases, byte[] quals){
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		int len=0;
-		float prob=1;
 		
 		long kmer=0, rkmer=0;
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-			
-			if(minProb>0 && quals!=null){//Update probability
-				prob=prob*PROB_CORRECT[quals[i]];
-				if(len>k){
-					byte oldq=quals[i-k];
-					prob=prob*PROB_CORRECT_INVERSE[oldq];
+		
+		if(minProb>0 && quals!=null){//Debranched loop
+			assert(quals.length==bases.length) : quals.length+", "+bases.length;
+			float prob=1;
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=AminoAcid.baseToNumber[b];
+				long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				
+				{//Update probability
+					byte q=quals[i];
+					prob=prob*PROB_CORRECT[q];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+				if(x>=0){
+					len++;
+				}else{
+					len=0;
+					kmer=rkmer=0;
+					prob=1;
+				}
+				if(len>=k && prob>=minProb){
+					add(Tools.max(kmer, rkmer));
 				}
 			}
-			if(AminoAcid.isFullyDefined(b)){
-				len++;
-			}else{
-				len=0;
-				prob=1;
-			}
-			if(len>=k && prob>=minProb){
-				add(Tools.max(kmer, rkmer));
+		}else{
+
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=AminoAcid.baseToNumber[b];
+				long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				
+				if(x>=0){
+					len++;
+				}else{
+					len=0;
+					kmer=rkmer=0;
+				}
+				if(len>=k){
+					add(Tools.max(kmer, rkmer));
+				}
 			}
 		}
 	}
@@ -208,14 +247,16 @@ public class LogLog {
 		if(number%SKIPMOD!=0){return;}
 		long key=number;
 		
-		int i=(int)(number%5);
-		key=Long.rotateRight(key, 1);
-		key=hash(key, tables[i%numTables]);
+//		int i=(int)(number%5);
+//		key=Long.rotateRight(key, 1);
+//		key=hash(key, tables[i%numTables]);
+		key=hash(key, tables[((int)number)&numTablesMask]);
 		int leading=Long.numberOfLeadingZeros(key);
 //		counts[leading]++;
 		
 		if(leading<3){return;}
-		final int bucket=(int)((number&Integer.MAX_VALUE)%buckets);
+//		final int bucket=(int)((number&Integer.MAX_VALUE)%buckets);
+		final int bucket=(int)(key&bucketMask);
 		
 		if(maxArray!=null){
 			int x=maxArray.get(bucket);
@@ -253,6 +294,7 @@ public class LogLog {
 	
 	public final int k;
 	public final int numTables=4;
+	public final int numTablesMask=numTables-1;
 	public final int bits;
 	public final float minProb;
 //	public final int hashes;
@@ -260,7 +302,8 @@ public class LogLog {
 	private final long[][][] tables;
 	public final AtomicIntegerArray maxArray;
 	public final int[] maxArray2;
-	public int buckets;
+	public final int buckets;
+	public final int bucketMask;
 	private final ThreadLocal<Kmer> localKmer=new ThreadLocal<Kmer>();
 	
 	protected Kmer getLocalKmer(){
@@ -277,7 +320,7 @@ public class LogLog {
 		
 		public LogLogWrapper(String[] args){
 
-			Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
+			Shared.capBufferLen(200);
 			Shared.capBuffers(8);
 			ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 			ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -289,8 +332,6 @@ public class LogLog {
 				String[] split=arg.split("=");
 				String a=split[0].toLowerCase();
 				String b=split.length>1 ? split[1] : null;
-				if(b==null || b.equalsIgnoreCase("null")){b=null;}
-				while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 				
 				if(parser.parse(arg, a, b)){
 					//do nothing
@@ -349,7 +390,7 @@ public class LogLog {
 					}
 
 					ffin1[i]=FileFormat.testInput(a, FileFormat.FASTQ, null, true, true);
-					ffin2[i]=FileFormat.testInput(b, FileFormat.FASTQ, null, true, true);	
+					ffin2[i]=FileFormat.testInput(b, FileFormat.FASTQ, null, true, true);
 				}
 			}
 
@@ -429,7 +470,7 @@ public class LogLog {
 			public void run(){
 				ListNum<Read> ln=cris.nextList();
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					
 					for(Read r : reads){
 //						if(!r.validated()){r.validate(true);}
@@ -437,11 +478,11 @@ public class LogLog {
 						log.hash(r);
 					}
 					
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 			}
 			
 			private final LogLog log;
@@ -453,7 +494,7 @@ public class LogLog {
 		/*----------------            Fields            ----------------*/
 		/*--------------------------------------------------------------*/
 		
-		private int buckets=1999;
+		private int buckets=2048;//1999
 		private int bits=8;
 		private int k=31;
 		private long seed=-1;
@@ -487,8 +528,8 @@ public class LogLog {
 		/*--------------------------------------------------------------*/
 	}
 	
-	public static final float[] PROB_CORRECT=Arrays.copyOf(align2.QualityTools.PROB_CORRECT, 127);
-	public static final float[] PROB_CORRECT_INVERSE=Arrays.copyOf(align2.QualityTools.PROB_CORRECT_INVERSE, 127);
+	public static final float[] PROB_CORRECT=Arrays.copyOf(align2.QualityTools.PROB_CORRECT, 128);
+	public static final float[] PROB_CORRECT_INVERSE=Arrays.copyOf(align2.QualityTools.PROB_CORRECT_INVERSE, 128);
 	
 	private static PrintStream outstream=System.err;
 	public static boolean verbose=false;

@@ -38,7 +38,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 		edits=ba.alignForward(query, ref, (qstart==-1 ? 0 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 		System.out.println("Forward2:   \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 		System.out.println("***********************\n");
-//		
+//
 //		edits=ba.alignForwardRC(query, ref, (qstart==-1 ? query.length-1 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 //		System.out.println("ForwardRC:  \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 //		System.out.println("***********************\n");
@@ -98,6 +98,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignForward(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		assert(big>maxEdits);
 		if(verbose){System.err.println("alignForward("+new String(query)+", "+new String(ref)+", "+qstart+", "+rstart+", "+maxEdits+")");}
@@ -211,6 +212,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignForwardRC(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		assert(big>maxEdits);
 		if(verbose){System.err.println("alignForwardRC("+new String(query)+", "+new String(ref)+", "+qstart+", "+rstart+", "+maxEdits+")");}
@@ -324,6 +326,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignReverse(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		assert(big>maxEdits);
 		if(verbose){System.err.println("alignReverse("+new String(query)+", "+new String(ref)+", "+qstart+", "+rstart+", "+maxEdits+")");}
@@ -439,6 +442,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignReverseRC(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		assert(big>maxEdits);
 		if(verbose){System.err.println("alignReverseRC("+new String(query)+", "+new String(ref)+", "+qstart+", "+rstart+", "+maxEdits+")");}

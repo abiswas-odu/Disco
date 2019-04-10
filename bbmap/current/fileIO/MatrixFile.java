@@ -25,8 +25,9 @@ public class MatrixFile extends TextFile{
 	}
 	
 	
-	public MatrixFile(String name){super(name, false, false);}
+	public MatrixFile(String name){super(name, false);}
 	
+	@Override
 	public String nextLine(){
 		String line=readLine();
 		
@@ -83,7 +84,5 @@ public class MatrixFile extends TextFile{
 		
 		return new Matrix(grid, prefix, name);
 	}
-	
-	public static boolean verbose=false;
 	
 }

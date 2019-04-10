@@ -2,6 +2,8 @@ package dna;
 import java.io.Serializable;
 import java.util.HashMap;
 
+import shared.Tools;
+
 
 public class Exon implements Comparable<Exon>, Serializable{
 	
@@ -23,11 +25,11 @@ public class Exon implements Comparable<Exon>, Serializable{
 //	public Exon(String startPoint, String endPoint, String chrom){
 //		this(startPoint, endPoint, chrom, "?");
 //	}
-//	
+//
 //	public Exon(int startPoint, int endPoint, String chrom){
 //		this(startPoint, endPoint, chrom, "?");
 //	}
-//	
+//
 //	public Exon(int startPoint, int endPoint, byte chrom){
 //		this(startPoint, endPoint, chrom, (byte)2);
 //	}
@@ -78,7 +80,7 @@ public class Exon implements Comparable<Exon>, Serializable{
 	
 	private static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	
 	public int distToSpliceSite(int x, int y){
@@ -109,7 +111,7 @@ public class Exon implements Comparable<Exon>, Serializable{
 	public static byte toChromosome(String s){
 		int i=0;
 //		System.out.println(s);
-		while(!Character.isDigit(s.charAt(i))){i++;}
+		while(!Tools.isDigit(s.charAt(i))){i++;}
 		return Byte.parseByte(s.substring(i));
 	}
 	
@@ -119,11 +121,13 @@ public class Exon implements Comparable<Exon>, Serializable{
 		return r;
 	}
 	
+	@Override
 	public String toString(){
 //		return "(chr"+chromosome+","+(strand==0 ? "+" : "-")+","+a+"~"+b+")";
 		return "(chr"+chromosome+", "+a+" - "+b+", len "+length()+")";
 	}
 	
+	@Override
 	public int compareTo(Exon other){
 		if(chromosome<other.chromosome){return -1;}
 		if(chromosome>other.chromosome){return 1;}
@@ -146,6 +150,7 @@ public class Exon implements Comparable<Exon>, Serializable{
 		return 0;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return equals((Exon)other);
 	}
@@ -154,6 +159,7 @@ public class Exon implements Comparable<Exon>, Serializable{
 		return a==other.a && b==other.b && chromosome==other.chromosome && strand==other.strand && utr==other.utr && cds==other.cds;
 	}
 	
+	@Override
 	public int hashCode(){
 		int xor=a^(Integer.rotateLeft(b, 16));
 		xor^=Integer.rotateRight(chromosome, 6);

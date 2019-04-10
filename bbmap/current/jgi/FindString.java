@@ -11,7 +11,7 @@ public class FindString {
 	
 	public static void main(String[] args){
 		String fname=args[0];
-		TextFile tf=new TextFile(fname, true, false);
+		TextFile tf=new TextFile(fname, true);
 		for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 			boolean b=false;
 			for(int i=1; i<args.length; i++){

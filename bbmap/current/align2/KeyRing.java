@@ -61,7 +61,7 @@ public final class KeyRing {
 		
 		String s=sb.toString();
 		
-		assert(key==ChromosomeArray.toNumber(0, s.length()-1, s)) : 
+		assert(key==ChromosomeArray.toNumber(0, s.length()-1, s)) :
 			Integer.toHexString(key)+" -> "+s+" != "+Integer.toHexString(ChromosomeArray.toNumber(0, s.length()-1, s));
 		
 		return sb.toString();
@@ -81,7 +81,7 @@ public final class KeyRing {
 		if(slots<=spacing+1){return new int[] {0, slots-1};}
 		
 //		int middles=(midslots/spacing);
-//		
+//
 //		if(middles+2<minKeysDesired && midslots+2>=minKeysDesired){
 //			while(middles+2<minKeysDesired){
 //				spacing--;
@@ -122,7 +122,7 @@ public final class KeyRing {
 		
 	}*/
 
-	/** This is only useful for low-quality reads, with no-calls.  Otherwise it just wastes time... */ 
+	/** This is only useful for low-quality reads, with no-calls.  Otherwise it just wastes time... */
 	public static final int[] reverseOffsets(final int[] offsetsP, final int k, final int readlen){
 		int[] offsetsM=new int[offsetsP.length];
 		for(int i=0; i<offsetsP.length; i++){
@@ -191,7 +191,7 @@ public final class KeyRing {
 		int slots=readlen-blocksize+1;
 //		System.err.println("slots = "+slots);
 		if(slots==1 || maxKeys==1){return new int[] {slots/2};}
-		if(slots==2 || maxKeys==2){return new int[] {0, slots-1};} 
+		if(slots==2 || maxKeys==2){return new int[] {0, slots-1};}
 		if(slots==3 || maxKeys==3){return new int[] {0, slots/2, slots-1};}
 		
 		int midslots=slots-2;
@@ -250,19 +250,19 @@ public final class KeyRing {
 //		assert(overlap<blocksize);
 //		assert(blocksize<=readlen) : readlen+", "+blocksize+", "+overlap+", "+minKeysDesired;
 //		assert(minKeysDesired>=2);
-//		
+//
 //		int slots=readlen-blocksize+1;
 //		int midslots=slots-2;
 //		int spacing=blocksize-overlap;
 //
 //		if(slots<=minKeysDesired){return slots;}
 //		if(slots<=spacing+1){return Tools.min(3, slots);}
-//		
+//
 //		int middles=(midslots/spacing);
 //		if(middles<minKeysDesired-2){
 //			middles=Tools.max(minKeysDesired-2, midslots);
 //		}
-//		
+//
 //		assert(middles>0); //due to the escape conditions
 //		return middles+2;
 //	}
@@ -339,12 +339,12 @@ public final class KeyRing {
 		return offsets;
 	}
 	
-//	public static final int[] makeOffsets2(float[] keyErrorProb, 
+//	public static final int[] makeOffsets2(float[] keyErrorProb,
 //			final int readlenOriginal, int blocksize, float density, int minKeysDesired){
 //		return makeOffsets2(keyErrorProb, readlenOriginal, blocksize, density, 2*density, minKeysDesired);
 //	}
 	
-	public static final int[] makeOffsets2(float[] keyErrorProb, 
+	public static final int[] makeOffsets2(float[] keyErrorProb,
 			final int readlenOriginal, int blocksize, float density, float maxDensity, int minKeysDesired){
 		int readlen=readlenOriginal;
 		assert(maxDensity>=density);
@@ -394,7 +394,7 @@ public final class KeyRing {
 		return offsets;
 	}
 	
-	public static final int[] makeOffsets3(float[] keyErrorProb, 
+	public static final int[] makeOffsets3(float[] keyErrorProb,
 			final int readlenOriginal, int blocksize, float density, float maxDensity, int minKeysDesired, boolean semiperfectmode){
 		int readlen=readlenOriginal;
 		assert(maxDensity>=density);

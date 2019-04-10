@@ -1,14 +1,15 @@
 package bloom;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
+import dna.AminoAcid;
+import fileIO.ReadWrite;
+import shared.Timer;
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastqReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.AminoAcid;
-import fileIO.ReadWrite;
-import shared.Timer;
 
 /**
  * @author Brian Bushnell
@@ -42,7 +43,7 @@ public static void main(String[] args){
 		for(int i=0; i<lim1; i++){
 			String prefix=i+"";
 			while(prefix.length()<8){prefix=prefix+" ";}
-			System.out.println(prefix+"\t"+String.format("%.3f%%   ",(100l*freq[i]/(double)sum))+"\t"+freq[i]);
+			System.out.println(prefix+"\t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*freq[i]/(double)sum))+"\t"+freq[i]);
 		}
 		while(lim1<=freq.length){
 			int x=0;
@@ -52,7 +53,7 @@ public static void main(String[] args){
 			String prefix=lim1+"-"+(lim2-1);
 			if(lim2>=freq.length){prefix=lim1+"+";}
 			while(prefix.length()<8){prefix=prefix+" ";}
-			System.out.println(prefix+"\t"+String.format("%.3f%%   ",(100l*x/(double)sum))+"\t"+x);
+			System.out.println(prefix+"\t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum))+"\t"+x);
 			lim1*=2;
 			lim2=min(lim2*2, freq.length);
 		}
@@ -68,9 +69,9 @@ public static void main(String[] args){
 		
 		System.out.println("Estimate:   \t         \t"+(sum2+collisionsA+collisionsB-(long)(collisionsA*modifier)));
 		System.out.println();
-		System.out.println("Singleton:  \t"+String.format("%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
+		System.out.println("Singleton:  \t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
 		x=sum2-x;
-		System.out.println("Useful:     \t"+String.format("%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
+		System.out.println("Useful:     \t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
 		
 	}
 	
@@ -108,7 +109,7 @@ public static void main(String[] args){
 				assert(paired==(r.mate!=null));
 			}
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 					readsProcessed++;
@@ -179,13 +180,13 @@ public static void main(String[] args){
 					
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			System.err.println("Returned list");
 			ReadWrite.closeStream(cris);
 			System.err.println("Closed stream");

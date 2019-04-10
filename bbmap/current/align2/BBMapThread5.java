@@ -2,8 +2,10 @@ package align2;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 
+import bloom.BloomFilter;
+import dna.AminoAcid;
+import dna.Data;
 import jgi.CoveragePileup;
 import shared.Shared;
 import shared.Tools;
@@ -11,10 +13,6 @@ import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SiteScore;
-
-import dna.AminoAcid;
-import dna.Data;
-import dna.Gene;
 
 /**
  * Based on MapTestThread11f
@@ -74,8 +72,8 @@ public final class BBMapThread5 extends AbstractMapThread {
 	@Override
 	final int CLEARZONE1(){return CLEARZONE1;}
 
-	public BBMapThread5(ConcurrentReadInputStream cris_, int keylen_, 
-			CoveragePileup pileup_, boolean SMITH_WATERMAN_, int THRESH_, int minChrom_, 
+	public BBMapThread5(ConcurrentReadInputStream cris_, int keylen_,
+			CoveragePileup pileup_, boolean SMITH_WATERMAN_, int THRESH_, int minChrom_,
 			int maxChrom_, float keyDensity_, float maxKeyDensity_, float minKeyDensity_, int maxDesiredKeys_,
 			boolean REMOVE_DUPLICATE_BEST_ALIGNMENTS_, boolean SAVE_AMBIGUOUS_XY_,
 			float MINIMUM_ALIGNMENT_SCORE_RATIO_, boolean TRIM_LIST_, boolean MAKE_MATCH_STRING_, boolean QUICK_MATCH_STRINGS_,
@@ -84,22 +82,22 @@ public final class BBMapThread5 extends AbstractMapThread {
 			int MAX_SITESCORES_TO_PRINT_, boolean PRINT_SECONDARY_ALIGNMENTS_,
 			boolean REQUIRE_CORRECT_STRANDS_PAIRS_, boolean SAME_STRAND_PAIRS_, boolean KILL_BAD_PAIRS_, boolean RCOMP_MATE_,
 			boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, int TIP_DELETION_SEARCH_RANGE_,
-			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, int KFILTER_, float IDFILTER_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int TRIM_MIN_LEN_,
-			boolean LOCAL_ALIGN_, boolean RESCUE_, boolean STRICT_MAX_INDEL_, String MSA_TYPE_){
+			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, int KFILTER_, float IDFILTER_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, float TRIM_QUAL_, int TRIM_MIN_LEN_,
+			boolean LOCAL_ALIGN_, boolean RESCUE_, boolean STRICT_MAX_INDEL_, String MSA_TYPE_, BloomFilter bloomFilter_){
 		
 		super(cris_,
 				outStream_, outStreamMapped_, outStreamUnmapped_, outStreamBlack_,
-				pileup_, SMITH_WATERMAN_, LOCAL_ALIGN_, REMOVE_DUPLICATE_BEST_ALIGNMENTS_, 
-				AMBIGUOUS_RANDOM_, AMBIGUOUS_ALL_, TRIM_LEFT_, TRIM_RIGHT_, UNTRIM_, TRIM_QUAL_, TRIM_MIN_LEN_, THRESH_, 
+				pileup_, SMITH_WATERMAN_, LOCAL_ALIGN_, REMOVE_DUPLICATE_BEST_ALIGNMENTS_,
+				AMBIGUOUS_RANDOM_, AMBIGUOUS_ALL_, TRIM_LEFT_, TRIM_RIGHT_, UNTRIM_, TRIM_QUAL_, TRIM_MIN_LEN_, THRESH_,
 				minChrom_, maxChrom_, KFILTER_, IDFILTER_, KILL_BAD_PAIRS_, SAVE_AMBIGUOUS_XY_,
 				REQUIRE_CORRECT_STRANDS_PAIRS_,
 				SAME_STRAND_PAIRS_, RESCUE_, STRICT_MAX_INDEL_, SLOW_ALIGN_PADDING_, SLOW_RESCUE_PADDING_,
-				MSA_TYPE_, keylen_, PERFECTMODE_, SEMIPERFECTMODE_, FORBID_SELF_MAPPING_, RCOMP_MATE_, 
-				MAKE_MATCH_STRING_, DONT_OUTPUT_UNMAPPED_READS_, DONT_OUTPUT_BLACKLISTED_READS_, PRINT_SECONDARY_ALIGNMENTS_, 
-				QUICK_MATCH_STRINGS_, MAX_SITESCORES_TO_PRINT_, MINIMUM_ALIGNMENT_SCORE_RATIO_, 
+				MSA_TYPE_, keylen_, PERFECTMODE_, SEMIPERFECTMODE_, FORBID_SELF_MAPPING_, RCOMP_MATE_,
+				MAKE_MATCH_STRING_, DONT_OUTPUT_UNMAPPED_READS_, DONT_OUTPUT_BLACKLISTED_READS_, PRINT_SECONDARY_ALIGNMENTS_,
+				QUICK_MATCH_STRINGS_, MAX_SITESCORES_TO_PRINT_, MINIMUM_ALIGNMENT_SCORE_RATIO_,
 				keyDensity_, maxKeyDensity_, minKeyDensity_, maxDesiredKeys_,
 				BBIndex5.MIN_APPROX_HITS_TO_KEEP, BBIndex5.USE_EXTENDED_SCORE,
-				BBIndex5.BASE_HIT_SCORE, BBIndex5.USE_AFFINE_SCORE, BBIndex5.MAX_INDEL, TRIM_LIST_, TIP_DELETION_SEARCH_RANGE_);
+				BBIndex5.BASE_HIT_SCORE, BBIndex5.USE_AFFINE_SCORE, BBIndex5.MAX_INDEL, TRIM_LIST_, TIP_DELETION_SEARCH_RANGE_, bloomFilter_);
 		
 		assert(SLOW_ALIGN_PADDING>=0);
 		assert(!(RCOMP_MATE/* || FORBID_SELF_MAPPING*/)) : "RCOMP_MATE: TODO";
@@ -131,6 +129,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 	}
 	
 	
+	@Override
 	public int trimList(ArrayList<SiteScore> list, boolean retainPaired, int maxScore, boolean specialCasePerfect, int minSitesToRetain, int maxSitesToRetain){
 		if(list==null || list.size()==0){return -99999;}
 		if(list.size()==1){return list.get(0).score;}
@@ -243,7 +242,8 @@ public final class BBMapThread5 extends AbstractMapThread {
 	}
 	
 	
-	public void scoreSlow(final ArrayList<SiteScore> list, final byte[] basesP, final byte[] basesM, 
+	@Override
+	public void scoreSlow(final ArrayList<SiteScore> list, final byte[] basesP, final byte[] basesM,
 			final int maxSwScore, final int maxImperfectSwScore){
 		
 		int minMsaLimit;
@@ -261,7 +261,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		for(int i=0; i<list.size(); i++){
 			final SiteScore ss=list.get(i);
 			assert(ss.lengthsAgree());
-			final byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
+			final byte[] bases=(ss.strand==Shared.PLUS ? basesP : basesM);
 			
 			if(SEMIPERFECTMODE){
 				assert(ss.stop-ss.start==bases.length-1);
@@ -359,7 +359,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 				assert(ss.lengthsAgree());
 			}else{
 				assert(swscoreNoIndel<=maxSwScore) : swscoreNoIndel+", "+maxImperfectSwScore+", "+maxSwScore+", "+new String(basesP);
-				assert(clipped || swscoreNoIndel==-1 || msa.scoreNoIndels(bases, ss.chrom, ss.start)==swscoreNoIndel) : 
+				assert(clipped || swscoreNoIndel==-1 || msa.scoreNoIndels(bases, ss.chrom, ss.start)==swscoreNoIndel) :
 					setLimits+", "+clipped+", "+(swscoreArray==null)+", "+
 					swscoreNoIndel+" != "+msa.scoreNoIndels(bases, ss.chrom, ss.start)+"\n"+
 					ss.toText()+"\n"+(ss.stop-ss.start)+", "+bases.length; //Slow
@@ -380,6 +380,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 	}
 	
 	
+	@Override
 	public void processRead(final Read r, final byte[] basesM){
 		if(idmodulo>1 && r.numericID%idmodulo!=1){return;}
 		final byte[] basesP=r.bases;
@@ -497,7 +498,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		if(SLOW_ALIGN || USE_AFFINE_SCORE){r.setPerfectFlag(maxSwScore);}
 		
 		if(r.numSites()>1){
-			final int clearzone=r.perfect() ? CLEARZONEP : 
+			final int clearzone=r.perfect() ? CLEARZONEP :
 				r.topSite().score>=(int)(maxSwScore*CLEARZONE1b_CUTOFF) ? CLEARZONE1 :
 					(r.topSite().score>=(int)(maxSwScore*CLEARZONE1c_CUTOFF) ? CLEARZONE1b : CLEARZONE1c);
 			final int numBestSites1=Tools.countTopScores(r.sites, clearzone);
@@ -514,7 +515,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		if((SLOW_ALIGN || USE_AFFINE_SCORE) && r.numSites()>0){
 			int lim=(int)(maxSwScore*MINIMUM_ALIGNMENT_SCORE_RATIO);
 			if(r.topSite().score<lim){r.sites=null;}
-			else{Tools.removeLowQualitySitesUnpaired(r.sites, Tools.min(lim, Tools.max(1, lim-CLEARZONE3)));} 
+			else{Tools.removeLowQualitySitesUnpaired(r.sites, Tools.min(lim, Tools.max(1, lim-CLEARZONE3)));}
 		}
 		if(r.numSites()==0){r.sites=null;r.mapScore=0;}
 		r.setFromTopSite(AMBIGUOUS_RANDOM, true, MAX_PAIR_DIST);
@@ -598,7 +599,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		
 		
 		//This block is to prevent an assertion from firing.  Generally caused by alignment being lost during match generation.
-		//TODO: Fix cause. 
+		//TODO: Fix cause.
 		if(r.mapScore>0 && r.sites==null){
 			if(!Shared.anomaly){System.err.println("Anomaly: mapScore>0 and list==null.\n"+r+"\n");}
 			Shared.anomaly=true;
@@ -610,11 +611,11 @@ public final class BBMapThread5 extends AbstractMapThread {
 			}
 			r.clearMapping();
 		}
-		assert(r.sites==null || r.mapScore>0) : 
+		assert(r.sites==null || r.mapScore>0) :
 			"\nmapScore = "+r.mapScore+"\nread = "+r.toText(false)+"\nscore thresh = "+(-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO*maxSwScore))+"\n"+
-			"msa unlimited return = "+Arrays.toString(msa.fillAndScoreLimited(r.strand()==Gene.PLUS ? r.bases :
+			"msa unlimited return = "+Arrays.toString(msa.fillAndScoreLimited(r.strand()==Shared.PLUS ? r.bases :
 			AminoAcid.reverseComplementBases(r.bases), r.topSite(), Tools.max(SLOW_ALIGN_PADDING, 10), 0))+"\n"+
-			"msa limited return = "+Arrays.toString(msa.fillAndScoreLimited(r.strand()==Gene.PLUS ? r.bases :
+			"msa limited return = "+Arrays.toString(msa.fillAndScoreLimited(r.strand()==Shared.PLUS ? r.bases :
 			AminoAcid.reverseComplementBases(r.bases), r.topSite(), Tools.max(SLOW_ALIGN_PADDING, 10), (-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO*maxSwScore))))+"\n\n"+
 			"msa vert limit: "+msa.showVertLimit()+"\n\nmsa horz limit: "+msa.showHorizLimit()+"\n\n";
 		
@@ -667,6 +668,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 	
 	
 	/** Returns number of perfect pairs */
+	@Override
 	public int pairSiteScoresInitial(Read r, Read r2, boolean trim){
 		
 		if(r.numSites()<1 || r2.numSites()<1){return 0;}
@@ -725,7 +727,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 				
 //				int innerdist=0;
 //				int outerdist=0;
-//				
+//
 //				if(ss1.start<=ss2.start){
 //					innerdist=ss2.start-ss1.stop;
 //					outerdist=ss2.stop-ss1.start;
@@ -739,7 +741,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 				
 				if(REQUIRE_CORRECT_STRANDS_PAIRS){
 					if(ss1.strand!=ss2.strand){
-						if(ss1.strand==Gene.PLUS){
+						if(ss1.strand==Shared.PLUS){
 							innerdist=ss2.start-ss1.stop;
 							outerdist=ss2.stop-ss1.start;
 						}else{
@@ -849,7 +851,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 //		if(pairs.isEmpty()){return null;}
 //
 //		ArrayList<SiteScore> temp=new ArrayList<SiteScore>(Tools.max(r.list.size(), r2.list.size()));
-//		
+//
 //		for(SiteScore ss : r.list){
 //			if(ss.score>maxPairedScore1){temp.add(ss);}
 //		}
@@ -858,7 +860,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 //		}
 //		r.list.clear();
 //		r.list.addAll(temp);
-//		
+//
 //		for(SiteScore ss : r2.list){
 //			if(ss.score>maxPairedScore2){temp.add(ss);}
 //		}
@@ -867,13 +869,14 @@ public final class BBMapThread5 extends AbstractMapThread {
 //		}
 //		r2.list.clear();
 //		r2.list.addAll(temp);
-//		
+//
 //		return pairs;
 		
 		return numPerfectPairs;
 	}
 	
 	
+	@Override
 	public void processReadPair(final Read r, final byte[] basesM1, final byte[] basesM2){
 		if(idmodulo>1 && r.numericID%idmodulo!=1){return;}
 		final Read r2=r.mate;
@@ -911,7 +914,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		initialSiteSum2+=r2.numSites();
 		
 		//TODO: Fix this.  This is a workaround for an assertion error counting the number of reads used.
-		//Discards need to be tracked separately for each end. 
+		//Discards need to be tracked separately for each end.
 //		if(maxPossibleQuickScore2<0){lowQualityReadsDiscarded--;}
 		
 		final int maxSwScore1=msa.maxQuality(len1);
@@ -1001,14 +1004,14 @@ public final class BBMapThread5 extends AbstractMapThread {
 				int unpaired2=0;
 				if(r.sites!=null){
 					for(SiteScore ss : r.sites){
-						assert(ss.pairedScore<1 || ss.pairedScore>ss.quickScore || ss.pairedScore>ss.slowScore) : 
+						assert(ss.pairedScore<1 || ss.pairedScore>ss.quickScore || ss.pairedScore>ss.slowScore) :
 							"\n"+ss.toText()+"\n"+r.toText(false)+"\n";
 						if(ss.pairedScore==0){unpaired1++;}
 					}
 				}
 				if(r2.sites!=null){
 					for(SiteScore ss : r2.sites){
-						assert(ss.pairedScore<1 || ss.pairedScore>ss.quickScore || ss.pairedScore>ss.slowScore) : 
+						assert(ss.pairedScore<1 || ss.pairedScore>ss.quickScore || ss.pairedScore>ss.slowScore) :
 							"\n"+ss.toText()+"\n"+r2.toText(false)+"\n";
 						if(ss.pairedScore==0){unpaired2++;}
 					}
@@ -1033,7 +1036,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 				
 //				if(r.list!=null){Shared.sort(r.list);}
 //				if(r2.list!=null){Shared.sort(r2.list);}
-//				
+//
 //				Tools.removeLowQualitySites(r.list, maxSwScore1, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE);
 //				Tools.removeLowQualitySites(r2.list, maxSwScore2, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE);
 				
@@ -1088,7 +1091,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		
 
 		if(r.numSites()>1){
-			final int clearzone=r.perfect() ? CLEARZONEP : 
+			final int clearzone=r.perfect() ? CLEARZONEP :
 				r.topSite().score>=(int)(maxSwScore1*CLEARZONE1b_CUTOFF) ? CLEARZONE1 :
 					(r.topSite().score>=(int)(maxSwScore1*CLEARZONE1c_CUTOFF) ? CLEARZONE1b : CLEARZONE1c);
 			int numBestSites1=Tools.countTopScores(r.sites, clearzone);
@@ -1103,7 +1106,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		}
 
 		if(r2.numSites()>1){
-			final int clearzone=r2.perfect() ? CLEARZONEP : 
+			final int clearzone=r2.perfect() ? CLEARZONEP :
 				r2.topSite().score>=(int)(maxSwScore2*CLEARZONE1b_CUTOFF) ? CLEARZONE1 :
 					(r2.topSite().score>=(int)(maxSwScore2*CLEARZONE1c_CUTOFF) ? CLEARZONE1b : CLEARZONE1c);
 			int numBestSites2=Tools.countTopScores(r2.sites, clearzone);
@@ -1122,10 +1125,10 @@ public final class BBMapThread5 extends AbstractMapThread {
 			SiteScore ss1=r.topSite();
 			SiteScore ss2=r2.topSite();
 			if(canPair(ss1, ss2, len1, len2, REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
-				assert(SLOW_ALIGN ? ss1.pairedScore>ss1.slowScore : ss1.pairedScore>ss1.quickScore) : 
+				assert(SLOW_ALIGN ? ss1.pairedScore>ss1.slowScore : ss1.pairedScore>ss1.quickScore) :
 					"\n"+ss1.toText()+"\n"+ss2.toText()+"\n"+r.toText(false)+"\n"+r2.toText(false)+"\n\n"+
 						r.mapped()+", "+r.paired()+", "+r.strand()+", "+r.ambiguous()+"\n\n"+r2.mapped()+", "+r2.paired()+", "+r2.strand()+", "+r2.ambiguous()+"\n\n";
-				assert(SLOW_ALIGN ? ss2.pairedScore>ss2.slowScore : ss2.pairedScore>ss2.quickScore) : 
+				assert(SLOW_ALIGN ? ss2.pairedScore>ss2.slowScore : ss2.pairedScore>ss2.quickScore) :
 					"\n"+ss1.toText()+"\n"+ss2.toText()+"\n"+r.toText(false)+"\n"+r2.toText(false)+"\n\n";
 				r.setPaired(true);
 				r.mate.setPaired(true);
@@ -1188,11 +1191,11 @@ public final class BBMapThread5 extends AbstractMapThread {
 		assert(checkTopSite(r)); // TODO remove this
 		if(verbose){
 			System.err.println("\nFinal:\nRead1:\t"+r+"\nRead2:\t"+r2);
-			if(r.match!=null && r.shortmatch()){r.toLongMatchString(false); r.setShortMatch(false);}
-			if(r2.match!=null && r2.shortmatch()){r2.toLongMatchString(false); r2.setShortMatch(false);}
+			if(r.match!=null && r.shortmatch()){r.toLongMatchString(false);}
+			if(r2.match!=null && r2.shortmatch()){r2.toLongMatchString(false);}
 		}
 		
-		//Block to prevent assertion from firing.  Generally caused by alignment being lost during match generation.  TODO: Fix cause. 
+		//Block to prevent assertion from firing.  Generally caused by alignment being lost during match generation.  TODO: Fix cause.
 		if(r.mapScore>0 && r.sites==null){
 			if(!Shared.anomaly){System.err.println("Anomaly: mapScore>0 and list==null.\n"+r+"\n");}
 			Shared.anomaly=true;
@@ -1205,7 +1208,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 			r2.setPaired(false);
 		}
 		assert(checkTopSite(r)); // TODO remove this
-		//Block to prevent assertion from firing.  Generally caused by alignment being lost during match generation.  TODO: Fix cause. 
+		//Block to prevent assertion from firing.  Generally caused by alignment being lost during match generation.  TODO: Fix cause.
 		if(r2.mapScore>0 && r2.sites==null){
 			if(!Shared.anomaly){System.err.println("Anomaly: mapScore>0 and list==null.\n"+r+"\n");}
 			Shared.anomaly=true;
@@ -1218,18 +1221,18 @@ public final class BBMapThread5 extends AbstractMapThread {
 			r.setPaired(false);
 		}
 		
-		assert(r.sites==null || r.mapScore>0) : 
+		assert(r.sites==null || r.mapScore>0) :
 			r.mapScore+"\t"+r.sites+"\n"+(-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore1))+"\n"+
-			Arrays.toString(msa.fillAndScoreLimited(r.strand()==Gene.PLUS ? r.bases :
+			Arrays.toString(msa.fillAndScoreLimited(r.strand()==Shared.PLUS ? r.bases :
 			AminoAcid.reverseComplementBases(r.bases), r.topSite(), Tools.max(SLOW_ALIGN_PADDING, 80), 0))+"\n"+
-			Arrays.toString(msa.fillAndScoreLimited(r.strand()==Gene.PLUS ? r.bases :
+			Arrays.toString(msa.fillAndScoreLimited(r.strand()==Shared.PLUS ? r.bases :
 			AminoAcid.reverseComplementBases(r.bases), r.topSite(), Tools.max(SLOW_ALIGN_PADDING, 80), (-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore1))))+"\n\n"+
 			msa.showVertLimit()+"\n\n"+msa.showHorizLimit()+"\n\n"+r+"\n\n"+r2+"\n\n";
-		assert(r2.sites==null || r2.mapScore>0) : 
+		assert(r2.sites==null || r2.mapScore>0) :
 			r2.mapScore+"\t"+r2.sites+"\n"+(-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore2))+"\n"+
-			Arrays.toString(msa.fillAndScoreLimited(r2.strand()==Gene.PLUS ? r2.bases :
+			Arrays.toString(msa.fillAndScoreLimited(r2.strand()==Shared.PLUS ? r2.bases :
 			AminoAcid.reverseComplementBases(r2.bases), r2.topSite(), Tools.max(SLOW_ALIGN_PADDING, 80), 0))+"\n"+
-			Arrays.toString(msa.fillAndScoreLimited(r2.strand()==Gene.PLUS ? r2.bases :
+			Arrays.toString(msa.fillAndScoreLimited(r2.strand()==Shared.PLUS ? r2.bases :
 			AminoAcid.reverseComplementBases(r2.bases), r2.topSite(), Tools.max(SLOW_ALIGN_PADDING, 80), (-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore2))))+"\n\n"+
 			msa.showVertLimit()+"\n\n"+msa.showHorizLimit()+"\n\n"+r+"\n\n"+r2+"\n\n";
 		

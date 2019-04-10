@@ -2,7 +2,6 @@ package driver;
 
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 
 public class CompareReferenceGenomes {
 	

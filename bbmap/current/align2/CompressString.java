@@ -44,16 +44,16 @@ public class CompressString {
 		
 //		s=compressRepeatsMultiperiod(bytes, 1, 1, null);
 //		System.out.println("compress(1) length: "+s.length());
-//		
+//
 //		s=compressRepeatsMultiperiod(bytes, 2, 2, null);
 //		System.out.println("compress(2) length: "+s.length());
-//		
+//
 //		s=compressRepeatsMultiperiod(bytes, 3, 3, null);
 //		System.out.println("compress(3) length: "+s.length());
-//		
+//
 //		s=compressRepeatsMultiperiod(bytes, 1, 2, null);
 //		System.out.println("compress(1,2) length: "+s.length());
-//		
+//
 //		s=compressRepeatsMultiperiod(bytes, 1, 3, null);
 //		System.out.println("compress(1,3) length: "+s.length());
 	}
@@ -70,7 +70,7 @@ public class CompressString {
 		StringBuilder sb=new StringBuilder(array.length);
 		
 		for(int base=0; base<array.length; base++){
-			//Test for repeats of current pattern (array[i] to array[period-1]) 
+			//Test for repeats of current pattern (array[i] to array[period-1])
 			int repeats=countRepeats(array, base, period);
 			int occurances=repeats+1;
 
@@ -95,7 +95,7 @@ public class CompressString {
 				assert(log>0 && log<=31);
 				
 				
-				//Append 
+				//Append
 				for(int i=1; i<log; i++){
 					for(int j=0; j<period; j++){
 						sb.append((char)array[base+j]);
@@ -116,7 +116,7 @@ public class CompressString {
 		StringBuilder sb=new StringBuilder(array.length);
 		
 		for(int base=0; base<array.length; base++){
-			//Test for repeats of current pattern (array[i] to array[period-1]) 
+			//Test for repeats of current pattern (array[i] to array[period-1])
 			
 			
 			int period=0;
@@ -124,7 +124,7 @@ public class CompressString {
 //			for(int x=maxPeriod; x>=minPeriod; x--){
 //				int temp=countRepeats(array, base, x);
 //				if(temp>1){
-//					repeats=temp; 
+//					repeats=temp;
 //					period=x;
 //					break;
 //				}
@@ -132,7 +132,7 @@ public class CompressString {
 			for(int x=minPeriod; x<=maxPeriod; x++){
 				int temp=countRepeats(array, base, x);
 				if(temp>1){
-					repeats=temp; 
+					repeats=temp;
 					period=x;
 					break;
 				}
@@ -167,7 +167,7 @@ public class CompressString {
 				assert(log>0 && log<=31);
 				
 				
-				//Append 
+				//Append
 				for(int i=0; i<log; i++){
 					for(int j=0; j<period; j++){
 						sb.append((char)array[base+j]);
@@ -189,7 +189,7 @@ public class CompressString {
 		StringBuilder sb=new StringBuilder(array.length);
 		
 		for(int base=0; base<array.length; base++){
-			//Test for repeats of current pattern (array[i] to array[period-1]) 
+			//Test for repeats of current pattern (array[i] to array[period-1])
 			
 			
 			int period=0;
@@ -199,7 +199,7 @@ public class CompressString {
 				int temp=countRepeats(array, base, x);
 //				System.out.println("*** temp="+temp+" for "+base+", "+x);
 				if(temp>1){
-					repeats=temp; 
+					repeats=temp;
 					period=x;
 					break;
 				}
@@ -228,7 +228,7 @@ public class CompressString {
 			else{
 				//Compress and advance pointer
 				
-				//Append 
+				//Append
 				for(int j=0; j<period; j++){
 					sb.append((char)array[base+j]);
 					if(list!=null){list.add(base+j);}

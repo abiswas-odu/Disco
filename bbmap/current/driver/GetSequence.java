@@ -4,17 +4,19 @@ import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.Gene;
-import dna.Range;
+import shared.Shared;
+import shared.Tools;
+import structures.Range;
 
 public class GetSequence {
 	
 	public static void main(String[] args){
 		
 		int chrom=-1;
-		byte strand=Gene.PLUS;
+		byte strand=Shared.PLUS;
 		
 		/** Change base to zero or one for the coordinates mode */
-		int base=0; 
+		int base=0;
 		
 //		char c=args[1].charAt(0);
 //		if(c=='+'){strand=Gene.PLUS;}
@@ -28,7 +30,7 @@ public class GetSequence {
 				final String arg=args[i];
 				final String[] split=arg.split("=");
 				Data.setGenome(Integer.parseInt(split[1]));
-			}else if(Character.isDigit(x) || x=='[' || x=='('){
+			}else if(Tools.isDigit(x) || x=='[' || x=='('){
 				firstLoc=i;
 			}else{
 				if(args[i].startsWith("chr")){
@@ -48,7 +50,7 @@ public class GetSequence {
 //		System.out.println(chrom);
 //		System.out.println(strand);
 		
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		
 		String[] array=new String[args.length];
@@ -85,11 +87,11 @@ public class GetSequence {
 	}
 	
 	public static String get(int chrom, int a, int b){
-		return get(chrom, a, b, Gene.PLUS);
+		return get(chrom, a, b, Shared.PLUS);
 	}
 	
 	public static String get(int chrom, int a, int b, byte strand){
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray cha=Data.getChromosome(chrom);
 		return cha.getString(a, b);
 	}

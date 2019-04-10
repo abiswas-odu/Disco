@@ -2,12 +2,15 @@ package dna;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
-import jgi.AssemblyStats2;
-import shared.Tools;
-import stream.ByteBuilder;
-import stream.KillSwitch;
 import fileIO.ReadWrite;
+import jgi.AssemblyStats2;
+import shared.KillSwitch;
+import shared.Shared;
+import shared.Tools;
+import structures.ByteBuilder;
+import structures.Range;
 
 
 public class ChromosomeArray implements Serializable {
@@ -37,7 +40,7 @@ public class ChromosomeArray implements Serializable {
 		System.out.println("Writing to "+outfile);
 		
 		System.out.println("minIndex="+cha.minIndex+", maxIndex="+cha.maxIndex+", length="+cha.array.length+
-				"; time="+String.format("%.3f seconds", (time2-time1)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time2-time1)/1000000000d));
 
 		long time3=System.nanoTime();
 		ReadWrite.write(cha, outfile, false);
@@ -47,7 +50,7 @@ public class ChromosomeArray implements Serializable {
 		long time4=System.nanoTime();
 		
 		System.out.println("minIndex="+cha.minIndex+", maxIndex="+cha.maxIndex+", length="+cha.array.length+
-				"; time="+String.format("%.3f seconds", (time4-time3)/1000000000d));
+				"; time="+String.format(Locale.ROOT, "%.3f seconds", (time4-time3)/1000000000d));
 	}
 	
 	public static ChromosomeArray read(String fname, int chrom){
@@ -75,12 +78,12 @@ public class ChromosomeArray implements Serializable {
 	}
 	
 	public ChromosomeArray(){
-		this((byte)-1, Gene.PLUS);
+		this((byte)-1, Shared.PLUS);
 	}
 	
 	/** Actually does reverse complement */
 	public ChromosomeArray complement(){
-		byte otherStrand=(strand==Gene.MINUS ? Gene.PLUS : Gene.MINUS);
+		byte otherStrand=(strand==Shared.MINUS ? Shared.PLUS : Shared.MINUS);
 		ChromosomeArray ca=new ChromosomeArray(chromosome, otherStrand, 0, maxIndex);
 		for(int i=0; i<=maxIndex; i++){
 			int pos=maxIndex-i;
@@ -115,8 +118,8 @@ public class ChromosomeArray implements Serializable {
 		if(CHANGE_U_TO_T && CHANGE_DEGENERATE_TO_N){
 			val=AminoAcid.baseToACGTN[val];
 		}else{
-			val=Character.toUpperCase((char)val);
-			if(AminoAcid.baseToNumberExtended[val]<0){val='N';}	
+			val=Tools.toUpperCase((char)val);
+			if(AminoAcid.baseToNumberExtended[val]<0){val='N';}
 		}
 		array[loc]=(val>Byte.MAX_VALUE ? Byte.MAX_VALUE : (byte)val);
 		minIndex=min(loc, minIndex);
@@ -140,9 +143,9 @@ public class ChromosomeArray implements Serializable {
 			}
 		}else{
 			for(int i=0; i<s.length(); i++, loc++){
-				char c=Character.toUpperCase(s.charAt(i));
+				char c=Tools.toUpperCase(s.charAt(i));
 				if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
-				assert(Character.isLetter(c));
+				assert(Tools.isLetter(c));
 				assert(c<=Byte.MAX_VALUE);
 				array[loc]=(byte)c;
 			}
@@ -180,9 +183,9 @@ public class ChromosomeArray implements Serializable {
 			}
 		}else{
 			for(int i=0; i<slen; i++, loc++){
-				char c=Tools.max((char)0, Character.toUpperCase((char)s[i]));
+				char c=Tools.max((char)0, Tools.toUpperCase((char)s[i]));
 				if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
-				assert(Character.isLetter(c));
+				assert(Tools.isLetter(c));
 				assert(c<=Byte.MAX_VALUE);
 				array[loc]=(byte)c;
 			}
@@ -196,7 +199,8 @@ public class ChromosomeArray implements Serializable {
 	/**
 	 * @param loc
 	 * @param length
-	 * @return
+	 * @param counts
+	 * @return gc fraction
 	 */
 	public float calcGC(int loc, int length, int[] counts) {
 		counts=countACGTINOC(loc, length, counts);
@@ -396,7 +400,7 @@ public class ChromosomeArray implements Serializable {
 		if(chromosome!=other.chromosome){System.err.println("c");return false;}
 		if(array.length!=other.array.length){System.err.println("d");return false;}
 		for(int i=minIndex; i<=maxIndex; i++){
-			if(Character.toLowerCase(array[i])!=Character.toLowerCase(other.array[i])){
+			if(Tools.toLowerCase(array[i])!=Tools.toLowerCase(other.array[i])){
 				System.err.println("e");
 				return false;
 			}

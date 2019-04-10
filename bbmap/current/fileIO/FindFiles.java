@@ -49,7 +49,7 @@ public class FindFiles {
 	public FindFiles(String pre, String suf, String mid){
 		assert(!"*".equals(pre)) : "Use # instead of *, which has problems from the command line";
 		assert(!"*".equals(suf)) : "Use # instead of *, which has problems from the command line";
-		prefix=((pre==null || pre.equals("*") || pre.equals("#")) ? null : pre.toLowerCase()); 
+		prefix=((pre==null || pre.equals("*") || pre.equals("#")) ? null : pre.toLowerCase());
 		suffix=((suf==null || suf.equals("*") || suf.equals("#")) ? null : suf.toLowerCase());
 		middle=((mid==null || mid.equals("*") || mid.equals("#")) ? null : mid.toLowerCase());
 	}

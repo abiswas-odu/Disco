@@ -1,5 +1,7 @@
 package driver;
 
+import java.util.Locale;
+
 import fileIO.TextFile;
 
 /**
@@ -22,15 +24,15 @@ public class ProcessSpeed {
 			}else if(line.startsWith("real\t")){
 				String time=line.split("\t")[1];
 				double seconds=toSeconds(time);
-				System.out.print(String.format("%.3f\t", seconds));
+				System.out.print(String.format(Locale.ROOT, "%.3f\t", seconds));
 			}else if(line.startsWith("user\t")){
 				String time=line.split("\t")[1];
 				double seconds=toSeconds(time);
-				System.out.print(String.format("%.3f\t", seconds));
+				System.out.print(String.format(Locale.ROOT, "%.3f\t", seconds));
 			}else if(line.startsWith("sys\t")){
 				String time=line.split("\t")[1];
 				double seconds=toSeconds(time);
-				System.out.print(String.format("%.3f\t", seconds));
+				System.out.print(String.format(Locale.ROOT, "%.3f\t", seconds));
 			}else if(line.startsWith("Correct:")){
 				System.out.print(line.split("\\p{javaWhitespace}+")[2]+"\t");
 			}else if(line.startsWith("Incorrect:")){

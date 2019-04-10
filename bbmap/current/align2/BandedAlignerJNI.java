@@ -1,6 +1,7 @@
 package align2;
 
 import java.io.File;
+
 import dna.AminoAcid;
 
 /**
@@ -66,7 +67,7 @@ public class BandedAlignerJNI extends BandedAligner{
 		edits=ba.alignForward(query, ref, (qstart==-1 ? 0 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 		System.out.println("Forward:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 		System.out.println("***********************\n");
-//		
+//
 //		edits=ba.alignForwardRC(query, ref, (qstart==-1 ? query.length-1 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 //		System.out.println("ForwardRC:  \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 //		System.out.println("***********************\n");
@@ -92,6 +93,7 @@ public class BandedAlignerJNI extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignForward(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		int[] returnVals = new int[5];
 		returnVals[0] = lastQueryLoc;
@@ -115,6 +117,7 @@ public class BandedAlignerJNI extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignForwardRC(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		int[] returnVals = new int[5];
 		returnVals[0] = lastQueryLoc;
@@ -138,6 +141,7 @@ public class BandedAlignerJNI extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignReverse(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		int[] returnVals = new int[5];
 		returnVals[0] = lastQueryLoc;
@@ -161,6 +165,7 @@ public class BandedAlignerJNI extends BandedAligner{
 	 * @param rstart
 	 * @return Edit distance
 	 */
+	@Override
 	public int alignReverseRC(final byte[] query, final byte[] ref, final int qstart, final int rstart, final int maxEdits, final boolean exact){
 		int[] returnVals = new int[5];
 		returnVals[0] = lastQueryLoc;

@@ -6,19 +6,20 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.Read;
+import structures.ByteBuilder;
 import structures.ListNum;
-import structures.LongList;
 
 /**
  * Filters sequences according to their taxonomy,
@@ -41,8 +42,11 @@ public class PrintTaxonomy {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		PrintTaxonomy as=new PrintTaxonomy(args);
-		as.process(t);
+		PrintTaxonomy x=new PrintTaxonomy(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -51,24 +55,20 @@ public class PrintTaxonomy {
 	 */
 	public PrintTaxonomy(String[] args){
 		
-		//Process any config files
-		args=Parser.parseConfig(args);
-		
-		//Detect whether the uses needs help
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		//Print the program name and arguments
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		//Set some shared static variables regarding PIGZ
+		//Set shared static variables
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		
 		//Create a parser object
 		Parser parser=new Parser();
+		
+		int taxLevel=0, minLevel=0, maxLevel=TaxTree.LIFE;
 		
 		//Parse each argument
 		for(int i=0; i<args.length; i++){
@@ -78,9 +78,6 @@ public class PrintTaxonomy {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //Strip leading hyphens
-			
 			
 			if(a.equals("out")){
 				out1=b;
@@ -91,39 +88,25 @@ public class PrintTaxonomy {
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
-				tableFile=b;
-				if("auto".equalsIgnoreCase(b)){tableFile=TaxTree.defaultTableFile();}
+				giTableFile=b;
 			}else if(a.equals("accession")){
 				accessionFile=b;
-				if("auto".equalsIgnoreCase(b)){tableFile=TaxTree.defaultAccessionFile();}
 			}else if(a.equals("tree") || a.equals("taxtree")){
-				treeFile=b;
-				if("auto".equalsIgnoreCase(b)){treeFile=TaxTree.defaultTreeFile();}
+				taxTreeFile=b;
 			}else if(a.equals("level") || a.equals("taxlevel")){
-				if(b==null){taxLevel=-1;}
-				else if(Character.isDigit(b.charAt(0))){
-					taxLevel=Integer.parseInt(b);
-				}else{
-					taxLevel=TaxTree.stringToLevel(b.toLowerCase());
-				}
+				taxLevel=TaxTree.parseLevel(b);
 			}else if(a.equals("minlevel")){
-				if(b==null){minLevel=-1;}
-				else if(Character.isDigit(b.charAt(0))){
-					minLevel=Integer.parseInt(b);
-				}else{
-					minLevel=TaxTree.stringToLevel(b.toLowerCase());
-				}
+				minLevel=TaxTree.parseLevel(b);
 			}else if(a.equals("maxlevel")){
-				if(b==null){maxLevel=-1;}
-				else if(Character.isDigit(b.charAt(0))){
-					maxLevel=Integer.parseInt(b);
-				}else{
-					maxLevel=TaxTree.stringToLevel(b.toLowerCase());
-				}
+				maxLevel=TaxTree.parseLevel(b);
 			}else if(a.equals("printname")){
 				printName=Tools.parseBoolean(b);
 			}else if(a.equals("reverse")){
 				reverseOrder=Tools.parseBoolean(b);
+			}else if(a.equals("silva")){
+				TaxTree.SILVA_MODE=Tools.parseBoolean(b);
+			}else if(a.equals("simple")){
+				skipNonCanonical=Tools.parseBoolean(b);
 			}else if(a.equals("column")){
 				keyColumn=Integer.parseInt(b);
 			}else if(b!=null && (a.equals("name") || a.equals("names") || a.equals("id") || a.equals("ids"))){
@@ -134,6 +117,14 @@ public class PrintTaxonomy {
 				names.add(arg);
 			}
 		}
+		
+		if(taxTreeFile==null || "auto".equalsIgnoreCase(taxTreeFile)){taxTreeFile=TaxTree.defaultTreeFile();}
+		if("auto".equalsIgnoreCase(giTableFile)){giTableFile=TaxTree.defaultTableFile();}
+		if("auto".equalsIgnoreCase(accessionFile)){accessionFile=TaxTree.defaultAccessionFile();}
+		
+		taxLevelExtended=TaxTree.levelToExtended(taxLevel);
+		minLevelExtended=TaxTree.levelToExtended(minLevel);
+		maxLevelExtended=TaxTree.levelToExtended(maxLevel);
 		
 		{//Process parser fields
 			overwrite=ReadStats.overwrite=parser.overwrite;
@@ -150,28 +141,23 @@ public class PrintTaxonomy {
 		}
 		
 		//Create output FileFormat objects
-		ffout1=FileFormat.testOutput(out1, FileFormat.TEXT, null, true, overwrite, append, ordered);
+		ffout1=FileFormat.testOutput(out1, FileFormat.TEXT, null, true, overwrite, append, false);
 		
-		ffcount=FileFormat.testOutput(countFile, FileFormat.TEXT, null, true, overwrite, append, ordered);
+		ffcount=FileFormat.testOutput(countFile, FileFormat.TEXT, null, true, overwrite, append, false);
 		
 		//Create input FileFormat objects
 		ffin1=FileFormat.testInput(in1, FileFormat.TEXT, null, true, false);
 		
-		if(tableFile!=null){
+		if(giTableFile!=null){
 			outstream.println("Loading gi table.");
-			GiToNcbi.initialize(tableFile);
+			GiToNcbi.initialize(giTableFile);
 		}
 		if(accessionFile!=null){
 			outstream.println("Loading accession table.");
 			AccessionToTaxid.load(accessionFile);
 		}
-		if(treeFile!=null){
-			outstream.println("Loading tree.");
-			tree=ReadWrite.read(TaxTree.class, treeFile, true);
-			if(tree.nameMap==null){
-				outstream.println("Hashing names.");
-				tree.hashNames();
-			}
+		if(taxTreeFile!=null){
+			tree=TaxTree.loadTaxTree(taxTreeFile, outstream, true, true);
 			assert(tree.nameMap!=null);
 		}else{
 			tree=null;
@@ -226,7 +212,7 @@ public class PrintTaxonomy {
 	/** Iterate through the names */
 	void processNames(final TextStreamWriter tsw){
 		for(String name : names){
-			if(taxLevel>-1){
+			if(taxLevelExtended>0){
 				printTaxLevel(name, tsw);
 			}else{
 				printTaxonomy(name, tsw);
@@ -241,7 +227,7 @@ public class PrintTaxonomy {
 			if(keyColumn>=0){
 				String result=translateLine(name, keyColumn);
 				tsw.print(result);
-			}else if(taxLevel>-1){
+			}else if(taxLevelExtended>0){
 				printTaxLevel(name, tsw);
 			}else{
 				printTaxonomy(name, tsw);
@@ -261,23 +247,23 @@ public class PrintTaxonomy {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 			for(Read r1 : reads){
 				if(keyColumn>=0){
 					String result=translateLine(r1.id, keyColumn);
 					tsw.println(result);
-				}else if(taxLevel>-1){
+				}else if(taxLevelExtended>0){
 					printTaxLevel(r1.id, tsw);
 				}else{
 					printTaxonomy(r1.id, tsw);
 				}
 			}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		ReadWrite.closeStreams(cris);
 	}
 	
@@ -294,17 +280,17 @@ public class PrintTaxonomy {
 			String name=split[col];
 			while(name.startsWith(">") || name.startsWith("@")){name=name.substring(1);}
 			
-			TaxNode tn=tree.getNode(name);
+			TaxNode tn=parseNodeFromHeader(name);
 			if(tn!=null){
-				String tl=makeTaxLine(tn, minLevel, maxLevel).toString();
+				String tl=makeTaxLine(tn, minLevelExtended, maxLevelExtended).toString();
 				split[col]=tl;
 			}else{
-				List<TaxNode> list=tree.getNodesByName(name);
+				List<TaxNode> list=tree.getNodesByNameExtended(name);
 				if(list!=null){
 					String tab="";
 					for(TaxNode tn2 : list){
 						sb.append(tab);
-						sb.append(makeTaxLine(tn2, minLevel, maxLevel).toString());
+						sb.append(makeTaxLine(tn2, minLevelExtended, maxLevelExtended).toString());
 						tab="\t";
 					}
 				}else{
@@ -325,12 +311,12 @@ public class PrintTaxonomy {
 		while(name.startsWith(">") || name.startsWith("@")){name=name.substring(1);}
 		tsw.print("\n");
 		if(printName){tsw.print(name+":\n");}
-		TaxNode tn=tree.getNode(name);
+		TaxNode tn=parseNodeFromHeader(name);
 		if(tn!=null){
 			printTaxonomy(tn, tsw);
 			return;
 		}else{
-			List<TaxNode> list=tree.getNodesByName(name);
+			List<TaxNode> list=tree.getNodesByNameExtended(name);
 			if(list!=null){
 				String nl="";
 				for(TaxNode tn2 : list){
@@ -349,12 +335,12 @@ public class PrintTaxonomy {
 		while(name.startsWith(">") || name.startsWith("@")){name=name.substring(1);}
 		tsw.print("\n");
 		if(printName){tsw.print(name+":\n");}
-		TaxNode tn=tree.getNode(name);
+		TaxNode tn=parseNodeFromHeader(name);
 		if(tn!=null){
 			printTaxLevel(tn, tsw);
 			return;
 		}else{
-			List<TaxNode> list=tree.getNodesByName(name);
+			List<TaxNode> list=tree.getNodesByNameExtended(name);
 			if(list!=null){
 				for(TaxNode tn2 : list){
 					printTaxLevel(tn2, tsw);
@@ -377,26 +363,32 @@ public class PrintTaxonomy {
 //	}
 	
 	void printTaxonomy(TaxNode tn, final TextStreamWriter tsw){
+//		assert(false) : tn.levelExtended+", "+taxLevelExtended+", "+minLevelExtended+", "+maxLevelExtended;
 		assert(tn!=null);
 //		tsw.print("\n");
 		do{
-			if(tn.level<=taxLevel){tn.incrementRaw(1);}
-			if(tn.level>=minLevel && tn.level<=maxLevel){
-				tsw.println(tn.levelString()+"\t"+tn.id+"\t"+tn.name);
+			if(tn.levelExtended<=taxLevelExtended){tn.incrementRaw(1);}
+			if(tn.levelExtended>=minLevelExtended && tn.levelExtended<=maxLevelExtended){
+				if(!tn.cellularOrganisms() && (!skipNonCanonical || tn.isSimple())){
+					tsw.println(tn.levelStringExtended(false)+"\t"+tn.id+"\t"+tn.name);
+				}
 			}
 			tn=tree.getNode(tn.pid);
 		}while(tn!=null && tn.id!=tn.pid);
 	}
 	
-	StringBuilder makeTaxLine(TaxNode tn, int minLevel, int maxLevel){
+	StringBuilder makeTaxLine(TaxNode tn, int minLevelE, int maxLevelE){
+//		assert(false) : tn+", "+minLevelE+", "+maxLevelE;
 		assert(tn!=null);
 		StringBuilder sb=new StringBuilder();
 		
 		if(reverseOrder){
 			ArrayList<TaxNode> list=new ArrayList<TaxNode>();
-			while(tn.level<=maxLevel){
-				if(tn.level>=minLevel){
-					list.add(tn);
+			while(tn.levelExtended<=maxLevelE){
+				if(tn.levelExtended>=minLevelE){
+					if(!tn.cellularOrganisms() && (!skipNonCanonical || tn.isSimple())){
+						list.add(tn);
+					}
 				}
 				if(tn.id==tn.pid){break;}
 				tn=tree.getNode(tn.pid);
@@ -413,8 +405,8 @@ public class PrintTaxonomy {
 			}
 		}else{
 			String semi="";
-			while(tn.level<=maxLevel){
-				if(tn.level>=minLevel){
+			while(tn.levelExtended<=maxLevelE){
+				if(tn.levelExtended>=minLevelE && !tn.cellularOrganisms() && (!skipNonCanonical || tn.isSimple())){
 					sb.append(semi);
 					sb.append(tn.levelToStringShort());
 					sb.append("__");
@@ -429,19 +421,46 @@ public class PrintTaxonomy {
 		return sb;
 	}
 	
-	public static void printTaxonomy(TaxNode tn, final TextStreamWriter tsw, final TaxTree tree, final int maxLevel){
+//	public static void printTaxonomy(TaxNode tn, final StringBuilder sb, final TaxTree tree, final int maxLevel, boolean skipNonCanonical){
+//		final int maxLevelE=maxLevel<0 ? maxLevel : TaxTree.levelToExtended(maxLevel);
+//		assert(tn!=null);
+////		tsw.print("\n");
+//		do{
+//			if(!tn.cellularOrganisms() && (!skipNonCanonical || tn.isSimple())){
+//				sb.append(tn.levelStringExtended(false)+"\t"+tn.id+"\t"+tn.name+"\n");
+//			}
+//			tn=tree.getNode(tn.pid);
+//		}while(tn!=null && tn.id!=tn.pid && tn.levelExtended<=maxLevelE);
+//	}
+	
+	public static void printTaxonomy(TaxNode tn, final ByteBuilder sb, final TaxTree tree, final int maxLevel, boolean skipNonCanonical){
+		final int maxLevelE=maxLevel<0 ? maxLevel : TaxTree.levelToExtended(maxLevel);
 		assert(tn!=null);
 //		tsw.print("\n");
 		do{
-			tsw.println(tn.levelString()+"\t"+tn.id+"\t"+tn.name);
+			if(!tn.cellularOrganisms() && (!skipNonCanonical || tn.isSimple())){
+				sb.append(tn.levelStringExtended(false)).append('\t').append(tn.id).append('\t').append(tn.name).append('\n');
+			}
 			tn=tree.getNode(tn.pid);
-		}while(tn!=null && tn.id!=tn.pid && tn.level<=maxLevel);
+		}while(tn!=null && tn.id!=tn.pid && tn.levelExtended<=maxLevelE);
 	}
+	
+//	public static void printTaxonomy(TaxNode tn, final TextStreamWriter tsw, final TaxTree tree, final int maxLevel){
+//		final int maxLevelE=maxLevel<0 ? maxLevel : TaxTree.levelToExtended(maxLevel);
+//		assert(tn!=null);
+////		tsw.print("\n");
+//		do{
+//			if(!skipNonCanonical || tn.isSimple()){
+//				tsw.println(tn.levelStringExtended(false)+"\t"+tn.id+"\t"+tn.name);
+//			}
+//			tn=tree.getNode(tn.pid);
+//		}while(tn!=null && tn.id!=tn.pid && tn.levelExtended<=maxLevelE);
+//	}
 	
 	void printTaxLevel(TaxNode tn, final TextStreamWriter tsw){
 		if(tn==null){tn=unknown;}
-		while(tn!=null && tn.id!=tn.pid && tn.level<taxLevel){tn=tree.getNode(tn.pid);}
-		if(tsw!=null)tsw.println(tn.name);
+		while(tn.id!=tn.pid && tn.levelExtended<taxLevelExtended){tn=tree.getNode(tn.pid);}
+		if(tsw!=null){tsw.println(tn.name);}
 		tn.incrementRaw(1);
 	}
 	
@@ -452,9 +471,9 @@ public class PrintTaxonomy {
 //		tn.incrementRaw(1);
 //	}
 	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
+	public TaxNode parseNodeFromHeader(String header){
+		if(tree==null){return null;}
+		return tree.parseNodeFromHeader(header, true);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -469,20 +488,22 @@ public class PrintTaxonomy {
 	
 	private String countFile=null;
 
-	private String tableFile=null;;
-	private String treeFile=TaxTree.defaultTreeFile();
+	private String giTableFile=null;
+	private String taxTreeFile=null;
 	private String accessionFile=null;
 	
 	private final TaxTree tree;
 	
-	/** Level to print */
-	private int taxLevel=-1;//TaxTree.stringToLevel("phylum");
+//	/** Level to print */
+//	private int taxLevel=-1;//TaxTree.stringToLevel("phylum");
+//
+//	/** Min level to print */
+//	private int minLevel=-1;
+//
+//	/** Max level to print */
+//	private int maxLevel=TaxTree.stringToLevel("life");
 	
-	/** Min level to print */
-	private int minLevel=-1;
-	
-	/** Max level to print */
-	private int maxLevel=TaxTree.stringToLevel("life");
+	private final int taxLevelExtended, minLevelExtended, maxLevelExtended;
 	
 	/** Reverse order for tax lines */
 	private boolean reverseOrder=true;
@@ -492,8 +513,16 @@ public class PrintTaxonomy {
 	private long maxReads=-1;
 	
 	boolean printName=true;
+	boolean skipNonCanonical=false;
 	
 	int keyColumn=-1;
+//	Deprecated.  Description from shellscript:
+//	column=-1       If set to a non-negative integer, parse the taxonomy
+//            information from this column in a tab-delimited file.
+//            Example if column=1:
+//            read1 TAB gi|944259871|gb|KQL24128.1| TAB score:42
+//            becomes
+//            read1 TAB  k__Viridiplantae;p__Streptophyta;... TAB score:42
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Final Fields         ----------------*/
@@ -507,7 +536,7 @@ public class PrintTaxonomy {
 	
 	private final FileFormat ffcount;
 	
-	private final TaxNode unknown=new TaxNode(-99, -99, taxLevel, "UNKNOWN");
+	private final TaxNode unknown=new TaxNode(-99, -99, TaxTree.LIFE, TaxTree.LIFE_E, "UNKNOWN");
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Common Fields         ----------------*/
@@ -523,7 +552,5 @@ public class PrintTaxonomy {
 	private boolean overwrite=false;
 	/** Append to existing output files */
 	private boolean append=false;
-	/** This flag has no effect on singlethreaded programs */
-	private final boolean ordered=false;
 	
 }

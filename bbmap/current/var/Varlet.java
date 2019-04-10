@@ -1,17 +1,20 @@
 package var;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 import align2.QualityTools;
 import dna.Gene;
 import fileIO.TextFile;
+import shared.Shared;
 import shared.Tools;
 
 public class Varlet extends var.Variation {
 	
-	
+	private static final long serialVersionUID = -606340580378991068L;
+
 	public Varlet(int chrom_, byte strand_, int start_, int stop_, int matchStart_, int matchStop_, byte vType, String rf, String ca,
-			 int varQuality_, int readQuality_, int mapScore_, int errors_, float expectedErrors_, int paired_, long readID_, 
+			 int varQuality_, int readQuality_, int mapScore_, int errors_, float expectedErrors_, int paired_, long readID_,
 			 int readLen_,
 			 int readStart_, int readStop_, int readCopies_, int headDist_, int tailDist_, int endDist_, int pairnum){
 		super(chrom_, start_, stop_, vType, rf, ca);
@@ -41,10 +44,10 @@ public class Varlet extends var.Variation {
 		endDist=endDist_;
 		
 		if(pairnum==0){
-			if(strand==Gene.PLUS){numPlusReads1=1;}
+			if(strand==Shared.PLUS){numPlusReads1=1;}
 			else{numMinusReads1=1;}
 		}else{
-			if(strand==Gene.PLUS){numPlusReads2=1;}
+			if(strand==Shared.PLUS){numPlusReads2=1;}
 			else{numMinusReads2=1;}
 		}
 		
@@ -59,6 +62,7 @@ public class Varlet extends var.Variation {
 		assert(readStart<readStop) : this;
 	}
 	
+	@Override
 	public String toString(){return toText().toString();}
 	
 	public static String header(){return textHeader().toString();}
@@ -107,7 +111,7 @@ public class Varlet extends var.Variation {
 		StringBuilder sb=new StringBuilder(64);
 		
 		sb.append(chromosome).append('\t');
-		sb.append(Gene.strandCodes[strand]).append('\t');
+		sb.append(Shared.strandCodes[strand]).append('\t');
 		sb.append(readStart).append('\t');
 		sb.append(readStop).append('\t');
 		sb.append(beginLoc).append('\t');
@@ -116,7 +120,7 @@ public class Varlet extends var.Variation {
 		
 		sb.append(mapScore).append('\t');
 		sb.append(errors).append('\t');
-		sb.append(String.format("%.1f", expectedErrors)).append('\t');
+		sb.append(String.format(Locale.ROOT, "%.1f", expectedErrors)).append('\t');
 		sb.append(readID).append('\t');
 		sb.append(readLen).append('\t');
 		sb.append(headDist).append('\t');
@@ -145,7 +149,7 @@ public class Varlet extends var.Variation {
 	}
 	
 	public static final ArrayList<Varlet> fromTextFile(String fname){
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		ArrayList<Varlet> list=new ArrayList<Varlet>(2000);
 		
 		for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
@@ -200,7 +204,7 @@ public class Varlet extends var.Variation {
 		
 		
 		
-		Varlet v=new Varlet(chrom, strand, start, stop, -1, -1, varType, ref, call, avgVarQuality, avgReadQuality, 
+		Varlet v=new Varlet(chrom, strand, start, stop, -1, -1, varType, ref, call, avgVarQuality, avgReadQuality,
 				mapScore, errors, expectedErrors, paired, readID, readLen, readStart, readStop, numReads,
 				headDist, tailDist, endDist, 1);
 		

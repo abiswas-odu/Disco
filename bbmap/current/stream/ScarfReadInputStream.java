@@ -29,7 +29,7 @@ public class ScarfReadInputStream extends ReadInputStream {
 			System.err.println("Warning: Did not find expected scarf file extension for filename "+ff.name());
 		}
 		
-		tf=ByteFile.makeByteFile(ff, false);
+		tf=ByteFile.makeByteFile(ff);
 		
 		interleaved=FASTQ.FORCE_INTERLEAVED;//((tf.is()==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(tf.name));
 //		assert(false) : interleaved;
@@ -95,6 +95,7 @@ public class ScarfReadInputStream extends ReadInputStream {
 		}
 	}
 	
+	@Override
 	public boolean close(){
 		if(verbose){System.err.println("Closing "+this.getClass().getName()+" for "+tf.name()+"; errorState="+errorState);}
 		errorState|=tf.close();
@@ -116,6 +117,7 @@ public class ScarfReadInputStream extends ReadInputStream {
 	public boolean paired() {return interleaved;}
 	
 	/** Return true if this stream has detected an error */
+	@Override
 	public boolean errorState(){return errorState || FASTQ.errorState();}
 
 	private ArrayList<Read> buffer=null;
@@ -124,8 +126,8 @@ public class ScarfReadInputStream extends ReadInputStream {
 	private final ByteFile tf;
 	private final boolean interleaved;
 
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
-	private final long MAX_DATA=Shared.READ_BUFFER_MAX_DATA; //TODO - lot of work for unlikely case of super-long scarf reads.  Must be disabled for paired-ends.
+	private final int BUF_LEN=Shared.bufferLen();;
+	private final long MAX_DATA=Shared.bufferData(); //TODO - lot of work for unlikely case of super-long scarf reads.  Must be disabled for paired-ends.
 
 	public long generated=0;
 	public long consumed=0;

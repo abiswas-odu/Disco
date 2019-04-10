@@ -1,90 +1,87 @@
 package driver;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-
-import var.VarLine;
-import var.Variation;
 
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 import shared.Shared;
 import structures.CoverageArray2;
+import var.VarLine;
+import var.Variation;
 
 public class GenerateNoCallsFromCoverage {
 	
 //	@Deprecated
 //	public static ArrayList<VarLine> generateOld(byte chrom, CoverageArray ca, int build, char gender){
-//		
+//
 //		ArrayList<VarLine> lines=new ArrayList<VarLine>(256);
-//		
+//
 //		assert(Data.GENOME_BUILD==build);
 //		ChromosomeArray chra=Data.getChromosome(chrom);
-//		
+//
 //		int start=-1;
 //		int stop=-1;
-//		
+//
 //		for(int i=chra.minIndex; i<chra.maxIndex; i++){
 //			boolean nc=(ca.get(i)<minCovered);
-//			
+//
 //			if(nc && start==-1){
 //				start=i;
 //			}
-//			
+//
 //			if(!nc && start>-1){
 //				stop=i-1;
-//				
+//
 //				VarLine v1=new VarLine();
 //				v1.ploidy=(chrom<=22 ? 2 : chrom>=24 ? 1 : (Byte)Variation.ploidyMap.get("?"));
-//				
+//
 //				v1.haplotype=1;
 //				v1.chromosome=chrom;
 //				v1.beginLoc=start;
 //				v1.endLoc=stop;
-//				
+//
 //				v1.ref="=";
 //				v1.call=null;
-//				
+//
 //				v1.totalScore=-1;
 //				v1.xRef=-2;
 //				v1.xRefArray=null;
 //				v1.hapLink=-1;
 //				v1.varType=Variation.NOCALL;
-//				
+//
 //				VarLine v2;
 //				if((chrom==23 && gender=='M') || chrom==24 || chrom==25){
 //					v2=null;
 //				}else{
 //					v2=new VarLine();
 //					v2.ploidy=(chrom<=22 ? 2 : chrom>=24 ? 1 : (Byte)Variation.ploidyMap.get("?"));
-//					
+//
 //					v2.haplotype=2;
 //					v2.chromosome=chrom;
 //					v2.beginLoc=start;
 //					v2.endLoc=stop;
-//					
+//
 //					v2.ref="=";
 //					v2.call=null;
-//					
+//
 //					v2.totalScore=-1;
 //					v2.xRef=-2;
 //					v2.xRefArray=null;
 //					v2.hapLink=-1;
 //					v2.varType=Variation.NOCALL;
 //				}
-//				
-//				
+//
+//
 //				start=-1;
 //				stop=-1;
 //				lines.add(v1);
 //				if(v2!=null){lines.add(v2);}
 //			}
-//			
-//			
+//
+//
 //		}
-//		
+//
 //		return lines;
 //	}
 	
@@ -318,7 +315,7 @@ public class GenerateNoCallsFromCoverage {
 					else{
 						assert(!prev.intersects(current)
 						|| (prev.isPoint() && (current.endLoc==prev.beginLoc || current.beginLoc==prev.beginLoc))
-						|| (current.isPoint() && (prev.endLoc==current.beginLoc || prev.beginLoc==current.beginLoc))) : 
+						|| (current.isPoint() && (prev.endLoc==current.beginLoc || prev.beginLoc==current.beginLoc))) :
 							refp+", "+ncp+", "+refc+", "+ncc+"\n"+prev+"\n"+current;
 					}
 				}else if(ncc || refc){
@@ -333,7 +330,7 @@ public class GenerateNoCallsFromCoverage {
 					else{
 						assert(!prev.intersects(current)
 						|| (prev.isPoint() && (current.endLoc==prev.beginLoc || current.beginLoc==prev.beginLoc))
-						|| (current.isPoint() && (prev.endLoc==current.beginLoc || prev.beginLoc==current.beginLoc))) : 
+						|| (current.isPoint() && (prev.endLoc==current.beginLoc || prev.beginLoc==current.beginLoc))) :
 							refp+", "+ncp+", "+refc+", "+ncc+"\n"+prev+"\n"+current;
 					}
 				}else if(ncp || refp){
@@ -346,7 +343,7 @@ public class GenerateNoCallsFromCoverage {
 					prev.endLoc=current.beginLoc-1;
 					if(prev.beginLoc>prev.endLoc){prev=null;}
 					else{
-						assert(!prev.intersects(current) || 
+						assert(!prev.intersects(current) ||
 								(prev.isNoCall() && prev.lengthRef()==1 && current.isPoint()) //Corner case for intersection
 								) : "\n"+prev+"\n\n"+current+"\n";
 					}
@@ -364,7 +361,7 @@ public class GenerateNoCallsFromCoverage {
 							assert(prev==null || !temp.intersects(prev));
 							assert(!temp.intersects(current)
 									|| (temp.isPoint() && (current.endLoc==temp.beginLoc || current.beginLoc==temp.beginLoc))
-									|| (current.isPoint() && (temp.endLoc==current.beginLoc || temp.beginLoc==current.beginLoc))) : 
+									|| (current.isPoint() && (temp.endLoc==current.beginLoc || temp.beginLoc==current.beginLoc))) :
 										refp+", "+ncp+", "+refc+", "+ncc+"\n"+temp+"\n"+current;
 
 							if(verbose){System.err.println("Current="+current+"\nprev="+prev+"\nAdding "+temp+"\n");}

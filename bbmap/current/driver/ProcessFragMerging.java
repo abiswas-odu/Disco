@@ -1,5 +1,7 @@
 package driver;
 
+import java.util.Locale;
+
 import fileIO.TextFile;
 
 /**
@@ -24,7 +26,7 @@ public class ProcessFragMerging {
 			}else if(line.startsWith("real")){
 				String time=line.split("\t")[1];
 				double seconds=toSeconds(time);
-				System.out.print(String.format("%.3f", seconds)+sym);
+				System.out.print(String.format(Locale.ROOT, "%.3f", seconds)+sym);
 			}else if(line.startsWith("Reads Used:")){
 				System.out.print(split[2]+sym+split[3].substring(1)+sym);
 			}else if(line.startsWith("mapped:")){

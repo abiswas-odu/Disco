@@ -3,11 +3,10 @@ package assemble;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import ukmer.KmerTableSetU;
-
 import kmer.AbstractKmerTableSet;
 import kmer.KmerTableSet;
 import shared.Timer;
+import ukmer.KmerTableSetU;
 
 /**
  * Designed for removal of dead ends (aka hairs).
@@ -23,17 +22,19 @@ public abstract class Shaver extends ShaveObject {
 	/*--------------------------------------------------------------*/
 
 	public static final Shaver makeShaver(AbstractKmerTableSet tables, int threads){
-		return makeShaver(tables, threads, 1, 1, 1, 100, 100, true, true);
+		return makeShaver(tables, threads, 1, 1, 1, 1, 3, 100, 100, true, true);
 	}
 	
-	public static final Shaver makeShaver(AbstractKmerTableSet tables, int threads, 
-			int minCount, int maxCount, int minSeed, int maxLengthToDiscard, int maxDistanceToExplore, 
+	public static final Shaver makeShaver(AbstractKmerTableSet tables, int threads,
+			int minCount, int maxCount, int minSeed, int minCountExtend, float branchMult2, int maxLengthToDiscard, int maxDistanceToExplore,
 			boolean removeHair, boolean removeBubbles){
 		final Class<?> c=tables.getClass();
 		if(c==KmerTableSet.class){
-			return new Shaver1((KmerTableSet)tables, threads, minCount, maxCount, minSeed, maxLengthToDiscard, maxDistanceToExplore, removeHair, removeBubbles);
+			return new Shaver1((KmerTableSet)tables, threads, minCount, maxCount, minSeed, minCountExtend, branchMult2,
+					maxLengthToDiscard, maxDistanceToExplore, removeHair, removeBubbles);
 		}else if(c==KmerTableSetU.class){
-			return new Shaver2((KmerTableSetU)tables, threads, minCount, maxCount, minSeed, maxLengthToDiscard, maxDistanceToExplore, removeHair, removeBubbles);
+			return new Shaver2((KmerTableSetU)tables, threads, minCount, maxCount, minSeed, minCountExtend, branchMult2,
+					maxLengthToDiscard, maxDistanceToExplore, removeHair, removeBubbles);
 		}
 		throw new RuntimeException("Unhandled class "+c);
 	}
@@ -43,13 +44,15 @@ public abstract class Shaver extends ShaveObject {
 	/*----------------         Constructor          ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public Shaver(AbstractKmerTableSet tables_, int threads_, 
-			int minCount_, int maxCount_, int minSeed_, int maxLengthToDiscard_, int maxDistanceToExplore_, 
+	public Shaver(AbstractKmerTableSet tables_, int threads_,
+			int minCount_, int maxCount_, int minSeed_, int minCountExtend_, float branchMult2_, int maxLengthToDiscard_, int maxDistanceToExplore_,
 			boolean removeHair_, boolean removeBubbles_){
 		threads=threads_;
 		minCount=minCount_;
 		maxCount=maxCount_;
 		minSeed=minSeed_;
+		minCountExtend=minCountExtend_;
+		branchMult2=branchMult2_;
 		maxLengthToDiscard=maxLengthToDiscard_;
 		maxDistanceToExplore=maxDistanceToExplore_;
 		removeHair=removeHair_;
@@ -65,14 +68,9 @@ public abstract class Shaver extends ShaveObject {
 	abstract AbstractExploreThread makeExploreThread(int id_);
 	abstract AbstractShaveThread makeShaveThread(int id_);
 	
-	public final long shave(int minCount_, int maxCount_, int minSeed_, int maxLengthToDiscard_, int maxDistanceToExplore_, boolean removeHair_, boolean removeBubbles_){
+	public final long shave(int minCount_, int maxCount_){
 		minCount=minCount_;
 		maxCount=maxCount_;
-		minSeed=minSeed_;
-		maxLengthToDiscard=maxLengthToDiscard_;
-		maxDistanceToExplore=maxDistanceToExplore_;
-		removeHair=removeHair_;
-		removeBubbles=removeBubbles_;
 		return shave();
 	}
 	
@@ -207,11 +205,16 @@ public abstract class Shaver extends ShaveObject {
 	final int threads;
 	int minCount;
 	int maxCount;
-	int minSeed;
-	int maxLengthToDiscard;
-	int maxDistanceToExplore;
-	boolean removeHair;
-	boolean removeBubbles;
+	final int minSeed;
+	final int minCountExtend;
+	final float branchMult2;
+	final int maxLengthToDiscard;
+	final int maxDistanceToExplore;
+	final boolean removeHair;
+	final boolean removeBubbles;
+	static boolean startFromHighCounts=true; //True is much faster, but decreases contiguity.
+	static boolean shaveFast=true;
+	static final boolean shaveVFast=false; //True is faster, but slightly decreases contiguity.
 
 	private long[][] countMatrix;
 	private long[][] removeMatrix;

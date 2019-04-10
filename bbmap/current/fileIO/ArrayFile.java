@@ -23,8 +23,9 @@ public class ArrayFile extends TextFile{
 	}
 	
 	
-	public ArrayFile(String name){super(name, false, false);}
+	public ArrayFile(String name){super(name, false);}
 	
+	@Override
 	public String nextLine(){
 		String line=readLine();
 		char c=line.charAt(0);
@@ -67,7 +68,5 @@ public class ArrayFile extends TextFile{
 		
 		return grid;
 	}
-	
-	public static boolean verbose=false;
 	
 }

@@ -4,12 +4,11 @@ import java.io.File;
 import java.util.Random;
 
 import dna.AminoAcid;
-import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays2;
-import dna.Gene;
 import fileIO.ReadWrite;
+import shared.Shared;
 import shared.Tools;
 
 /**
@@ -103,7 +102,7 @@ public class GenerateMultiChrom {
 	 */
 	private static ChromosomeArray makeSynthetic(ChromosomeArray cha, int chrom) {
 //		assert(false) : cha.array.length+", "+cha.maxIndex;
-		ChromosomeArray chb=new ChromosomeArray(chrom, Gene.PLUS, cha.minIndex, cha.array.length+40);
+		ChromosomeArray chb=new ChromosomeArray(chrom, Shared.PLUS, cha.minIndex, cha.array.length+40);
 		chb.maxIndex=-1;
 		
 		int dif=0;

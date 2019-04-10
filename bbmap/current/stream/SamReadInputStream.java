@@ -6,6 +6,7 @@ import fileIO.ByteFile;
 import fileIO.FileFormat;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 
 public class SamReadInputStream extends ReadInputStream {
 	
@@ -35,7 +36,7 @@ public class SamReadInputStream extends ReadInputStream {
 			System.err.println("Warning: Did not find expected sam file extension for filename "+ff.name());
 		}
 		
-		tf=ByteFile.makeByteFile(ff, false);
+		tf=ByteFile.makeByteFile(ff);
 		header=new ArrayList<byte[]>();
 		
 	}
@@ -107,6 +108,7 @@ public class SamReadInputStream extends ReadInputStream {
 //			System.out.println("A: Read line "+new String(line));
 			while(line!=null && line[0]=='@'){
 //				System.out.println(">"+new String(line));
+				if(Shared.TRIM_RNAME){line=trimHeaderSQ(line);}
 				if(loadHeader){header.add(line);}
 				line=tf2.nextLine();
 //				assert(false) : new String(line)+"\n"+header.size()+", "+SHARED_HEADER;
@@ -115,6 +117,7 @@ public class SamReadInputStream extends ReadInputStream {
 			if(loadHeader && nextReadID2==0){setSharedHeader(header);}
 			if(line==null){return list;}
 			SamLine sl1=new SamLine(line);
+			
 			Read r1=sl1.toRead(parseCustom);
 			r1.obj=sl1;
 			r1.numericID=nextReadID2;
@@ -152,10 +155,11 @@ public class SamReadInputStream extends ReadInputStream {
 		return list;
 	}
 
+	@Override
 	public boolean close(){
 		return tf.close();
 	}
-
+	
 	@Override
 	public synchronized void restart() {
 		generated=0;
@@ -183,8 +187,46 @@ public class SamReadInputStream extends ReadInputStream {
 	
 	public static synchronized void setSharedHeader(ArrayList<byte[]> list){
 //		assert(false) : list.size();
+//		if(list!=null && Shared.TRIM_RNAME){
+//			for(int i=0; i<list.size(); i++){
+//				byte[] line=list.get(i);
+//				list.set(i, trimHeaderSQ(line));
+//			}
+//		}
 		SHARED_HEADER=list;
 		SamReadInputStream.class.notifyAll();
+	}
+	
+	static byte[] trimHeaderSQ(byte[] line){
+		if(line==null || !Tools.startsWith(line, "@SQ")){return line;}
+		
+		final int idx=Tools.indexOfDelimited(line, "SN:", 2, (byte)'\t');
+		if(idx<0){
+			assert(false) : "Bad header: "+new String(line);
+			return line;
+		}
+		
+		int trimStart=-1;
+		for(int i=idx; i<line.length; i++){
+			final byte b=line[i];
+			if(b=='\t'){return line;}
+			if(Character.isWhitespace(b)){
+				trimStart=i;
+				break;
+			}
+		}
+		if(trimStart<0){return line;}
+		
+		final int trimStop=Tools.indexOf(line, (byte)'\t', trimStart+1);
+		final int bbLen=trimStart+(trimStop<0 ? 0 : line.length-trimStop);
+		final ByteBuilder bb=new ByteBuilder(bbLen);
+		for(int i=0; i<trimStart; i++){bb.append(line[i]);}
+		if(trimStop>=0){
+			for(int i=trimStop; i<line.length; i++){bb.append(line[i]);}
+		}
+		assert(bb.length==bbLen) : bbLen+", "+bb.length+", idx="+idx+", trimStart="+trimStart+", trimStop="+trimStop+"\n\n"+new String(line)+"\n\n"+bb+"\n\n";
+		
+		return bb.array;
 	}
 	
 	private static ArrayList<byte[]> SHARED_HEADER;
@@ -201,7 +243,7 @@ public class SamReadInputStream extends ReadInputStream {
 	private final boolean interleaved;
 	private final boolean loadHeader;
 
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.bufferLen();;
 	
 	public long generated=0;
 	public long consumed=0;

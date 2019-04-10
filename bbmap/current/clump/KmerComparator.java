@@ -4,12 +4,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 
-import jgi.BBMerge;
-import jgi.Dedupe;
-import shared.Shared;
-import shared.Tools;
 import bloom.KCountArray;
 import dna.AminoAcid;
+import jgi.BBMerge;
+import shared.Shared;
+import shared.Tools;
 import sketch.SketchTool;
 import stream.Read;
 
@@ -30,11 +29,11 @@ public class KmerComparator implements Comparator<Read> {
 		
 		shift=2*k;
 		shift2=shift-2;
-		mask=~((-1L)<<shift);
+		mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		seed=seed_;
 		border=Tools.max(0, border_);
 		hashes=Tools.mid(0, hashes_, 8);
-		codes=SketchTool.makeCodes(8, 256, seed_);
+		codes=SketchTool.makeCodes(8, 256, seed_, true);
 		if(verbose){
 			System.err.println("Made a comparator with k="+k+", seed="+seed+", border="+border+", hashes="+hashes);
 		}
@@ -67,6 +66,12 @@ public class KmerComparator implements Comparator<Read> {
 	}
 	
 	public long hash(Read r1, KCountArray table, int minCount, boolean setObject){
+		long x=hash_inner(r1, table, minCount, setObject);
+		if(Clump.containment && r1.mate!=null){hash_inner(r1.mate, table, minCount, setObject);}
+		return x;
+	}
+	
+	private long hash_inner(Read r1, KCountArray table, int minCount, boolean setObject){
 		ReadKey key;
 		if(setObject){
 			if(r1.obj==null){
@@ -112,41 +117,9 @@ public class KmerComparator implements Comparator<Read> {
 		
 		int x=keyA.compareTo(keyB);
 		if(x==0 && compareSequence){
-			x=compareSequence(a, b, 0);
+			x=KmerComparator2.compareSequence(a, b, 0);
 		}
 		return x==0 ? a.id.compareTo(b.id) : x;
-	}
-	
-	public int compareSequence(Read a, Read b, int depth){
-		int x=compareSequence(a.bases, b.bases);
-		if(x!=0){return x;}
-		if(a.mate!=null){x=compareSequence(a.mate.bases, b.mate.bases);}
-		if(x!=0){return x;}
-		return compareQuality(a, b);
-	}
-	
-	public int compareSequence(final byte[] a, final byte[] b){
-		if(a==null || b==null){
-			if(a==null && b!=null){return 1;}
-			if(a!=null && b==null){return -1;}
-			return 0;
-		}
-		if(a.length!=b.length){
-			return b.length-a.length;
-		}
-		for(int i=0, lim=a.length; i<lim; i++){
-			int x=a[i]-b[i];
-			if(x!=0){return x;}
-		}
-		return 0;
-	}
-	
-	//Not optimal, but fast.  This function is probably not very important.
-	public int compareQuality(Read a, Read b){
-		if(a.quality==null){return 0;}
-		int qa=Tools.sumInt(a.quality);
-		int qb=Tools.sumInt(b.quality);
-		return qb-qa;
 	}
 	
 	/** Finds the global maximum */
@@ -165,6 +138,7 @@ public class KmerComparator implements Comparator<Read> {
 				return key.kmer;
 			}
 		}
+		if(r.length()<k){return fillShort(r, key);}
 		assert(minCount>0 || table==null) : minCount;
 		assert(table==null || minCount<=table.maxValue) : minCount;
 		
@@ -177,15 +151,16 @@ public class KmerComparator implements Comparator<Read> {
 		
 		if(bases==null || bases.length<k){return -1;}
 		
-		long topCode=-1;
+		long topCode=Long.MIN_VALUE;
 		int topCount=-2;
 		float topProb=0;
 		final int localBorder=(bases.length>k+4*border ? border : 0);
 		
-		for(int i=localBorder, max=bases.length-localBorder; i<max; i++){
+		final int max=bases.length-localBorder;
+		for(int i=localBorder; i<max; i++){
 			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
+			long x=AminoAcid.baseToNumber[b];
+			long x2=AminoAcid.baseToComplementNumber[b];
 			kmer=((kmer<<2)|x)&mask;
 			rkmer=(rkmer>>>2)|(x2<<shift2);
 			
@@ -197,7 +172,7 @@ public class KmerComparator implements Comparator<Read> {
 				}
 			}
 			
-			if(AminoAcid.baseToNumber[b]<0){
+			if(x<0){
 				len=0;
 				prob=1;
 			}else{len++;}
@@ -232,6 +207,13 @@ public class KmerComparator implements Comparator<Read> {
 				}
 			}
 		}
+		if(topCode==Long.MIN_VALUE){
+			return fillShort(r, key);
+		}
+//		if(bases.length<k){
+//			final long kmax=Tools.max(kmer, rkmer);
+//			key.set(kmax, bases.length-1, (kmax!=kmer));
+//		}
 		
 //		assert(minCount<2) : minCount+", "+topCode+", "+topCount;
 //		assert(minCount>0) : minCount+", "+topCode+", "+topCount;
@@ -249,10 +231,36 @@ public class KmerComparator implements Comparator<Read> {
 //			if(r.mate!=null){
 //				r.mate.id=r.numericID+" 2:f";
 //			}
-		//		}else 
+		//		}else
 		if(addName){r.id+=" "+key;}
 
 		assert(key.kmer>=0 && key.position>=0) : key+"\n"+r;
+		return key.kmer;
+	}
+	
+	public long fillShort(Read r, ReadKey key){
+		final byte[] bases=r.bases;
+		final int max=Tools.min(bases.length, k);
+		key.set(0, max-1, false);
+		long kmer=0;
+		long rkmer=0;
+		
+		for(int i=0; i<max; i++){
+			byte b=bases[i];
+			long x=AminoAcid.baseToNumber0[b];
+			long x2=AminoAcid.baseToComplementNumber0[b];
+			kmer=((kmer<<2)|x)&mask;
+			rkmer=(rkmer>>>2)|(x2<<shift2);
+		}
+
+		final long kmax=Tools.max(kmer, rkmer);
+		key.set(kmax, max-1, (kmax!=kmer));
+		
+		if(key.kmerMinusStrand && rcompReads){
+			key.flip(r, k);
+		}
+		if(addName){r.id+=" "+key;}
+		
 		return key.kmer;
 	}
 		
@@ -294,7 +302,7 @@ public class KmerComparator implements Comparator<Read> {
 		final int minCount;
 	}
 	
-	private static ReadKey getLocalKey(){
+	static ReadKey getLocalKey(){
 		ReadKey key=localReadKey.get();
 		if(key==null){
 			localReadKey.set(key=new ReadKey());
@@ -325,7 +333,7 @@ public class KmerComparator implements Comparator<Read> {
 	public static boolean verbose=true;
 
 	public static boolean mergeFirst=false;
-	public static boolean compareSequence=false;
+	public static boolean compareSequence=true;
 	
 	public static ThreadLocal<ReadKey> localReadKey=new ThreadLocal<ReadKey>();
 	

@@ -1,9 +1,7 @@
 #!/bin/bash
-#bbwrap in=<infile> out=<outfile>
 
 usage(){
 echo "
-BBWrap v34.x
 Last modified April 21, 2015
 
 Description:  Wrapper for BBMap to allow multiple input and output files for the same reference.
@@ -18,17 +16,18 @@ BBWrap will not work with stdin and stdout, or histogram output.
 
 Other Parameters:
 
-in=<file,file>    Input sequences to map.
-mapper=bbmap      Select mapper.  May be BBMap, BBMapPacBio, 
-                  or BBMapPacBioSkimmer.
-append=f          Append to files rather than overwriting them.  
-                  If append is enabled, and there is exactly one output file,
-                  all output will be written to that file.
+in=<file,file>  Input sequences to map.
+mapper=bbmap    Select mapper.  May be BBMap, BBMapPacBio, 
+                or BBMapPacBioSkimmer.
+append=f        Append to files rather than overwriting them.  
+                If append is enabled, and there is exactly one output file,
+                all output will be written to that file.
 
 ***** All BBMap parameters can be used; see bbmap.sh for more details. *****
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -46,6 +45,7 @@ NATIVELIBDIR="$DIR""jni/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -66,11 +66,29 @@ calcXmx () {
 calcXmx "$@"
 
 bbwrap() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load samtools/1.4
 		module load pigz
-		module load samtools
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
+		module unload PrgEnv-intel
+		module load PrgEnv-gnu/7.1
+		module load samtools/1.4
+		module load pigz
 	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBWrap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2

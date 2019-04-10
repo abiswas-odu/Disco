@@ -111,19 +111,11 @@ public class Cluster{
 		}
 	}
 	
-	/**
-	 * @param r1
-	 * @return
-	 */
 	public float score(Read r) {
 		if(r==null){return 0;}
 		return r.mate==null ? scoreSingle(r) : scorePaired(r);
 	}
 	
-	/**
-	 * @param r1
-	 * @return
-	 */
 	public float scoreSingle(Read r) {
 		if(r==null){return 0;}
 		ReadTag rt=(ReadTag)r.obj;
@@ -211,11 +203,7 @@ public class Cluster{
 		// TODO Auto-generated method stub
 		return 0;
 	}
-
-	/**
-	 * @param r1
-	 * @return
-	 */
+	
 	public float scorePaired(Read r) {
 		assert(false) : "TODO";
 		if(r==null){return 0;}

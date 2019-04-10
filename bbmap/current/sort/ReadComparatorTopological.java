@@ -1,7 +1,5 @@
 package sort;
 
-import java.util.Comparator;
-
 import shared.Tools;
 import stream.Read;
 
@@ -12,11 +10,13 @@ import stream.Read;
  */
 
 
-public class ReadComparatorTopological implements Comparator<Read>{
+public class ReadComparatorTopological extends ReadComparator{
+	
+	private ReadComparatorTopological(){}
 	
 	@Override
 	public int compare(Read r1, Read r2) {
-		return compare(r1, r2, true);
+		return ascending*compare(r1, r2, true);
 	}
 	
 	public int compare(Read r1, Read r2, boolean compareMates) {
@@ -30,7 +30,7 @@ public class ReadComparatorTopological implements Comparator<Read>{
 		if(x!=0){return x;}
 
 		if(r1.bases!=null && r2.bases!=null && r1.length()!=r2.length()){return r1.length()-r2.length();}
-		if(r1.mate!=null && r2.mate!=null && r1.mate.bases!=null && r2.mate.bases!=null 
+		if(r1.mate!=null && r2.mate!=null && r1.mate.bases!=null && r2.mate.bases!=null
 				&& r1.mateLength()!=r2.mateLength()){return r1.mateLength()-r2.mateLength();}
 		
 		x=compareVectors(r1.quality, r2.quality);
@@ -75,4 +75,13 @@ public class ReadComparatorTopological implements Comparator<Read>{
 		}
 		return 0;
 	}
+
+	@Override
+	public void setAscending(boolean asc) {
+		ascending=(asc ? 1 : -1);
+	}
+	
+	public static final ReadComparatorTopological comparator=new ReadComparatorTopological();
+	
+	int ascending=1;
 }

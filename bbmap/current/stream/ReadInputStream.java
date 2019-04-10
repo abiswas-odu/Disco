@@ -24,18 +24,17 @@ public abstract class ReadInputStream {
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
 		/* Iterate through read lists from the input stream */
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			list.addAll(reads);
 			
 			/* Dispose of the old list and fetch a new one */
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		/* Cleanup */
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		ReadWrite.closeStream(cris);
-		
 		return list;
 	}
 	

@@ -1,18 +1,17 @@
 #!/bin/bash
-#kmercountexact in=<infile>
 
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 2, 2016
+Last modified November 29, 2018
 
 Description:  Counts the number of unique kmers in a file.
 Generates a kmer frequency histogram and genome size estimate (in peaks output),
 and prints a file containing all kmers and their counts.
 Supports K=1 to infinity, though not all values are allowed.
-SEE ALSO: bbnorm.sh/khist.sh, which have similar functionality.
+SEE ALSO: bbnorm.sh/khist.sh, loglog.sh, and kmercountmulti.sh.
 
-Usage:   kmercountexact.sh in=<file> khist=<file> peaks=<file> out=<file>
+Usage:   kmercountexact.sh in=<file> khist=<file> peaks=<file>
 
 Input may be fasta or fastq, compressed or uncompressed.
 Output may be stdout or a file.  out, khist, and peaks are optional.
@@ -21,9 +20,11 @@ Output may be stdout or a file.  out, khist, and peaks are optional.
 Input parameters:
 in=<file>           Primary input file.
 in2=<file>          Second input file for paired reads.
+amino=f             Run in amino acid mode.
 
 Output parameters:
-out=<file>          Print kmers and their counts.
+out=<file>          Print kmers and their counts.  This is produces a
+                    huge file, so skip it if you only need the histogram.
 fastadump=t         Print kmers and counts as fasta versus 2-column tsv.
 mincount=1          Only print kmers with at least this depth.
 reads=-1            Only process this number of reads, then quit (-1 means all).
@@ -47,18 +48,23 @@ histcolumns=2       2 columns: (depth, count).  3 columns: (depth, rawCount, cou
 histmax=100000      Maximum depth to print in histogram output.
 histheader=t        Set true to print a header line.
 nzo=t               (nonzeroonly) Only print lines for depths with a nonzero kmer count.
-smooth=f            Smooth the kmer histogram.
+gchist=f            Add an extra histogram column with the average GC%.
+
+Smoothing parameters:
+smoothkhist=f       Smooth the output kmer histogram.
+smoothpeaks=t       Smooth the kmer histogram for peak-calling, but does not affect the output histogram.
 smoothradius=1      Initial radius of progressive smoothing function.
 maxradius=10        Maximum radius of progressive smoothing function.
 progressivemult=2   Increment radius each time depth increases by this factor.
-gchist=f            Add an extra histogram column with the average GC%.
+logscale=t          Transform to log-scale prior to peak-calling.
+logwidth=0.1        The larger the number, the smoother.
 
 Peak calling parameters:
 peaks=<file>        Write the peaks to this file.  Default is stdout. 
                     Also contains the genome size estimate in bp.
 minHeight=2         (h) Ignore peaks shorter than this.
-minVolume=2         (v) Ignore peaks with less area than this.
-minWidth=2          (w) Ignore peaks narrower than this.
+minVolume=5         (v) Ignore peaks with less area than this.
+minWidth=3          (w) Ignore peaks narrower than this.
 minPeak=2           (minp) Ignore peaks with an X-value below this.
 maxPeak=BIG         (maxp) Ignore peaks with an X-value above this.
 maxPeakCount=12     (maxpc) Print up to this many peaks (prioritizing height).
@@ -81,11 +87,16 @@ merge=f             Attempt to merge reads before counting kmers.
 ecco=f              Error correct via overlap, but do not merge reads.   
 
 Java Parameters:
--Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
-                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+-Xmx                This will set Java's memory usage, overriding autodetection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.
+                    The max is typically 85% of physical memory.
+-eoom               This flag will cause the process to exit if an
+                    out-of-memory exception occurs.  Requires Java 8u92+.
+-da                 Disable assertions.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -102,6 +113,7 @@ CP="$DIR""current/"
 z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -122,12 +134,25 @@ calcXmx () {
 calcXmx "$@"
 
 kmercountexact() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP jgi.KmerCountExact $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP jgi.KmerCountExact $@"
 	echo $CMD >&2
 	eval $CMD
 }

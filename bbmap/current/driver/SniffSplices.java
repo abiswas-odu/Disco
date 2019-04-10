@@ -1,6 +1,7 @@
 package driver;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 import dna.AminoAcid;
 import dna.Motif;
@@ -12,10 +13,10 @@ public class SniffSplices {
 		
 //		MotifProbsN mAG=MotifProbsN.makeMotif("AG Exon Starts MP2", 11, 13, 11, 2);
 //		MotifProbsN mGT=MotifProbsN.makeMotif("GT Exon Stops MP2", 3, 10, 3, 2);
-//		
+//
 //		MotifProbsN eStarts2=MotifProbsN.makeMotif("Exon Starts MP2", 9, 11, 9, 2);
 //		MotifProbsN eStops2=MotifProbsN.makeMotif("Exon Stops MP2", 3, 10, 3, 2);
-//		
+//
 //		MotifProbsN gStarts2=MotifProbsN.makeMotif("Gene Starts MP2", 9, 11, 9, 2);
 //		MotifProbsN gStops2=MotifProbsN.makeMotif("Gene Stops MP2", 3, 10, 3, 2);
 		
@@ -151,15 +152,15 @@ public class SniffSplices {
 
 				System.out.print((initialLoc+i*increment)+"\t");
 
-				System.out.print(s.charAt(i)+"  Strength = "+String.format("%.4f   ",norm));
-				if(percent!=-1){System.out.print(String.format("->   %.4f   ",percent));}
+				System.out.print(s.charAt(i)+"  Strength = "+String.format(Locale.ROOT, "%.4f   ",norm));
+				if(percent!=-1){System.out.print(String.format(Locale.ROOT, "->   %.4f   ",percent));}
 				float norm2=norm;
 				while(norm2>0.1f){
 					norm2-=.1f;
 					System.out.print("*");
 				}
 
-//				System.out.print("\t"+String.format("%.3f   ",m.percentile(norm)));
+//				System.out.print("\t"+String.format(Locale.ROOT, "%.3f   ",m.percentile(norm)));
 
 				System.out.println();
 				
@@ -175,10 +176,10 @@ public class SniffSplices {
 //	private static final MotifProbsN eStarts2=MotifProbsN.makeMotif("Exon Starts MP"+N_MOTIF, 12, 9, 2);
 ////	private static final MotifProbsN eStops2=MotifProbsN.makeMotif("Exon Stops MP"+N_MOTIF, 3, 11, 3, 2);
 //	private static final MotifProbsN eStops2=MotifProbsN.makeMotif("Exon Stops MP"+N_MOTIF, 12, 3, 2);
-//	
+//
 //	private static final MotifProbsN gStarts2=MotifProbsN.makeMotif("Gene Starts MP"+N_MOTIF, 13, 9, 2);
 //	private static final MotifProbsN gStops2=MotifProbsN.makeMotif("Gene Stops MP"+N_MOTIF, 11, 3, 2);
-//	
+//
 //	private static final MotifProbsN trStarts2=MotifProbsN.makeMotif("Tr Starts MP"+N_MOTIF, 12, 7, 2);
 //	private static final MotifProbsN trStops2=MotifProbsN.makeMotif("Tr Stops MP"+N_MOTIF, 11, 6, 2);
 

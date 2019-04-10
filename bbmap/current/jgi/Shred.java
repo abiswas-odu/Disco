@@ -2,24 +2,24 @@ package jgi;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.KillSwitch;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -38,8 +38,11 @@ public class Shred {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		Shred mb=new Shred(args);
-		mb.process(t);
+		Shred x=new Shred(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	/**
@@ -48,19 +51,14 @@ public class Shred {
 	 */
 	public Shred(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
-
-		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(100, Shared.READ_BUFFER_LENGTH);
+		Shared.capBufferLen(100);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -73,13 +71,11 @@ public class Shred {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(a.equals("length") || a.equals("len") || a.equals("shredlen") || a.equals("shredlength")){
-				shredLength=(int)Tools.parseKMG(b);
+				shredLength=Tools.parseIntKMG(b);
 			}else if(a.equals("overlap")){
-				overlap=(int)Tools.parseKMG(b);
+				overlap=Tools.parseIntKMG(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("even") || a.equals("equal")){
@@ -87,9 +83,9 @@ public class Shred {
 			}else if(a.equals("seed")){
 				seed=Long.parseLong(b);
 			}else if(a.equals("median")){
-				median=(int)Tools.parseKMG(b);
+				median=Tools.parseIntKMG(b);
 			}else if(a.equals("variance")){
-				variance=(int)Tools.parseKMG(b);
+				variance=Tools.parseIntKMG(b);
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
 			}else if(parser.parse(arg, a, b)){
@@ -129,10 +125,7 @@ public class Shred {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -203,33 +196,8 @@ public class Shred {
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
-		
-		final double rpnano=readsProcessed/(double)(t.elapsed);
-		final double bpnano=basesProcessed/(double)(t.elapsed);
-		
-		outstream.println("Time:                         \t"+t);
-		
-		{
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-			
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		}
-
-		{
-			String rpstring=(readsOut<100000 ? ""+readsOut : readsOut<100000000 ? (readsOut/1000)+"k" : (readsOut/1000000)+"m");
-			String bpstring=(basesOut<100000 ? ""+basesOut : basesOut<100000000 ? (basesOut/1000)+"k" : (basesOut/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-			
-			outstream.println("Reads Out:          "+rpstring);
-			outstream.println("Bases Out:          "+bpstring);
-		}
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
+		outstream.println(Tools.readsBasesOut(readsProcessed, basesProcessed, readsOut, basesOut, 8, false));
 		
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -253,7 +221,7 @@ public class Shred {
 			assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 		}
 
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 			
 			ArrayList<Read> listOut=new ArrayList<Read>();
@@ -276,7 +244,7 @@ public class Shred {
 
 			if(ros!=null){ros.add(listOut, ln.id);}
 
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){outstream.println("Returned a list.");}
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
@@ -323,7 +291,7 @@ public class Shred {
 			if(length<minLength){return;}
 			final byte[] bases2=KillSwitch.copyOfRange(bases, a, b);
 			final byte[] quals2=(quals==null ? null : KillSwitch.copyOfRange(quals, a, b));
-			Read shred=new Read(bases2, quals2, readsOut, name+"_"+a+"-"+(b-1));
+			Read shred=new Read(bases2, quals2, name+"_"+a+"-"+(b-1), readsOut);
 			readsOut++;
 			basesOut+=shred.length();
 			list.add(shred);
@@ -340,7 +308,7 @@ public class Shred {
 			if(length<minLength){return;}
 			final byte[] bases2=KillSwitch.copyOfRange(bases, i, limit);
 			final byte[] quals2=(quals==null ? null : KillSwitch.copyOfRange(quals, i, limit));
-			Read shred=new Read(bases2, quals2, readsOut, name+"_"+i+"-"+(limit-1));
+			Read shred=new Read(bases2, quals2, name+"_"+i+"-"+(limit-1), readsOut);
 			readsOut++;
 			basesOut+=shred.length();
 			list.add(shred);
@@ -360,7 +328,7 @@ public class Shred {
 			if(length<minLength || limit>bases.length){return;}
 			final byte[] bases2=KillSwitch.copyOfRange(bases, i, limit);
 			final byte[] quals2=(quals==null ? null : KillSwitch.copyOfRange(quals, i, limit));
-			Read shred=new Read(bases2, quals2, readsOut, name+"_"+i+"-"+(limit-1));
+			Read shred=new Read(bases2, quals2, name+"_"+i+"-"+(limit-1), readsOut);
 			readsOut++;
 			basesOut+=shred.length();
 			list.add(shred);
@@ -368,11 +336,6 @@ public class Shred {
 			assert(limit<bases.length);
 			i=limit;
 		}
-	}
-	
-	/** This is called if the program runs with no parameters */
-	private void printOptions(){
-		throw new RuntimeException("TODO");
 	}
 	
 	/*--------------------------------------------------------------*/

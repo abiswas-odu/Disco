@@ -10,7 +10,7 @@ import shared.Shared;
 import shared.Tools;
 import structures.ListNum;
 
-/** 
+/**
  * This class allows multiple files as input.
  * These files are synchronized, so a read will be created by merging the sitescores from the same line of each file.
  * @author Brian Bushnell
@@ -44,7 +44,7 @@ public class RTextInputStream extends ReadInputStream {
 		fnames=fnames_;
 		textfiles=new TextFile[fnames.length];
 		for(int i=0; i<textfiles.length; i++){
-			textfiles[i]=new TextFile(fnames[i], true, false);
+			textfiles[i]=new TextFile(fnames[i], true);
 		}
 		
 		readLimit=(crisReadLimit<0 ? Long.MAX_VALUE : crisReadLimit);
@@ -52,7 +52,7 @@ public class RTextInputStream extends ReadInputStream {
 			System.err.println("Warning - created a read stream for 0 reads.");
 			assert(false);
 		}
-		interleaved=(mate_fnames_!=null ? false : 
+		interleaved=(mate_fnames_!=null ? false :
 			(!FASTQ.TEST_INTERLEAVED || textfiles[0].is==System.in) ? FASTQ.FORCE_INTERLEAVED : isInterleaved(fnames[0]));
 		
 //		assert(false) : (mate_fnames_!=null)+", "+(textfiles[0].is==System.in)+", "+interleaved+", "+FASTQ.FORCE_INTERLEAVED+", "+isInterleaved(fnames[0]);
@@ -65,7 +65,7 @@ public class RTextInputStream extends ReadInputStream {
 	public static boolean isInterleaved(String fname){
 		File f=new File(fname);
 		assert(f.exists() && f.isFile());
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		String s=tf.nextLine();
 		tf.close();
 		return "#INTERLEAVED".equals(s);
@@ -130,7 +130,7 @@ public class RTextInputStream extends ReadInputStream {
 						merged.get(0).toText(false)+"\n"+mates.get(0).toText(false)+"\n\n"+
 						merged.get(merged.size()-1).toText(false)+"\n"+mates.get(mates.size()-1).toText(false)+"\n\n"+
 						merged.get(Tools.min(merged.size(), mates.size())-1).toText(false)+"\n"+
-						mates.get(Tools.min(merged.size(), mates.size())-1).toText(false)+"\n\n";	
+						mates.get(Tools.min(merged.size(), mates.size())-1).toText(false)+"\n\n";
 
 				for(int i=0; i<merged.size(); i++){
 					Read r1=merged.get(i);
@@ -236,7 +236,7 @@ public class RTextInputStream extends ReadInputStream {
 	private final long readLimit;
 	private final boolean interleaved;
 	
-	public static final int READS_PER_LIST=Shared.READ_BUFFER_LENGTH;
+	public static final int READS_PER_LIST=Shared.bufferLen();;
 
 	private final RTextInputStream mateStream;
 	private final ConcurrentLegacyReadInputStream cris;

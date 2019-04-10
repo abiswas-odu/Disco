@@ -4,19 +4,18 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Locale;
 
-import jgi.ErrorCorrect;
+import dna.AminoAcid;
+import fileIO.FileFormat;
+import shared.KillSwitch;
 import shared.Timer;
 import shared.Tools;
-import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
-import stream.KillSwitch;
 import stream.Read;
 import structures.ListNum;
 import ukmer.Kmer;
-import dna.AminoAcid;
-import fileIO.FileFormat;
 
 /**
  * @author Brian Bushnell
@@ -41,7 +40,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
+			String b=split.length>1 ? split[1] : null;
 
 			if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
@@ -103,7 +102,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 		for(int i=0; i<lim1; i++){
 			String prefix=i+"";
 			while(prefix.length()<8){prefix=prefix+" ";}
-			System.out.println(prefix+"\t"+String.format("%.3f%%   ",(100l*freq[i]/(double)sum))+"\t"+freq[i]);
+			System.out.println(prefix+"\t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*freq[i]/(double)sum))+"\t"+freq[i]);
 		}
 		while(lim1<=freq.length){
 			int x=0;
@@ -113,7 +112,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 			String prefix=lim1+"-"+(lim2-1);
 			if(lim2>=freq.length){prefix=lim1+"+";}
 			while(prefix.length()<8){prefix=prefix+" ";}
-			System.out.println(prefix+"\t"+String.format("%.3f%%   ",(100l*x/(double)sum))+"\t"+x);
+			System.out.println(prefix+"\t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum))+"\t"+x);
 			lim1*=2;
 			lim2=min(lim2*2, freq.length);
 		}
@@ -123,37 +122,37 @@ public class KmerCount7MT extends KmerCountAbstract {
 		System.out.println();
 		System.out.println("Keys Counted:  \t         \t"+keysCounted);
 		System.out.println("Unique:        \t         \t"+sum2);
-		System.out.println("Avg Sites/Key: \t         \t"+String.format("%.3f    ",(keysCounted*1d/sum2)));
+		System.out.println("Avg Sites/Key: \t         \t"+String.format(Locale.ROOT, "%.3f    ",(keysCounted*1d/sum2)));
 		System.out.println();
-		System.out.println("Singleton:     \t"+String.format("%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
+		System.out.println("Singleton:     \t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
 		x=sum2-x;
-		System.out.println("Useful:        \t"+String.format("%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
+		System.out.println("Useful:        \t"+String.format(Locale.ROOT, "%.3f%%   ",(100l*x/(double)sum2))+"\t"+x);
 	}
 	
 	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, int k, int cbits){
 		return makeKca(fname1, fname2, extraFiles, k, cbits, 0, Tools.min(2*k, 35), 1, minQuality, true, maxReads, 1, 1, 1, 2);
 	}
 	
-	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
+	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles,
 			int k, int cbits, int gap, int matrixbits, int hashes, int minqual, boolean rcomp, long maxreads){
 		assert(matrixbits<63);
 		return makeKca(fname1, fname2, extraFiles, k, cbits, gap, matrixbits, hashes, minqual, rcomp, maxreads, 1, 1, 1, 2);
 	}
 	
-	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
+	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles,
 			int k, int cbits, int gap, int matrixbits, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
 		assert(matrixbits<63);
-		return makeKca(fname1, fname2, extraFiles, 
+		return makeKca(fname1, fname2, extraFiles,
 				k, cbits, gap, 1L<<matrixbits, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
-	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
+	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles,
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
-		return makeKca(fname1, fname2, extraFiles, 
+		return makeKca(fname1, fname2, extraFiles,
 				k, cbits, gap, cells, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
-	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
+	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles,
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2,
 			KCountArray prefilter, int prefilterLimit_){
 		final int kbits=Tools.min(2*k, 62);
@@ -290,7 +289,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 	public static KCountArray count(String reads1, String reads2, int k, int cbits, int gap, boolean rcomp, KCountArray count) throws Exception{
 		assert(k>=1 && (count!=null || k<20));
 		final int kbits=Tools.min(2*k, 62);
-		final long mask=~((-1L)<<(kbits));
+		final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 //		System.err.println("countFastq...  making a new cris");
 		if(count==null){
 			final long cells=1L<<kbits;
@@ -352,13 +351,13 @@ public class KmerCount7MT extends KmerCountAbstract {
 	
 
 	
-	public static KCountArray count(final String reads1, final String reads2, final int k, final int cbits, final boolean rcomp, 
+	public static KCountArray count(final String reads1, final String reads2, final int k, final int cbits, final boolean rcomp,
 			KCountArray count, final KCountArray trusted, final long maxReads, final int thresh, final int detectStepsize, final boolean conservative)
 			throws Exception{
 		
 		assert(k>=1 && (count!=null || k<20));
 		final int kbits=Tools.min(2*k, 62);
-		final long mask=~((-1L)<<(kbits));
+		final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 		
 //		System.out.println("k="+k+", kbits="+kbits+", mask="+Long.toHexString(mask)+", thresh="+thresh);
 //		System.out.println("\ntrusted=\n"+trusted);
@@ -425,7 +424,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 			this(cris_, k_, rcomp_, count_, null, 2, 1, true);
 		}
 		
-		CountThread(final ConcurrentReadInputStream cris_, final int k_, final boolean rcomp_, 
+		CountThread(final ConcurrentReadInputStream cris_, final int k_, final boolean rcomp_,
 		final KCountArray count_, final KCountArray trusted_, final int thresh_, final int detectStepsize_, final boolean conservative_){
 			cris=cris_;
 			k=k_;
@@ -438,6 +437,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 			MAKE_NEW_ARRAY=(counts.getClass()!=KCountArray4MT.class);
 		}
 		
+		@Override
 		public void run(){
 			buffer=new long[BUFFERLEN];
 //			System.out.println("Running");
@@ -479,10 +479,10 @@ public class KmerCount7MT extends KmerCountAbstract {
 			
 			if(count.gap==0){
 				final int kbits=Tools.min(2*k, 62);
-				final long mask=~((-1L)<<(kbits));
+				final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 				
 				
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r : reads){
 						readsProcessedLocal++;
@@ -492,7 +492,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 						}
 					}
 					//System.err.println("returning list");
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					//System.err.println("fetching list");
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
@@ -505,7 +505,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 				final int gap=count.gap;
 				final long mask1=~((-1L)<<(kbits1));
 				final long mask2=~((-1L)<<(kbits2));
-				while(reads!=null && reads.size()>0){
+				while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r : reads){
 						readsProcessedLocal++;
@@ -515,7 +515,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 						}
 					}
 					//System.err.println("returning list");
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					//System.err.println("fetching list");
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
@@ -523,31 +523,31 @@ public class KmerCount7MT extends KmerCountAbstract {
 			}
 			
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln.id, ln==null ? true : ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){System.err.println("Returned list");}
 		}
 		
 		
 
 
-		private void count(final ConcurrentReadInputStream cris, final int k, final boolean rcomp, 
+		private void count(final ConcurrentReadInputStream cris, final int k, final boolean rcomp,
 				final KCountArray count, final KCountArray trusted, final int thresh, final int detectStepsize, final boolean conservative){
 			if(count.gap>0){countFastqSplit(cris, k, rcomp, count, trusted, thresh, detectStepsize, conservative);}
 			assert(k>=1 && (count!=null || k<20));
 			final int kbits=Tools.min(2*k, 62);
-			final long mask=~((-1L)<<(kbits));
+			final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 			
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 					
 					Read r2=r.mate;
 					{
 						if(trusted!=null){
-							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r, trusted, k, thresh, detectStepsize) : 
+							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r, trusted, k, thresh, detectStepsize) :
 								ErrorCorrect.detectTrusted(r, trusted, k, thresh, detectStepsize));
 //							System.out.println("\n"+toString(bs, r.length()));
 //							System.out.println(new String(r.bases));
@@ -558,7 +558,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 								}
 							}
 //							System.out.println(new String(r.bases));
-//							System.out.println("used = "+String.format("%.3f%%",count.usedFraction()*100));
+//							System.out.println("used = "+String.format(Locale.ROOT, "%.3f%%",count.usedFraction()*100));
 //							System.out.println("used = "+((KCountArray4)count).cellsUsed());
 //							if(bs.length()<r.length()){r=null;}
 						}
@@ -567,7 +567,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 					}
 					if(r2!=null){
 						if(trusted!=null){
-							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r2, trusted, k, thresh, detectStepsize) : 
+							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r2, trusted, k, thresh, detectStepsize) :
 								ErrorCorrect.detectTrusted(r2, trusted, k, thresh, detectStepsize));
 							if(bs!=null){
 								for(int i=bs.nextClearBit(0); i<r2.length(); i=bs.nextClearBit(i+1)){
@@ -581,25 +581,25 @@ public class KmerCount7MT extends KmerCountAbstract {
 
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){System.err.println("Returned list");}
 		}
 		
 		
-		private void countFastqSplit(final ConcurrentReadInputStream cris, final int k, final boolean rcomp, 
+		private void countFastqSplit(final ConcurrentReadInputStream cris, final int k, final boolean rcomp,
 				final KCountArray count, final KCountArray trusted, final int thresh, final int detectStepsize, final boolean conservative){
 			assert(false) : cris.paired();
 			assert(count.gap>0);
 			assert(k<32 && k>=1 && (count!=null || k<20));
 			final int kbits=2*k;
-			final long mask=~((-1L)<<(kbits));
+			final long mask=(kbits>63 ? -1L : ~((-1L)<<kbits));
 			
 
 			final int k1=(k+1)/2;
@@ -613,14 +613,14 @@ public class KmerCount7MT extends KmerCountAbstract {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){
 					
 					Read r2=r.mate;
 					{
 						if(trusted!=null){
-							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r, trusted, k, thresh, detectStepsize) : 
+							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r, trusted, k, thresh, detectStepsize) :
 								ErrorCorrect.detectTrusted(r, trusted, k, thresh, detectStepsize));
 //							System.out.println("\n"+toString(bs, r.length()));
 //							System.out.println(new String(r.bases));
@@ -629,7 +629,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 								r.quality[i]=0;
 							}
 //							System.out.println(new String(r.bases));
-//							System.out.println("used = "+String.format("%.3f%%",count.usedFraction()*100));
+//							System.out.println("used = "+String.format(Locale.ROOT, "%.3f%%",count.usedFraction()*100));
 //							System.out.println("used = "+((KCountArray4)count).cellsUsed());
 //							if(bs.length()<r.length()){r=null;}
 						}
@@ -639,7 +639,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 					}
 					if(r2!=null){
 						if(trusted!=null){
-							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r2, trusted, k, thresh, detectStepsize) : 
+							BitSet bs=(conservative ? ErrorCorrect.detectErrorsBulk(r2, trusted, k, thresh, detectStepsize) :
 								ErrorCorrect.detectTrusted(r2, trusted, k, thresh, detectStepsize));
 							for(int i=bs.nextClearBit(0); i<r2.length(); i=bs.nextClearBit(i+1)){
 								r2.bases[i]='N';
@@ -651,14 +651,14 @@ public class KmerCount7MT extends KmerCountAbstract {
 
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			if(verbose){System.err.println("Returned list");}
 		}
 		
@@ -865,7 +865,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 
 		private final ConcurrentReadInputStream cris;
 		private final int k;
-		private final boolean rcomp; 
+		private final boolean rcomp;
 		private final KCountArray counts;
 		private final KCountArray trusted;
 		private final int thresh;

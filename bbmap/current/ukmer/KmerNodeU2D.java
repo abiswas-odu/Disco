@@ -1,10 +1,12 @@
 package ukmer;
 
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 
-import stream.ByteBuilder;
 import fileIO.ByteStreamWriter;
+import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 
 /**
  * Allows multiple values per kmer.
@@ -33,10 +35,12 @@ public class KmerNodeU2D extends KmerNodeU {
 		values=vals_;
 	}
 	
+	@Override
 	public final KmerNodeU makeNode(long[] pivot_, int value_){
 		return new KmerNodeU2D(pivot_, value_);
 	}
 	
+	@Override
 	public final KmerNodeU makeNode(long[] pivot_, int[] values_){
 		return new KmerNodeU2D(pivot_, values_);
 	}
@@ -84,23 +88,28 @@ public class KmerNodeU2D extends KmerNodeU {
 	/*----------------      Nonpublic Methods       ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	@Override
 	protected int value(){return values==null ? 0 : values[0];}
 	
+	@Override
 	protected int[] values(int[] singleton){
 		return values;
 	}
 	
+	@Override
 	public int set(int value_){
 		insertValue(value_);
 		return value_;
 	}
 	
+	@Override
 	protected int set(int[] values_){
 		int ret=(values==null ? 1 : 0);
 		insertValue(values_);
 		return ret;
 	}
 	
+	@Override
 	int numValues(){
 		if(values==null){return 0;}
 		for(int i=0; i<values.length; i++){
@@ -120,7 +129,7 @@ public class KmerNodeU2D extends KmerNodeU {
 			if(values[i]==-1){values[i]=v;return 1;}
 		}
 		final int oldSize=values.length;
-		final int newSize=(int)Tools.min(Integer.MAX_VALUE, oldSize*2L);
+		final int newSize=(int)Tools.min(Shared.MAX_ARRAY_LEN, oldSize*2L);
 		assert(newSize>values.length) : "Overflow.";
 		values=Arrays.copyOf(values, newSize);
 		values[oldSize]=v;
@@ -178,49 +187,52 @@ public class KmerNodeU2D extends KmerNodeU {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		if(values==null){return true;}
+		if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 		bsw.printlnKmer(pivot, values, k);
-		if(left!=null){left.dumpKmersAsBytes(bsw, k, mincount);}
-		if(right!=null){right.dumpKmersAsBytes(bsw, k, mincount);}
+		if(left!=null){left.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);}
+		if(right!=null){right.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);}
 		return true;
 	}
 	
 	@Override
-	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		if(values==null){return true;}
+		if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 		toBytes(pivot, values, k, bb);
-		bb.append('\n');
+		bb.nl();
 		if(bb.length()>=16000){
 			ByteBuilder bb2=new ByteBuilder(bb);
 			synchronized(bsw){bsw.addJob(bb2);}
 			bb.clear();
 		}
-		if(left!=null){left.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
-		if(right!=null){right.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
+		if(left!=null){left.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);}
+		if(right!=null){right.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);}
 		return true;
 	}
 	
 	@Override
-	protected final StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount){
+	protected final StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount, int maxcount){
 		if(values==null){return sb;}
 		if(sb==null){sb=new StringBuilder(32);}
 		sb.append(AbstractKmerTableU.toText(pivot, values, k)).append('\n');
-		if(left!=null){left.dumpKmersAsText(sb, k, mincount);}
-		if(right!=null){right.dumpKmersAsText(sb, k, mincount);}
+		if(left!=null){left.dumpKmersAsText(sb, k, mincount, maxcount);}
+		if(right!=null){right.dumpKmersAsText(sb, k, mincount, maxcount);}
 		return sb;
 	}
 	
 	@Override
-	protected final ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount){
+	protected final ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount, int maxcount){
 		if(values==null){return bb;}
 		if(bb==null){bb=new ByteBuilder(32);}
 		bb.append(AbstractKmerTableU.toBytes(pivot, values, k)).append('\n');
-		if(left!=null){left.dumpKmersAsText(bb, k, mincount);}
-		if(right!=null){right.dumpKmersAsText(bb, k, mincount);}
+		if(left!=null){left.dumpKmersAsText(bb, k, mincount, maxcount);}
+		if(right!=null){right.dumpKmersAsText(bb, k, mincount, maxcount);}
 		return bb;
 	}
 	
+	@Override
 	final boolean TWOD(){return true;}
 	
 	/*--------------------------------------------------------------*/

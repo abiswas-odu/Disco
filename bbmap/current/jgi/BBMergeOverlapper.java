@@ -1,16 +1,17 @@
 package jgi;
 
-import java.util.Arrays;
 import java.io.File;
+import java.util.Arrays;
+import java.util.Locale;
 
-import stream.Read;
-import ukmer.Kmer;
-import dna.AminoAcid;
-import shared.Shared;
-import shared.Tools;
 import assemble.Tadpole;
 import assemble.Tadpole1;
 import assemble.Tadpole2;
+import dna.AminoAcid;
+import shared.Shared;
+import shared.Tools;
+import stream.Read;
+import ukmer.Kmer;
 
 /**
  * @author Brian Bushnell
@@ -73,8 +74,8 @@ public final class BBMergeOverlapper {
 		return x;
 	}
 	
-	protected static final int mateByOverlapRatio(Read a, Read b, float[] aprob, float[] bprob, int[] rvector, 
-			int minOverlap0, int minOverlap, int minInsert0, int minInsert, final float maxRatio, final float minSecondRatio, 
+	protected static final int mateByOverlapRatio(Read a, Read b, float[] aprob, float[] bprob, int[] rvector,
+			int minOverlap0, int minOverlap, int minInsert0, int minInsert, final float maxRatio, final float minSecondRatio,
 			final float margin, final float offset, final float gIncr, final float bIncr, boolean useQuality) {
 		if(rvector==null){rvector=new int[5];}
 //		final boolean swapped;
@@ -90,13 +91,13 @@ public final class BBMergeOverlapper {
 		final int x;
 		if(/*false && */Shared.USE_JNI/* && !useQuality*/){
 			if(useQuality && a.quality!=null && b.quality!=null){
-				x=mateByOverlapRatioJNI_WithQualities(a.bases, b.bases, a.quality, b.quality, aprob, bprob, rvector, minOverlap0, minOverlap, minInsert0, minInsert, maxRatio, margin, offset);	
+				x=mateByOverlapRatioJNI_WithQualities(a.bases, b.bases, a.quality, b.quality, aprob, bprob, rvector, minOverlap0, minOverlap, minInsert0, minInsert, maxRatio, margin, offset);
 			}else{
 				x=mateByOverlapRatioJNI(a.bases, b.bases, rvector, minOverlap0, minOverlap, minInsert0, minInsert, maxRatio, margin, offset, gIncr, bIncr);
 			}
 		}else{
 			if(useQuality && a.quality!=null && b.quality!=null){
-				x=mateByOverlapRatioJava_WithQualities(a, b, aprob, bprob, rvector, minOverlap0, minOverlap, minInsert0, minInsert, 
+				x=mateByOverlapRatioJava_WithQualities(a, b, aprob, bprob, rvector, minOverlap0, minOverlap, minInsert0, minInsert,
 						maxRatio, minSecondRatio, margin, offset);
 			}else{
 				x=mateByOverlapRatioJava(a, b, rvector, minOverlap0, minOverlap, minInsert0, minInsert, maxRatio, minSecondRatio, margin, offset, gIncr, bIncr);
@@ -111,7 +112,7 @@ public final class BBMergeOverlapper {
 	}
 	
 	protected static final int mateByOverlapRatioJava_WithQualities(Read a, Read b, float[] aprob, float[] bprob, int[] rvector,
-			int minOverlap0, int minOverlap, int minInsert0, int minInsert, float maxRatio, final float minSecondRatio, 
+			int minOverlap0, int minOverlap, int minInsert0, int minInsert, float maxRatio, final float minSecondRatio,
 			final float margin, final float offset) {
 		assert(rvector!=null);
 		assert(margin>=1);
@@ -125,8 +126,8 @@ public final class BBMergeOverlapper {
 		
 		assert(aqual!=null && bqual!=null);
 		{
-			for(int i=0; i<aqual.length; i++){aprob[i]=probCorrect[aqual[i]];}
-			for(int i=0; i<bqual.length; i++){bprob[i]=probCorrect[bqual[i]];}
+			for(int i=0; i<aqual.length; i++){aprob[i]=probCorrect3[aqual[i]];}
+			for(int i=0; i<bqual.length; i++){bprob[i]=probCorrect3[bqual[i]];}
 		}
 		
 		{
@@ -160,7 +161,7 @@ public final class BBMergeOverlapper {
 		final int largestInsertToTest=(alen+blen-minOverlap0);
 		final int smallestInsertToTest=minInsert0;
 		for(int insert=largestInsertToTest; insert>=smallestInsertToTest; insert--){
-			if(verbose){System.err.println("\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
+			if(verbose){System.err.println("d\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
 
 			float good=0, bad=0;
 			int badInt=0;
@@ -199,7 +200,7 @@ public final class BBMergeOverlapper {
 
 			if(bad<=badlimit){
 				if(bad==0 && good>minOverlap0 && good<minOverlap){
-					rvector[2]=(int)bestBad;
+					rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 					rvector[4]=1;
 					return -1;
 				}
@@ -232,14 +233,13 @@ public final class BBMergeOverlapper {
 					}
 					
 					if(!TAG_CUSTOM && ((ambig && bestRatio<margin2) || secondBestRatio<minSecondRatio)){
-						rvector[2]=(int)bestBad;
+						rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 						rvector[4]=1;
 						return -1;
 					}
 				}
 			}
 		}
-		
 		if(secondBestRatio<minSecondRatio){ambig=true;}
 		
 		if(TAG_CUSTOM){
@@ -248,19 +248,19 @@ public final class BBMergeOverlapper {
 			
 			sb.append("_bi=").append(bestInsert);
 			sb.append("_bo=").append(bestOverlap);
-			sb.append("_bb=").append(String.format("%.4f", bestBad));
-			sb.append("_br=").append(String.format("%.4f", bestRatio));
+			sb.append("_bb=").append(String.format(Locale.ROOT, "%.4f", bestBad));
+			sb.append("_br=").append(String.format(Locale.ROOT, "%.4f", bestRatio));
 			sb.append("_bbi=").append(bestBadInt);
 
 			sb.append("_sbi=").append(secondBestInsert);
 			sb.append("_sbo=").append(secondBestOverlap);
-			sb.append("_sbb=").append(String.format("%.4f", secondBestBad));
-			sb.append("_sbr=").append(String.format("%.4f", secondBestRatio));
+			sb.append("_sbb=").append(String.format(Locale.ROOT, "%.4f", secondBestBad));
+			sb.append("_sbr=").append(String.format(Locale.ROOT, "%.4f", secondBestRatio));
 			sb.append("_sbbi=").append(secondBestBadInt);
 			
 			a.id=sb.toString();
 			
-			rvector[2]=(int)bestBad;
+			rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 			rvector[4]=(ambig ? 1 : 0);
 			
 			return (bestInsert<0 ? -1 : bestInsert);
@@ -268,12 +268,11 @@ public final class BBMergeOverlapper {
 		
 		if(!ambig && bestRatio>maxRatio){bestInsert=-1;}
 		
-		rvector[2]=(int)bestBad;
+		rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 		rvector[4]=(ambig ? 1 : 0);
 
 //		System.err.println("***C : "+bestOverlap+", "+ambig+", "+bestBad+", "+(bestOverlap<0 ? -1 : alen+blen-bestOverlap)+", "+
 //				(bestOverlap<0 ? -1 : (bestOverlap<alen && alen>=blen) ? bestOverlap+alen-blen : bestOverlap)+", "+alen+", "+blen);
-		
 		return (bestInsert<0 ? -1 : bestInsert);
 	}
 	
@@ -292,6 +291,9 @@ public final class BBMergeOverlapper {
 		
 		{
 			float x=findBestRatio(a, b, minOverlap0, minOverlap, minInsert, maxRatio, offset, gIncr, bIncr);
+			if(verbose){
+				System.err.println(x+", "+maxRatio+", "+Arrays.toString(rvector));
+			}
 			if(x>maxRatio){
 				rvector[2]=minLength;
 				rvector[4]=0;
@@ -322,7 +324,7 @@ public final class BBMergeOverlapper {
 		final int largestInsertToTest=(alen+blen-minOverlap0);
 		final int smallestInsertToTest=minInsert0;
 		for(int insert=largestInsertToTest; insert>=smallestInsertToTest; insert--){
-			if(verbose){System.err.println("\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
+//			if(verbose){System.err.println("Testing read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
 			
 			final int istart=(insert<=blen ? 0 : insert-blen);
 			final int jstart=(insert>=blen ? 0 : blen-insert);
@@ -357,7 +359,7 @@ public final class BBMergeOverlapper {
 
 			if(bad<=badlimit){
 				if(bad==0 && good>minOverlap0 && good<minOverlap){
-					rvector[2]=(int)bestBad;
+					rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 					rvector[4]=1;
 					return -1;
 				}
@@ -369,7 +371,12 @@ public final class BBMergeOverlapper {
 				if(ratio<bestRatio*margin){
 
 					ambig=(ratio*margin>=bestRatio || good<minOverlap);
+					
 					if(ratio<bestRatio){
+
+						if(verbose){
+							System.err.println("A: Set ambig="+ambig+": "+ratio+"*"+margin+"="+(ratio*margin)+">="+bestRatio+" || "+good+"<"+minOverlap);
+						}
 						secondBestInsert=bestInsert;
 						secondBestOverlap=bestOverlap;
 						secondBestBad=bestBad;
@@ -383,6 +390,10 @@ public final class BBMergeOverlapper {
 						bestBadInt=badInt;
 					}
 					else if(ratio<secondBestRatio){
+
+						if(verbose){
+							System.err.println("B: Set ambig="+ambig+": "+ratio+"*"+margin+"="+(ratio*margin)+">="+bestRatio+" || "+good+"<"+minOverlap);
+						}
 						secondBestInsert=insert;
 						secondBestOverlap=overlapLength;
 						secondBestBad=bad;
@@ -391,12 +402,16 @@ public final class BBMergeOverlapper {
 					}
 					
 					if(!TAG_CUSTOM && ((ambig && bestRatio<margin2) || secondBestRatio<minSecondRatio)){
-						rvector[2]=(int)bestBad;
+						rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 						rvector[4]=1;
 						return -1;
 					}
 				}
 			}
+		}
+		
+		if(verbose){
+			System.err.println("minSecondRatio="+minSecondRatio+", secondBestRatio="+secondBestRatio+", margin="+margin+", bestRatio="+bestRatio+", bestBad="+bestBad);
 		}
 		
 		if(TAG_CUSTOM){
@@ -405,19 +420,19 @@ public final class BBMergeOverlapper {
 
 			sb.append("_bi=").append(bestInsert);
 			sb.append("_bo=").append(bestOverlap);
-			sb.append("_bb=").append(String.format("%.4f", bestBad));
-			sb.append("_br=").append(String.format("%.4f", bestRatio));
+			sb.append("_bb=").append(String.format(Locale.ROOT, "%.4f", bestBad));
+			sb.append("_br=").append(String.format(Locale.ROOT, "%.4f", bestRatio));
 			sb.append("_bbi=").append(bestBadInt);
 
 			sb.append("_sbi=").append(secondBestInsert);
 			sb.append("_sbo=").append(secondBestOverlap);
-			sb.append("_sbb=").append(String.format("%.4f", secondBestBad));
-			sb.append("_sbr=").append(String.format("%.4f", secondBestRatio));
+			sb.append("_sbb=").append(String.format(Locale.ROOT, "%.4f", secondBestBad));
+			sb.append("_sbr=").append(String.format(Locale.ROOT, "%.4f", secondBestRatio));
 			sb.append("_sbbi=").append(secondBestBadInt);
 			
 			a.id=sb.toString();
 			
-			rvector[2]=(int)bestBad;
+			rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 			rvector[4]=(ambig ? 1 : 0);
 			
 			return (bestInsert<0 ? -1 : bestInsert);
@@ -425,7 +440,7 @@ public final class BBMergeOverlapper {
 		
 		if(!ambig && bestRatio>maxRatio){bestInsert=-1;}
 		
-		rvector[2]=(int)bestBad;
+		rvector[2]=bestBadInt;//=(int)(bestBad+0.95f);
 		rvector[4]=(ambig ? 1 : 0);
 
 //		System.err.println("***C : "+bestOverlap+", "+ambig+", "+bestBad+", "+(bestOverlap<0 ? -1 : alen+blen-bestOverlap)+", "+
@@ -434,7 +449,7 @@ public final class BBMergeOverlapper {
 		return (bestInsert<0 ? -1 : bestInsert);
 	}
 	
-	protected static final float findBestRatio_WithQualities(Read a, Read b, final float[] aprob, final float[] bprob, 
+	protected static final float findBestRatio_WithQualities(Read a, Read b, final float[] aprob, final float[] bprob,
 			final int minOverlap0, final int minOverlap, final int minInsert, final float maxRatio, final float offset) {
 		final byte[] abases=a.bases, bbases=b.bases;
 		final int alen=abases.length, blen=bbases.length;
@@ -447,7 +462,7 @@ public final class BBMergeOverlapper {
 		final int largestInsertToTest=(alen+blen-minOverlap); //TODO: test speed with minOverlap0
 		final int smallestInsertToTest=minInsert;
 		for(int insert=largestInsertToTest; insert>=smallestInsertToTest; insert--){
-			if(verbose){System.err.println("\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
+			if(verbose){System.err.println("a\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
 			
 			final int istart=(insert<=blen ? 0 : insert-blen);
 			final int jstart=(insert>=blen ? 0 : blen-insert);
@@ -487,7 +502,7 @@ public final class BBMergeOverlapper {
 		return bestRatio;
 	}
 	
-	protected static final float findBestRatio(Read a, Read b, 
+	protected static final float findBestRatio(Read a, Read b,
 			final int minOverlap0, final int minOverlap, final int minInsert, final float maxRatio, final float offset, final float gIncr, final float bIncr) {
 		final byte[] abases=a.bases, bbases=b.bases;
 		final int alen=abases.length, blen=bbases.length;
@@ -501,7 +516,7 @@ public final class BBMergeOverlapper {
 		final int largestInsertToTest=(alen+blen-minOverlap); //TODO: test speed with minOverlap0
 		final int smallestInsertToTest=minInsert;
 		for(int insert=largestInsertToTest; insert>=smallestInsertToTest; insert--){
-			if(verbose){System.err.println("\nTesting read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
+//			if(verbose){System.err.println("Testing read "+a.numericID+", overlap "+insert+", insert "+(alen+blen-insert));}
 			
 			final int istart=(insert<=blen ? 0 : insert-blen);
 			final int jstart=(insert>=blen ? 0 : blen-insert);
@@ -561,17 +576,17 @@ public final class BBMergeOverlapper {
 //		assert(false) : minOverlap+", "+maxOverlap;
 		
 		if(aqual!=null && bqual!=null){
-			for(int i=0; i<aqual.length; i++){aprob[i]=probCorrect[aqual[i]];}
-			for(int i=0; i<bqual.length; i++){bprob[i]=probCorrect[bqual[i]];}
+			for(int i=0; i<aqual.length; i++){aprob[i]=probCorrect3[aqual[i]];}
+			for(int i=0; i<bqual.length; i++){bprob[i]=probCorrect3[bqual[i]];}
 		}else{
 			for(int i=0; i<alen; i++){aprob[i]=0.98f;}
 			for(int i=0; i<blen; i++){bprob[i]=0.98f;}
 		}
 		
-		final float minprob=probCorrect[Tools.mid(1, minq, 41)];
+		final float minprob=probCorrect3[Tools.mid(1, minq, 41)];
 
 		for(int overlap=Tools.max(minOverlap0, 0); overlap<maxOverlap; overlap++){
-			if(verbose){System.err.println("\nTesting read "+a.numericID+", overlap "+overlap+", insert "+(alen+blen-overlap));}
+			if(verbose){System.err.println("c\nTesting read "+a.numericID+", overlap "+overlap+", insert "+(alen+blen-overlap));}
 
 			int good=0, bad=0;
 
@@ -604,7 +619,7 @@ public final class BBMergeOverlapper {
 
 				if(verbose){System.err.println("overlap="+overlap+", bad="+bad+", good="+good+", badlim="+badlim+", bestOverlap="+
 						bestOverlap+", bestGood="+bestGood+", bestBad="+bestBad+", ambig="+ambig+", mino="+minOverlap+", mino0="+minOverlap0+
-						", margin="+margin+", maxMismatches="+maxMismatches);}	
+						", margin="+margin+", maxMismatches="+maxMismatches);}
 			}
 
 			if(bad*2<good){
@@ -651,7 +666,7 @@ public final class BBMergeOverlapper {
 		
 		if(verbose){System.err.println("bestOverlap="+
 				bestOverlap+", bestGood="+bestGood+", bestBad="+bestBad+", ambig="+ambig+", mino="+minOverlap+", mino0="+minOverlap0+
-				", margin="+margin+", maxMismatches="+maxMismatches);}	
+				", margin="+margin+", maxMismatches="+maxMismatches);}
 		
 		return (bestOverlap<0 ? -1 : alen+blen-bestOverlap);
 	}
@@ -703,9 +718,9 @@ public final class BBMergeOverlapper {
 			if(ca=='N' || cb=='N'){
 				//do nothing
 			}else{
-				assert(AminoAcid.isFullyDefined(ca) && AminoAcid.isFullyDefined(cb)) : 
+				assert(AminoAcid.isFullyDefined(ca) && AminoAcid.isFullyDefined(cb)) :
 					"A non-ACGTN base was detected.  Please rerun with the flag 'itn'.\n"+(char)ca+", "+(char)cb+"\n";
-				float probC=probCorrect2[qa]*probCorrect2[qb];
+				float probC=probCorrect4[qa]*probCorrect4[qb];
 				float probE=1-probC;
 //				expected+=Tools.max(0.0005f, probE);
 				expected+=probE;
@@ -717,7 +732,7 @@ public final class BBMergeOverlapper {
 //		System.err.println("*expected:   \t"+expected);
 //		System.err.println("*Actual:     \t"+actual);
 //		System.err.println();
-//		
+//
 //		assert(a.id.equals("insert=142 /1") || a.id.equals("insert=263 /1")) : a.id;
 		
 		return expected;
@@ -752,9 +767,9 @@ public final class BBMergeOverlapper {
 				
 //				System.err.println(((char)ca)+", "+((char)cb)+", "+i+", "+j);
 				
-				assert(AminoAcid.isFullyDefined(ca) && AminoAcid.isFullyDefined(cb)) : 
+				assert(AminoAcid.isFullyDefined(ca) && AminoAcid.isFullyDefined(cb)) :
 					"A non-ACGTN base was detected.  Please rerun with the flag 'itn'.\n"+(char)ca+", "+(char)cb+"\n";
-				float probC=probCorrect2[qa]*probCorrect2[qb];
+				float probC=probCorrect4[qa]*probCorrect4[qb];
 				float probM=probC+(1-probC)*0.25f; //probability of matching
 				float probE=1-probM;
 				
@@ -798,7 +813,7 @@ public final class BBMergeOverlapper {
 		
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		long kmer=0, rkmer=0;
 		int len=0;
 		int min=cutoff;
@@ -943,23 +958,29 @@ public final class BBMergeOverlapper {
 	
 	protected static final boolean verbose=false;
 	
-	private static final float[] probCorrect=
-		{0.000f, 0.251f, 0.369f, 0.499f, 0.602f, 0.684f, 0.749f, 0.800f, 0.842f, 0.874f, 0.900f, 0.921f, 0.937f, 0.950f, 0.960f, 0.968f,
-		 0.975f, 0.980f, 0.984f, 0.987f, 0.990f, 0.992f, 0.994f, 0.995f, 0.996f, 0.997f, 0.997f, 0.998f, 0.998f, 0.999f, 0.999f, 0.999f,
-		 0.999f, 0.999f, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+	private static final float[] probCorrect3=
+		{0.000f, 0.251f, 0.369f, 0.499f, 0.602f, 0.684f, 0.749f, 0.800f, 0.842f, 0.874f,
+		 0.900f, 0.921f, 0.937f, 0.950f, 0.960f, 0.968f, 0.975f, 0.980f, 0.984f, 0.987f,
+		 0.990f, 0.992f, 0.994f, 0.995f, 0.996f, 0.997f, 0.997f, 0.998f, 0.998f, 0.999f,
+		 0.999f, 0.999f, 0.999f, 0.999f, 1, 1, 1, 1, 1, 1,
+		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 	
-	private static final float[] probCorrect2=
-		{0.0000f, 0.2501f, 0.3690f, 0.4988f, 0.6019f, 0.6838f, 0.7488f, 0.8005f, 0.8415f, 0.8741f, 0.9000f, 0.9206f, 0.9369f, 0.9499f,
-		 0.9602f, 0.9684f, 0.9749f, 0.9800f, 0.9842f, 0.9874f, 0.9900f, 0.9921f, 0.9937f, 0.9950f, 0.9960f, 0.9968f, 0.9975f, 0.9980f,
-		 0.9984f, 0.9987f, 0.9990f, 0.9992f, 0.9994f, 0.9995f, 0.9996f, 0.9997f, 0.9997f, 0.9998f, 0.9998f, 0.9999f, 0.9999f, 0.9999f,
-		 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f,
-		 0.9999f, 0.9999f, 0.9999f, 0.9999f};
+	private static final float[] probCorrect4=
+		{0.0000f, 0.2501f, 0.3690f, 0.4988f, 0.6019f, 0.6838f, 0.7488f, 0.8005f, 0.8415f, 0.8741f,
+		 0.9000f, 0.9206f, 0.9369f, 0.9499f, 0.9602f, 0.9684f, 0.9749f, 0.9800f, 0.9842f, 0.9874f,
+		 0.9900f, 0.9921f, 0.9937f, 0.9950f, 0.9960f, 0.9968f, 0.9975f, 0.9980f, 0.9984f, 0.9987f,
+		 0.9990f, 0.9992f, 0.9994f, 0.9995f, 0.9996f, 0.9997f, 0.9997f, 0.9998f, 0.9998f, 0.9999f,
+		 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f,
+		 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f};
 	
 	private static final float[] probCorrect5=
-		{0.20000f, 0.20567f, 0.36904f, 0.49881f, 0.60189f, 0.68377f, 0.74881f, 0.80047f, 0.84151f, 0.87411f, 0.90000f, 0.92057f, 0.93690f,
-		 0.94988f, 0.96019f, 0.96838f, 0.97488f, 0.98005f, 0.98415f, 0.98741f, 0.99000f, 0.99206f, 0.99369f, 0.99499f, 0.99602f, 0.99684f, 
-		 0.99749f, 0.99800f, 0.99842f, 0.99874f, 0.99900f, 0.99921f, 0.99937f, 0.99950f, 0.99960f, 0.99968f, 0.99975f, 0.99980f, 0.99984f, 
-		 0.99987f, 0.99990f, 0.99992f, 0.99994f, 0.99995f, 0.99996f, 0.99997f, 0.99997f, 0.99998f, 0.99998f, 0.99999f, 0.99999f, 0.99999f, 
-		 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f};
+		{0.20000f, 0.20567f, 0.36904f, 0.49881f, 0.60189f, 0.68377f, 0.74881f, 0.80047f, 0.84151f, 0.87411f,
+		 0.90000f, 0.92057f, 0.93690f, 0.94988f, 0.96019f, 0.96838f, 0.97488f, 0.98005f, 0.98415f, 0.98741f,
+		 0.99000f, 0.99206f, 0.99369f, 0.99499f, 0.99602f, 0.99684f, 0.99749f, 0.99800f, 0.99842f, 0.99874f,
+		 0.99900f, 0.99921f, 0.99937f, 0.99950f, 0.99960f, 0.99968f, 0.99975f, 0.99980f, 0.99984f, 0.99987f,
+		 0.99990f, 0.99992f, 0.99994f, 0.99995f, 0.99996f, 0.99997f, 0.99997f, 0.99998f, 0.99998f, 0.99999f,
+		 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f, 0.99999f};
 	
 }

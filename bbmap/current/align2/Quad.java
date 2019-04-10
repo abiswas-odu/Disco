@@ -8,6 +8,7 @@ public class Quad implements Comparable<Quad>{
 		site=val_;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return site==((Quad)other).site;
 	}
@@ -21,6 +22,7 @@ public class Quad implements Comparable<Quad>{
 		return(x==0 ? column-other.column : x);
 	}
 	
+	@Override
 	public String toString(){
 		return("("+column+","+row+","+site+")");
 	}

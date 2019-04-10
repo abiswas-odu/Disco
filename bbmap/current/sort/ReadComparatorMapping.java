@@ -2,9 +2,9 @@ package sort;
 
 import java.util.Comparator;
 
-import stream.Read;
-import dna.Gene;
+import shared.Shared;
 import shared.Tools;
+import stream.Read;
 
 /**
  * @author Brian Bushnell
@@ -80,7 +80,7 @@ public class ReadComparatorMapping implements Comparator<Read> {
 		if(a.strand()!=b.strand()){return a.strand()-b.strand();}
 		
 		assert(!SAME_STRAND_PAIRS) : "TODO";
-		if(a.strand()==Gene.PLUS){
+		if(a.strand()==Shared.PLUS){
 			if(a.start!=b.start){return a.start-b.start;}
 		}else{
 			if(a.stop!=b.stop){return a.stop-b.stop;}
@@ -121,7 +121,7 @@ public class ReadComparatorMapping implements Comparator<Read> {
 		}
 		
 		assert(!SAME_STRAND_PAIRS) : "TODO";
-		if(a.strand()==Gene.PLUS){
+		if(a.strand()==Shared.PLUS){
 			if(a.start!=b.start){return a.start-b.start;} //This line should be dead code
 			if(a.stop!=b.stop){return a.stop-b.stop;}
 		}else{

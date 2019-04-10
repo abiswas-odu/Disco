@@ -3,27 +3,27 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.DualCris;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import stream.SamLine;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import shared.TrimRead;
-import fileIO.FileFormat;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
+import stream.DualCris;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+import stream.SamLine;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -32,32 +32,25 @@ import fileIO.FileFormat;
  */
 public final class SplitPairsAndSingles {
 	
-
-	
 	public static void main(String[] args){
+		SplitPairsAndSingles x=new SplitPairsAndSingles(args);
+		x.process();
 		
-		if(args==null || args.length==0 || (args.length==1 && 
-				(args[0].equalsIgnoreCase("-h") || args[0].equals("-help") || args[0].equals("--help") || args[0].equals("-?") || args[0].equals("?")))){
-			printOptions();
-			System.exit(0);
-		}
-		SplitPairsAndSingles dd=new SplitPairsAndSingles(args);
-		dd.process();
-	}
-	
-	private static void printOptions(){
-		System.err.println("Please consult the shellscript for usage information.");
-		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 	
 	public SplitPairsAndSingles(String[] args){
-		for(String s : args){if(s.contains("standardout") || s.contains("stdout")){outstream=System.err;}}
-		System.err.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
+
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
+		}
 		
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		
 		
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
@@ -68,12 +61,6 @@ public final class SplitPairsAndSingles {
 		parser.minReadLength=minReadLength;
 		boolean setOut=false, setOuts=false;
 		boolean fixInterleaving_=false, repair_=false, allowIdenticalPairNames_=false;
-		
-		{
-			boolean b=false;
-			assert(b=true);
-			EA=b;
-		}
 
 		for(int i=0; i<args.length; i++){
 
@@ -81,12 +68,8 @@ public final class SplitPairsAndSingles {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if("null".equalsIgnoreCase(b)){b=null;}
-			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -151,6 +134,7 @@ public final class SplitPairsAndSingles {
 			qtrimLeft=parser.qtrimLeft;
 			qtrimRight=parser.qtrimRight;
 			trimq=parser.trimq;
+			trimE=parser.trimE();
 			minReadLength=parser.minReadLength;
 		}
 
@@ -161,10 +145,7 @@ public final class SplitPairsAndSingles {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		
 		if(in1!=null && in1.contains("#") && !new File(in1).exists()){
 			int pound=in1.lastIndexOf('#');
@@ -223,10 +204,13 @@ public final class SplitPairsAndSingles {
 		assert(!in1.equalsIgnoreCase(out1));
 		assert(!in1.equalsIgnoreCase(outsingle));
 		assert(!in1.equalsIgnoreCase(in2));
-		assert(out1==null || !out1.equalsIgnoreCase(out2));
+		assert(out1==null || !out1.equalsIgnoreCase(out2)) : "out2 may not be defined without out1, and out1 may not equal out2.";
 		assert(out1==null || !out1.equalsIgnoreCase(outsingle));
 		
 		pairMap=(repair ? new LinkedHashMap<String, Read>() : null);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(outstream);
 	}
 
 	public void process(){
@@ -240,29 +224,19 @@ public final class SplitPairsAndSingles {
 		outstream.println("\nInput:                  \t"+readsIn+" reads \t\t"+basesIn+" bases.");
 		
 		if(qtrimLeft || qtrimRight){
-			outstream.println("Trimmed:                \t"+readsTrimmed+" reads ("+String.format("%.2f",readsTrimmed*100.0/readsIn)+"%) \t"+
-					basesTrimmed+" bases ("+String.format("%.2f",basesTrimmed*100.0/basesIn)+"%)");
+			outstream.println("Trimmed:                \t"+readsTrimmed+" reads ("+String.format(Locale.ROOT, "%.2f",readsTrimmed*100.0/readsIn)+"%) \t"+
+					basesTrimmed+" bases ("+String.format(Locale.ROOT, "%.2f",basesTrimmed*100.0/basesIn)+"%)");
 		}
-		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
-				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
-		outstream.println("Pairs:                  \t"+pairsOut+" reads ("+String.format("%.2f",pairsOut*100.0/readsIn)+"%) \t"+
-				pairBasesOut+" bases ("+String.format("%.2f",pairBasesOut*100.0/basesIn)+"%)");
-		outstream.println("Singletons:             \t"+singlesOut+" reads ("+String.format("%.2f",singlesOut*100.0/readsIn)+"%) \t"+
-				singleBasesOut+" bases ("+String.format("%.2f",singleBasesOut*100.0/basesIn)+"%)");
-		
-		double rpnano=readsIn/(double)(t.elapsed);
-		double bpnano=basesIn/(double)(t.elapsed);
-
-		String rpstring=(readsIn<100000 ? ""+readsIn : readsIn<100000000 ? (readsIn/1000)+"k" : (readsIn/1000000)+"m");
-		String bpstring=(basesIn<100000 ? ""+basesIn : basesIn<100000000 ? (basesIn/1000)+"k" : (basesIn/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
+		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format(Locale.ROOT, "%.2f",readsOut*100.0/readsIn)+"%) \t"+
+				basesOut+" bases ("+String.format(Locale.ROOT, "%.2f",basesOut*100.0/basesIn)+"%)");
+		outstream.println("Pairs:                  \t"+pairsOut+" reads ("+String.format(Locale.ROOT, "%.2f",pairsOut*100.0/readsIn)+"%) \t"+
+				pairBasesOut+" bases ("+String.format(Locale.ROOT, "%.2f",pairBasesOut*100.0/basesIn)+"%)");
+		outstream.println("Singletons:             \t"+singlesOut+" reads ("+String.format(Locale.ROOT, "%.2f",singlesOut*100.0/readsIn)+"%) \t"+
+				singleBasesOut+" bases ("+String.format(Locale.ROOT, "%.2f",singleBasesOut*100.0/basesIn)+"%)");
 		
 		if(showSpeed){
-			outstream.println("\nTime:   \t\t\t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println();
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsIn, basesIn, 8));
 		}
 		
 		if(errorState){
@@ -318,27 +292,27 @@ public final class SplitPairsAndSingles {
 		
 		ReadWrite.closeStreams(cris, ros, rosb);
 	}
-//	
+//
 //	private void process3_old(final ConcurrentReadInputStream cris, final ConcurrentReadOutputStream ros, final ConcurrentReadOutputStream rosb){
 //
 //		ListNum<Read> ln=cris.nextList();
 //		ArrayList<Read> reads0=(ln!=null ? ln.list : null);
-//		ArrayList<Read> single=(rosb==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-//		
+//		ArrayList<Read> single=(rosb==null ? null : new ArrayList<Read>(Shared.bufferLen()));
+//
 //		while(reads0!=null && reads0.size()>0){
 //			ArrayList<Read> reads=(ArrayList<Read>) reads0.clone();
 //			int removed=0;
 //			for(int i=0; i<reads.size(); i++){
 //				Read r1=reads.get(i);
 //				Read r2=r1.mate;
-//				
+//
 //				readsIn++;
 //				basesIn+=r1.length();
 //				if(r2!=null){
 //					readsIn++;
 //					basesIn+=r2.length();
 //				}
-//				
+//
 //				{
 //					if(trimLeft || trimRight){
 //						if(r1!=null){
@@ -355,9 +329,9 @@ public final class SplitPairsAndSingles {
 //
 //					final int rlen1=(r1==null ? -1 : r1.length());
 //					final int rlen2=(r2==null ? -1 : r2.length());
-//					
+//
 //					if(verbose){System.err.println("rlen1="+rlen1+", rlen2="+rlen2);}
-//					
+//
 //					if(rlen1<minReadLength || rlen2<minReadLength){
 //						reads.set(i, null);
 //						removed++;
@@ -365,14 +339,14 @@ public final class SplitPairsAndSingles {
 //						if(r2!=null){
 //							r2.mate=null;
 //						}
-//						
+//
 //						if(rlen1>=minReadLength){
 //							single.add(r1);
 //							singlesOut++;
 //							singleBasesOut+=rlen1;
 //						}
 //						if(rlen2>=minReadLength){
-//							single.add(r2);	
+//							single.add(r2);
 //							singlesOut++;
 //							singleBasesOut+=rlen2;
 //						}
@@ -388,13 +362,13 @@ public final class SplitPairsAndSingles {
 //					}
 //				}
 //			}
-//			
+//
 //			if(rosb!=null){
 //				if(verbose){System.err.println("Adding "+single.size()+" to single out.");}
 //				rosb.add(new ArrayList<Read>(single), ln.id);
 //				single.clear();
 //			}
-//			
+//
 //			if(ros!=null){
 //				if(removed>0){Tools.condenseStrict(reads);}
 //				ArrayList<Read> x=new ArrayList<Read>(reads.size());
@@ -402,13 +376,13 @@ public final class SplitPairsAndSingles {
 //				if(verbose){System.err.println("Adding "+x.size()+" to pair out.");}
 //				ros.add(x, ln.id);
 //			}
-//			
-//			cris.returnList(ln.id, ln.list.isEmpty());
+//
+//			cris.returnList(ln);
 //			ln=cris.nextList();
 //			reads0=(ln!=null ? ln.list : null);
 //		}
-//		cris.returnList(ln.id, ln.list.isEmpty());
-//		
+//		cris.returnList(ln);
+//
 //		readsOut+=singlesOut+pairsOut;
 //		basesOut+=singleBasesOut+pairBasesOut;
 //	}
@@ -418,17 +392,17 @@ public final class SplitPairsAndSingles {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=ln.list;
 		
-		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-		final ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.bufferLen()));
+		final ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(Shared.bufferLen()));
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(int i=0; i<reads.size(); i++){
 				Read r1=reads.get(i);
 				Read r2=r1.mate;
 				processPair(r1, r2, pairs, singles);
 			}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 			
@@ -444,7 +418,7 @@ public final class SplitPairsAndSingles {
 				pairs.clear();
 			}
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		
 		readsOut+=singlesOut+pairsOut;
 		basesOut+=singleBasesOut+pairBasesOut;
@@ -455,12 +429,12 @@ public final class SplitPairsAndSingles {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=ln.list;
 		
-		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-		final ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.bufferLen()));
+		final ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(Shared.bufferLen()));
 		
 		Read current=null, prev=null;
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(int i=0; i<reads.size(); i++){
 				
 				current=reads.get(i);
@@ -485,7 +459,7 @@ public final class SplitPairsAndSingles {
 			
 //			if(verbose){System.err.println("X\n"+current+"\n"+prev+"\n");}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 			
@@ -515,7 +489,7 @@ public final class SplitPairsAndSingles {
 				pairs.clear();
 			}
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		
 		readsOut+=singlesOut+pairsOut;
 		basesOut+=singleBasesOut+pairBasesOut;
@@ -526,10 +500,10 @@ public final class SplitPairsAndSingles {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=ln.list;
 		
-		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.bufferLen()));
 		
 		boolean foundR1=false, foundR2=false;
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(Read r1 : reads){
 				Read r2=r1.mate;
 				
@@ -587,9 +561,9 @@ public final class SplitPairsAndSingles {
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=ln.list;
 		
-		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.bufferLen()));
 		
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 			for(Read r1 : reads){
 				Read r2=r1.mate;
 				
@@ -605,17 +579,17 @@ public final class SplitPairsAndSingles {
 			
 //			if(verbose){System.err.println("X\n"+current+"\n"+prev+"\n");}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 			
-			if(ros!=null){
+			if(ros!=null && pairs!=null){//pairs!=null is implied
 				if(verbose){System.err.println("Adding "+pairs.size()+" to pair out.");}
 				ros.add(new ArrayList<Read>(pairs), ln.id);
 				pairs.clear();
 			}
 		}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		
 		if(!pairMap.isEmpty()){
 			final ArrayList<Read> singles=new ArrayList<Read>(pairMap.size());
@@ -646,7 +620,7 @@ public final class SplitPairsAndSingles {
 		
 		if(qtrimLeft || qtrimRight){
 			if(r1!=null){
-				int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, 1);
+				int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, trimE, 1);
 				basesTrimmed+=x;
 				readsTrimmed+=(x>0 ? 1 : 0);
 				if(addcolon){
@@ -655,7 +629,7 @@ public final class SplitPairsAndSingles {
 				}
 			}
 			if(r2!=null){
-				int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, 1);
+				int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, trimE, 1);
 				basesTrimmed+=x;
 				readsTrimmed+=(x>0 ? 1 : 0);
 				if(addcolon){
@@ -674,7 +648,7 @@ public final class SplitPairsAndSingles {
 			r2.mate=r1;
 			r1.setPairnum(0);
 			r2.setPairnum(1);
-			if(pairs!=null){pairs.add(r1);}					
+			if(pairs!=null){pairs.add(r1);}
 			pairsOut+=2;
 			pairBasesOut+=(rlen1+rlen2);
 		}else if(rlen1>=minReadLength){
@@ -808,11 +782,12 @@ public final class SplitPairsAndSingles {
 
 	private final LinkedHashMap<String, Read> pairMap;
 
-	private byte trimq=6;
+	private float trimq=6;
+	/** Error rate for trimming (derived from trimq) */
+	private final float trimE;
 	private int minReadLength=20;
 	private final boolean qtrimLeft, qtrimRight;
-
-	private final boolean EA;
+	
 	private final boolean fixInterleaving;
 	private final boolean allowIdenticalPairNames;
 	private final boolean repair;

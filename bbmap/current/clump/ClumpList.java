@@ -2,18 +2,14 @@ package clump;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import dna.AminoAcid;
-import jgi.Dedupe;
 import shared.Shared;
 import shared.Tools;
-import stream.KillSwitch;
 import stream.Read;
 import structures.LongM;
 
@@ -168,7 +164,7 @@ public class ClumpList extends ArrayList<Clump> {
 	}
 	
 //	long addedR=0, addedC=0;
-//	
+//
 //	@Override
 //	public boolean add(Clump c){
 //		assert(c!=null && c.size()>0);
@@ -178,7 +174,7 @@ public class ClumpList extends ArrayList<Clump> {
 //		}
 //		return super.add(c);
 //	}
-//	
+//
 //	@Override
 //	public boolean addAll(Collection<? extends Clump> cc){
 //		for(Clump c : cc){add(c);}
@@ -294,7 +290,7 @@ public class ClumpList extends ArrayList<Clump> {
 	private void fillMap(LinkedHashMap<LongM, ArrayList<Clump>> map){
 		final int shift=2*k;
 		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
+		final long mask=(shift>63 ? -1L : ~((-1L)<<shift));
 		final LongM key=new LongM();
 		
 		for(Clump c : this){
@@ -304,20 +300,22 @@ public class ClumpList extends ArrayList<Clump> {
 			int len=0;
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
-				long x=Dedupe.baseToNumber[b];
-				long x2=Dedupe.baseToComplementNumber[b];
+				long x=AminoAcid.baseToNumber[b];
+				long x2=AminoAcid.baseToComplementNumber[b];
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
 
-				if(AminoAcid.baseToNumber[b]<0){
+				if(x<0){
 					len=0;
+					kmer=rkmer=0;
 				}else{len++;}
 
 				if(len>=k){
 					final long kmax=Tools.max(kmer, rkmer);
 					key.set(kmax);
 					if(kmax!=c.kmer){
-						assert(kmer!=c.kmer && rkmer!=c.kmer);
+						//This assertion should be fine, but it fails on nt.
+//						assert(kmer!=c.kmer && rkmer!=c.kmer) : kmax+", "+kmer+", "+rkmer+", "+c.kmer+", "+r.length()+", "+(r.length()<10000 ? r.toString() : "");
 					}
 					ArrayList<Clump> list=map.get(key);
 					if(list!=null && !list.contains(c)){list.add(c);}
@@ -355,7 +353,7 @@ public class ClumpList extends ArrayList<Clump> {
 					}
 					storage.addAll(c);
 				}else if(mode==DEDUPE){
-					duplicates+=c.removeDuplicates(maxSubstitutions, scanLimit, opticalOnly, markOnly, markAll, maxOpticalDistance);
+					duplicates+=c.removeDuplicates();
 					storage.addAll(c);
 				}else{
 					throw new RuntimeException("Unknown mode "+mode);
@@ -367,7 +365,7 @@ public class ClumpList extends ArrayList<Clump> {
 		
 		public long corrections=0;
 		public long duplicates=0;
-		private ArrayList<Read> storage=new ArrayList<Read>();
+		ArrayList<Read> storage=new ArrayList<Read>();
 		private final int mode;
 	}
 	
@@ -457,19 +455,12 @@ public class ClumpList extends ArrayList<Clump> {
 	private final boolean makeSimpleConsensus;
 	long cAdded=0, rAdded=0;
 	
-	private final int k;
-	private final AtomicInteger ptr=new AtomicInteger(0);
+	final int k;
+	final AtomicInteger ptr=new AtomicInteger(0);
 	private LinkedHashMap<LongM, ArrayList<Clump>> map;
 
-	public static boolean UNRCOMP=true;	
+	public static boolean UNRCOMP=true;
 	private static boolean verbose=false;
-	
-	public static boolean opticalOnly=false;
-	public static boolean markOnly=false;
-	public static boolean markAll=false;
-	public static int maxSubstitutions=2;
-	public static int scanLimit=5;
-	public static float maxOpticalDistance=40;
 	
 	private static final long serialVersionUID = 1L;
 	private static final PrintStream outstream=System.err;

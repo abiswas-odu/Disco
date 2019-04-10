@@ -1,8 +1,8 @@
 package dna;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
+
+import shared.Shared;
+import shared.Tools;
 
 
 public class GeneSet implements Comparable<GeneSet>{
@@ -34,7 +34,7 @@ public class GeneSet implements Comparable<GeneSet>{
 			maxEnd=max((int)gene.txStop, maxEnd);
 			//				assert(st==-1 || st==gene.strand) : g;
 			if(st==-1){st=gene.strand;}
-			else if(st!=gene.strand){st=(byte) Gene.find("?", Gene.strandCodes);}
+			else if(st!=gene.strand){st=(byte) Tools.find("?", Shared.strandCodes);}
 		}
 		
 		pseudo=pse;
@@ -49,6 +49,7 @@ public class GeneSet implements Comparable<GeneSet>{
 		strand=st;
 	}
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append(name);
@@ -56,7 +57,7 @@ public class GeneSet implements Comparable<GeneSet>{
 		sb.append('\t');
 		sb.append(padFront(transcripts+"",2)+" transcript"+(transcripts==1 ? " " : "s"));
 
-		sb.append("\tchr"+chrom+" ("+minStart+" - "+maxEnd+"), '"+Gene.strandCodes[strand]+"'");
+		sb.append("\tchr"+chrom+" ("+minStart+" - "+maxEnd+"), '"+Shared.strandCodes[strand]+"'");
 
 		return sb.toString();
 	}
@@ -107,6 +108,7 @@ public class GeneSet implements Comparable<GeneSet>{
 		return x=name.compareTo(other.name);
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return equals((GeneSet)other);
 	}

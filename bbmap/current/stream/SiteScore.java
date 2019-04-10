@@ -10,9 +10,9 @@ import align2.MSA;
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 
 
 
@@ -70,10 +70,18 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		return x;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		return compareTo((SiteScore)other)==0;
 	}
 	
+	@Override
+	public int hashCode() {
+		assert(false) : "This class should not be hashed.";
+		return super.hashCode();
+	}
+	
+	@Override
 	public String toString(){
 		return toText().toString();
 	}
@@ -193,7 +201,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			byte c=bases[i];
 			byte r=ref[start+i];
 			
-//			assert(Character.isUpperCase(c) && Character.isUpperCase(r));
+//			assert(Tools.isUpperCase(c) && Tools.isUpperCase(r));
 			if(c=='N'){return false;}
 			if(c!=r){
 				maxNoref--;
@@ -211,10 +219,10 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		for(int i=0; i<bases.length; i++){
 			byte c=bases[i];
 			byte r=ref[start+i];
-			assert(Character.isUpperCase(c) && Character.isUpperCase(r)) : "Lowercase letters detected: ref="+(char)r+", read="+(char)c+"\n"+new String(bases)+"\n"+
+			assert(Tools.isUpperCase(c) && Tools.isUpperCase(r)) : "Lowercase letters detected: ref="+(char)r+", read="+(char)c+"\n"+new String(bases)+"\n"+
 					"Please re-run with the 'tuc=t' flag (touppercase=true).";
 
-			if((c!=r /* && (Character.toUpperCase(c)!=Character.toUpperCase(r))*/) || c=='N'){
+			if((c!=r /* && (Tools.toUpperCase(c)!=Tools.toUpperCase(r))*/) || c=='N'){
 				return false;
 			}
 		}
@@ -269,7 +277,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		for(; refloc<=max; refloc++, readloc++){
 			final byte c=bases[readloc];
 			final byte r=ref[refloc];
-			assert(Character.isUpperCase(r) && Character.isUpperCase(c)) :
+			assert(Tools.isUpperCase(r) && Tools.isUpperCase(c)) :
 				"\nAn input read appears to contain a non-upper-case base.  Please rerun with the 'touppercase' flag.\n"+
 				"ref base = "+r+", read base = "+c+", TO_UPPER_CASE = "+Read.TO_UPPER_CASE+"\n"+(bases.length<=500 ? new String(bases) : "")+"\n";
 			if(c!=r || c==bn){
@@ -297,7 +305,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 	}
 	private static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
-		return a2<=b1 && b2>=a1; 
+		return a2<=b1 && b2>=a1;
 	}
 	
 	public static String header() {
@@ -410,6 +418,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		return ss2;
 	}
 	
+	@Override
 	public SiteScore clone(){
 		try {
 			return (SiteScore)super.clone();
@@ -530,7 +539,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		return unclipped;
 	}
 	
-	/** Simply replaces terminal 'I', 'X', and 'Y' with 'C' and adjusts length 
+	/** Simply replaces terminal 'I', 'X', and 'Y' with 'C' and adjusts length
 	 * TODO: Also clip out-of-bounds. */
 	public int clipTipIndels(int rlen){
 		int clipped=0;
@@ -542,6 +551,8 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			if(m=='C'){
 				//Do nothing
 				rpos++;
+			}else if(m=='m' || m=='S'){
+				break;
 			}else{
 				if(m=='I'){
 					start--;
@@ -568,10 +579,13 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			if(m=='C'){
 				//Do nothing
 				rpos--;
+			}else if(m=='m' || m=='S'){
+				break;
 			}else{
 				if(m=='I'){
 					stop++;
 				}else if(m=='X'){//Should not happen
+					assert(false);
 					rpos--;
 				}else if(m=='Y'){
 					stop++;
@@ -592,13 +606,13 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		return clipped;
 	}
 	
-//	/** Simply replaces terminal 'I', 'X', and 'Y' with 'C' and adjusts length 
+//	/** Simply replaces terminal 'I', 'X', and 'Y' with 'C' and adjusts length
 //	 * TODO: Also clip out-of-bounds. */
 //	public int clipTipIndels(int rlen){
 //		int clipped=0;
 //		if(match==null || match.length<1){return clipped;}
 //		assert(lengthsAgree());
-//		
+//
 //		for(int mpos=0, rpos=start; mpos<match.length; mpos++){
 //			final byte m=match[mpos];
 //			if(m=='I'){
@@ -612,7 +626,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 //			match[mpos]='C';
 //		}
 //		assert(clipped==0 || lengthsAgree());
-//		
+//
 //		for(int mpos=match.length-1, rpos=stop; mpos>=0; mpos--){
 //			final byte m=match[mpos];
 //			if(m=='I'){
@@ -626,7 +640,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 //			match[mpos]='C';
 //		}
 //		assert(clipped==0 || lengthsAgree());
-//		
+//
 //		return clipped;
 //	}
 	
@@ -679,7 +693,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			while(mloc>=0 && match[mloc]=='m'){mloc--; neutral--;}
 		}
 		if(insertion<=maxIndel && deletion<=4*maxIndel){return false;}
-		assert(mappedLength()==matchLength() || matchContainsXY()) : 
+		assert(mappedLength()==matchLength() || matchContainsXY()) :
 			"start="+start+", stop="+stop+", maplen="+mappedLength()+", matchlen="+matchLength()+"\n"+new String(match)+"\n"+new String(bases)+"\n\n"+this;
 		
 		int sum=neutral+insertion+deletion;
@@ -992,12 +1006,12 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 
 //	public boolean plus(){return strand()==Gene.PLUS;}
 //	public boolean minus(){return strand()==Gene.MINUS;}
-//	
+//
 //	public final byte strand(){return (byte)(flags&strandMask);}
 //	public boolean rescued(){return (flags&rescuedMask)!=0;}
 //	public boolean perfect(){return (flags&perfectMask)!=0;}
 //	public boolean semiperfect(){return (flags&semiperfectMask)!=0;}
-//	
+//
 //	public final int setStrand(int x){
 //		assert(x==0 || x==1);
 //		if(x==0){flags=(flags&~strandMask);}
@@ -1024,8 +1038,8 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 //		return b;
 //	}
 
-	public boolean plus(){return strand==Gene.PLUS;}
-	public boolean minus(){return strand==Gene.MINUS;}
+	public boolean plus(){return strand==Shared.PLUS;}
+	public boolean minus(){return strand==Shared.MINUS;}
 	public boolean perfect(){return perfect;}
 	public boolean semiperfect(){return semiperfect;}
 	public boolean rescued(){return rescued;}
@@ -1137,7 +1151,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 	public void setScore(int x){
 		score=x;
 	}
-	
+
 	public int start;
 	public int stop;
 	public int quickScore;

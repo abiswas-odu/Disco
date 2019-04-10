@@ -69,13 +69,13 @@ public final class QuadHeap {
 //			percDown(next);
 //		}
 //	}
-//	
+//
 //	private void percDown_old(int loc){
 //		//assert(testForDuplicates());
 //		assert(loc>0);
 //
 //		final Quad a=array[loc];
-//		
+//
 //		while(loc>1){
 //			int next=loc/2;
 //			Quad b=array[next];
@@ -212,6 +212,7 @@ public final class QuadHeap {
 		return true;
 	}
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder();
 		sb.append("[");

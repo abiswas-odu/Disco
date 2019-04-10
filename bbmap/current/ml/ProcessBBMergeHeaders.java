@@ -1,17 +1,19 @@
 package ml;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.FASTQ;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import shared.Timer;
 
 /**
  * @author Brian Bushnell
@@ -22,19 +24,20 @@ public class ProcessBBMergeHeaders {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		ProcessBBMergeHeaders as=new ProcessBBMergeHeaders(args);
-		as.process(t);
+		ProcessBBMergeHeaders x=new ProcessBBMergeHeaders(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public ProcessBBMergeHeaders(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		FASTQ.TEST_INTERLEAVED=false;
 		FASTQ.FORCE_INTERLEAVED=false;
@@ -45,8 +48,6 @@ public class ProcessBBMergeHeaders {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -101,9 +102,9 @@ public class ProcessBBMergeHeaders {
 			}
 			
 			ArrayList<Read> keep=new ArrayList<Read>(reads.size());
-			keep.add(new Read(null, null, 0, headerString()));
+			keep.add(new Read(null, null, headerString(), 0));
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -121,7 +122,7 @@ public class ProcessBBMergeHeaders {
 				if(ros!=null){ros.add(keep, ln.id);}
 				keep=new ArrayList<Read>();
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -135,14 +136,10 @@ public class ProcessBBMergeHeaders {
 		
 		t.stop();
 		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
+		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format(Locale.ROOT, "%.2fk reads/sec", (readsProcessed/(double)(t.elapsed))*1000000));
 	}
 	
 	/*--------------------------------------------------------------*/
-	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
-	}
 	
 	/*--------------------------------------------------------------*/
 	
@@ -211,8 +208,9 @@ public class ProcessBBMergeHeaders {
 			assert(!valid || bestOverlap>0) : bestOverlap+", "+bestInsert;
 		}
 		
+		@Override
 		public String toString(){
-			return String.format("%d\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.8f", 
+			return String.format(Locale.ROOT, "%d\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.8f",
 					correct ? 1 : 0, minOverlap, bestOverlap, bestBadInt, secondBestOverlap, secondBestBadInt,
 							expectedErrors1+expectedErrors2, bestExpected, bestRatio, bestBad, secondBestRatio, secondBestBad, probability);
 		}

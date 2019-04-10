@@ -1,30 +1,29 @@
 package jgi;
 
-import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Random;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.Read;
-import structures.ListNum;
-import dna.Parser;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.ByteStreamWriter;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
 import sort.Shuffle;
 import sort.Shuffle.ShuffleThread;
-import fileIO.FileFormat;
+import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.FastaReadInputStream;
+import stream.Read;
+import structures.ListNum;
 
 
 /**
@@ -42,26 +41,23 @@ public class CrossContaminate {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		CrossContaminate cc=new CrossContaminate(args);
-		cc.process(t);
+		CrossContaminate x=new CrossContaminate(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public CrossContaminate(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
@@ -76,12 +72,8 @@ public class CrossContaminate {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//do nothing
-			}else if(Parser.parseQuality(arg, a, b)){
+			
+			if(Parser.parseQuality(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -103,21 +95,25 @@ public class CrossContaminate {
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("in")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				for(String name : split2){
 					inNames.add(name);
 				}
 			}else if(a.equals("out")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				for(String name : split2){
 					outNames.add(name);
 				}
 			}else if(a.equals("innamefile")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				for(String name : split2){
 					inTemp.add(name);
 				}
 			}else if(a.equals("outnamefile")){
+				assert(b!=null) : "Bad parameter: "+arg;
 				String[] split2=b.split(",");
 				for(String name : split2){
 					outTemp.add(name);
@@ -168,7 +164,6 @@ public class CrossContaminate {
 		
 		if(inNames.isEmpty() || inNames.size()!=outNames.size()){
 			assert(false) : inNames+"\n"+outNames;
-			printOptions();
 			throw new RuntimeException("Error - at least one input file is required, and # input files must equal # output files.");
 		}
 		
@@ -229,18 +224,7 @@ public class CrossContaminate {
 		t.stop();
 		
 		if(showspeed){
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
-
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		}
 		
 		if(errorState){
@@ -293,7 +277,7 @@ public class CrossContaminate {
 				assert((r.mate!=null)==paired);
 			}
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -314,7 +298,7 @@ public class CrossContaminate {
 					addRead(r1, sinks);
 				}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -411,21 +395,6 @@ public class CrossContaminate {
 		return sinklist;
 	}
 	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
-	}
-	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Classes        ----------------*/
 	/*--------------------------------------------------------------*/
@@ -443,8 +412,9 @@ public class CrossContaminate {
 			return bsw.poisonAndWait();
 		}
 		
+		@Override
 		public String toString(){
-			return fname+", "+String.format("%.6f", prob);
+			return fname+", "+String.format(Locale.ROOT, "%.6f", prob);
 		}
 		
 		final String fname;

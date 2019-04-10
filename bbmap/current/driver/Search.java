@@ -4,7 +4,7 @@ import java.util.List;
 
 import dna.Data;
 import dna.Gene;
-import dna.Range;
+import structures.Range;
 
 
 public class Search {
@@ -136,8 +136,8 @@ public class Search {
 			
 			assert(a>=0);
 			assert(a<array.length);
-			assert(array[a].includes(p) || (a==0 && p<array[a].a) || 
-					(p>array[a].b && (a==array.length-1 || p<array[a+1].a))) : 
+			assert(array[a].includes(p) || (a==0 && p<array[a].a) ||
+					(p>array[a].b && (a==array.length-1 || p<array[a+1].a))) :
 						"a="+a+", b="+b+", p="+p+", array[a]="+array[a];
 			return a;
 		}

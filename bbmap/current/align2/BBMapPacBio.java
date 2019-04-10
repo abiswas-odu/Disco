@@ -2,7 +2,13 @@ package align2;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Locale;
 
+import bloom.BloomFilter;
+import dna.ChromosomeArray;
+import dna.Data;
+import dna.FastaToChromArrays2;
+import fileIO.ReadWrite;
 import jgi.CoveragePileup;
 import shared.Shared;
 import shared.Timer;
@@ -10,12 +16,6 @@ import shared.Tools;
 import stream.FastaReadInputStream;
 import stream.ReadStreamWriter;
 import stream.SamLine;
-
-import dna.ChromArrayMaker;
-import dna.ChromosomeArray;
-import dna.Data;
-import dna.FastaToChromArrays2;
-import fileIO.ReadWrite;
 
 /**
  * Based on TestIndex11f
@@ -36,7 +36,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		mapper.testSpeed(args);
 		ReadWrite.waitForWritingToFinish();
 		t.stop();
-		sysout.println("\nTotal time:     \t"+t);
+		outstream.println("\nTotal time:     \t"+t);
 		clearStatics();
 	}
 	
@@ -66,7 +66,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		MAX_SITESCORES_TO_PRINT=100;
 		PRINT_SECONDARY_ALIGNMENTS=false;
 		AbstractIndex.MIN_APPROX_HITS_TO_KEEP=1;
-		Shared.READ_BUFFER_LENGTH=Tools.mid(1, Shared.READ_BUFFER_LENGTH, 20);
+		Shared.capBufferLen(20);
 	}
 	
 	@Override
@@ -158,7 +158,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		if(expectedSites>-1){
 			BBMapThreadPacBio.setExpectedSites(expectedSites);
-			sysout.println("Set EXPECTED_SITES to "+expectedSites);
+			outstream.println("Set EXPECTED_SITES to "+expectedSites);
 		}
 		
 		if(fractionGenomeToExclude>=0){
@@ -189,28 +189,30 @@ public final class BBMapPacBio extends AbstractMapper  {
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
 		}
 		
-		if(ambigMode==AMBIG_BEST){
-			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
-			if(!PRINT_SECONDARY_ALIGNMENTS){BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=true;}
-			sysout.println("Retaining first best site only for ambiguous mappings.");
-		}else if(ambigMode==AMBIG_ALL){
-			PRINT_SECONDARY_ALIGNMENTS=ReadStreamWriter.OUTPUT_SAM_SECONDARY_ALIGNMENTS=true;
-			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
-			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			SamLine.MAKE_NH_TAG=true;
-			ambiguousAll=true;
-			sysout.println("Retaining all best sites for ambiguous mappings.");
-		}else if(ambigMode==AMBIG_RANDOM){
-			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
-			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			ambiguousRandom=true;
-			sysout.println("Choosing a site randomly for ambiguous mappings.");
-		}else if(ambigMode==AMBIG_TOSS){
-			REMOVE_DUPLICATE_BEST_ALIGNMENTS=true;
-			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=true;
-			sysout.println("Ambiguously mapped reads will be considered unmapped.");
-		}else{
-			throw new RuntimeException("Unknown ambiguous mapping mode: "+ambigMode);
+		if(in1!=null){
+			if(ambigMode==AMBIG_BEST){
+				REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
+				if(!PRINT_SECONDARY_ALIGNMENTS){BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=true;}
+				outstream.println("Retaining first best site only for ambiguous mappings.");
+			}else if(ambigMode==AMBIG_ALL){
+				PRINT_SECONDARY_ALIGNMENTS=ReadStreamWriter.OUTPUT_SAM_SECONDARY_ALIGNMENTS=true;
+				REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
+				BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
+				SamLine.MAKE_NH_TAG=true;
+				ambiguousAll=true;
+				outstream.println("Retaining all best sites for ambiguous mappings.");
+			}else if(ambigMode==AMBIG_RANDOM){
+				REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
+				BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
+				ambiguousRandom=true;
+				outstream.println("Choosing a site randomly for ambiguous mappings.");
+			}else if(ambigMode==AMBIG_TOSS){
+				REMOVE_DUPLICATE_BEST_ALIGNMENTS=true;
+				BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=true;
+				outstream.println("Ambiguously mapped reads will be considered unmapped.");
+			}else{
+				throw new RuntimeException("Unknown ambiguous mapping mode: "+ambigMode);
+			}
 		}
 		
 	}
@@ -222,7 +224,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		if(minid!=-1){
 			MINIMUM_ALIGNMENT_SCORE_RATIO=MSA.minIdToMinRatio(minid, MSA_TYPE);
-			sysout.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+String.format("%.3f",MINIMUM_ALIGNMENT_SCORE_RATIO));
+			outstream.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+String.format(Locale.ROOT, "%.3f",MINIMUM_ALIGNMENT_SCORE_RATIO));
 		}
 		
 		if(!setxs){SamLine.MAKE_XS_TAG=(SamLine.INTRON_LIMIT<1000000000);}
@@ -230,7 +232,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		if(outFile==null && outFile2==null && outFileM==null && outFileM2==null && outFileU==null && outFileU2==null
 				&& outFileB==null && outFileB2==null && splitterOutputs==null && BBSplitter.streamTable==null){
-			sysout.println("No output file.");
+			outstream.println("No output file.");
 			OUTPUT_READS=false;
 		}else{
 			OUTPUT_READS=true;
@@ -252,12 +254,12 @@ public final class BBMapPacBio extends AbstractMapper  {
 				Blacklist.addToBlacklist(s);
 			}
 			t.stop();
-			sysout.println("Created blacklist:\t"+t);
+			outstream.println("Created blacklist:\t"+t);
 			t.start();
 		}
 		
 		if(ziplevel!=-1){ReadWrite.ZIPLEVEL=ziplevel;}
-		if(reference!=null){RefToIndex.makeIndex(reference, build, sysout, keylen);}
+		if(reference!=null){RefToIndex.makeIndex(reference, build, outstream, keylen);}
 	}
 	
 
@@ -267,22 +269,22 @@ public final class BBMapPacBio extends AbstractMapper  {
 		if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_SPLIT){
 			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			sysout.println("Reads that map to multiple references will be written to special output streams.");
+			outstream.println("Reads that map to multiple references will be written to special output streams.");
 		}else if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_FIRST){
 			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			sysout.println("Reads that map to multiple references will be written to the first reference's stream only.");
+			outstream.println("Reads that map to multiple references will be written to the first reference's stream only.");
 		}else if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_TOSS){
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=true;
-			sysout.println("Reads that map to multiple references will be considered unmapped.");
+			outstream.println("Reads that map to multiple references will be considered unmapped.");
 		}else if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_RANDOM){
 			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			sysout.println("Reads that map to multiple references will be written to a random stream.");
+			outstream.println("Reads that map to multiple references will be written to a random stream.");
 		}else if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_ALL){
 			REMOVE_DUPLICATE_BEST_ALIGNMENTS=false;
 			BBIndexPacBio.QUIT_AFTER_TWO_PERFECTS=false;
-			sysout.println("Reads that map to multiple references will be written to all relevant output streams.");
+			outstream.println("Reads that map to multiple references will be written to all relevant output streams.");
 		}else{
 			BBSplitter.AMBIGUOUS2_MODE=BBSplitter.AMBIGUOUS2_FIRST;
 		}
@@ -298,7 +300,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 			AbstractIndex.MAXCHROM=Data.numChroms;
 			if(minChrom<0){minChrom=1;}
 			if(maxChrom<0 || maxChrom>Data.numChroms){maxChrom=Data.numChroms;}
-			sysout.println("Set genome to "+Data.GENOME_BUILD);
+			outstream.println("Set genome to "+Data.GENOME_BUILD);
 			
 			if(RefToIndex.AUTO_CHROMBITS){
 				int maxLength=Tools.max(Data.chromLengths);
@@ -307,7 +309,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 			}
 			if(RefToIndex.chrombits!=-1){
 				BBIndexPacBio.setChromBits(RefToIndex.chrombits);
-				if(verbose_stats>0){sysout.println("Set CHROMBITS to "+RefToIndex.chrombits);}
+				if(verbose_stats>0){outstream.println("Set CHROMBITS to "+RefToIndex.chrombits);}
 			}
 		}
 		
@@ -320,7 +322,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 			long bases=Data.numDefinedBases;
 			long x=Tools.max(1, Math.round(0.25f+bases*1d/targetGenomeSize));
 			BBMapThreadPacBio.setExpectedSites((int)x);
-			sysout.println("Set EXPECTED_SITES to "+x);
+			outstream.println("Set EXPECTED_SITES to "+x);
 		}
 		
 		assert(!(PERFECTMODE && SEMIPERFECTMODE));
@@ -329,7 +331,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		//Optional section for discrete timing of chrom array loading
 		if(SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE || useRandomReads || MAKE_MATCH_STRING){
-			sysout.println();
+			outstream.println();
 			if(RefToIndex.chromlist==null){
 				Data.loadChromosomes(minChrom, maxChrom);
 			}else{
@@ -338,9 +340,9 @@ public final class BBMapPacBio extends AbstractMapper  {
 					Data.chromosomePlusMatrix[cha.chromosome]=cha;
 				}
 			}
-			if(Shared.TRIM_READ_COMMENTS){Data.trimScaffoldNames();}
+			if(Shared.TRIM_RNAME){Data.trimScaffoldNames();}
 			t.stop();
-			sysout.println("Loaded Reference:\t"+t);
+			outstream.println("Loaded Reference:\t"+t);
 			t.start();
 		}
 		RefToIndex.chromlist=null;
@@ -366,7 +368,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		}
 		
 		t.stop();
-		sysout.println("Generated Index:\t"+t);
+		outstream.println("Generated Index:\t"+t);
 		t.start();
 		
 		if(!SLOW_ALIGN && !AbstractIndex.USE_EXTENDED_SCORE && !useRandomReads && !MAKE_MATCH_STRING){
@@ -378,14 +380,14 @@ public final class BBMapPacBio extends AbstractMapper  {
 		if(ReadWrite.countActiveThreads()>0){
 			ReadWrite.waitForWritingToFinish();
 			t.stop();
-			sysout.println("Finished Writing:\t"+t);
+			outstream.println("Finished Writing:\t"+t);
 			t.start();
 		}
 		
-		if(coverageBinned!=null || coverageBase!=null || coverageHist!=null || coverageStats!=null || coverageRPKM!=null || normcov!=null || normcovOverall!=null){
+		if(coverageBinned!=null || coverageBase!=null || coverageHist!=null || coverageStats!=null || coverageRPKM!=null || normcov!=null || normcovOverall!=null || calcCov){
 			String[] cvargs=("covhist="+coverageHist+"\tcovstats="+coverageStats+"\tbasecov="+coverageBase+"\tbincov="+coverageBinned+"\tphyscov="+coveragePhysical+
 					"\t32bit="+cov32bit+"\tnzo="+covNzo+"\ttwocolumn="+covTwocolumn+"\tsecondary="+PRINT_SECONDARY_ALIGNMENTS+"\tcovminscaf="+coverageMinScaf+
-					"\tksb="+covKsb+"\tbinsize="+covBinSize+"\tstartcov="+covStartOnly+"\tstrandedcov="+covStranded+"\trpkm="+coverageRPKM+
+					"\tksb="+covKsb+"\tbinsize="+covBinSize+"\tk="+covK+"\tstartcov="+covStartOnly+"\tstopcov="+covStopOnly+"\tstrandedcov="+covStranded+"\trpkm="+coverageRPKM+
 					"\tnormcov="+normcov+"\tnormcovo="+normcovOverall+(in1==null ? "" : "\tin1="+in1)+(in2==null ? "" : "\tin2="+in2)+
 					(covSetbs ? ("\tbitset="+covBitset+"\tarrays="+covArrays) : "")).split("\t");
 			pileup=new CoveragePileup(cvargs);
@@ -398,14 +400,40 @@ public final class BBMapPacBio extends AbstractMapper  {
 		BBIndexPacBio.analyzeIndex(minChrom, maxChrom, BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE, keylen);
 		
 		t.stop();
-		sysout.println("Analyzed Index:   \t"+t);
+		outstream.println("Analyzed Index:   \t"+t);
 		t.start();
+		
+		if(makeBloomFilter){
+			String serialPath=RefToIndex.bloomLoc(build);
+			File serialFile=new File(serialPath);
+			if(bloomSerial && !RefToIndex.NODISK && serialFile.exists()){
+				bloomFilter=ReadWrite.read(BloomFilter.class, RefToIndex.bloomLoc(build), true);
+				t.stop("Loaded Bloom Filter: ");
+			}else{
+				if(bloomSerial){System.out.println("Could not read "+serialPath+", generating filter from reference.");}
+				bloomFilter=new BloomFilter(true, bloomFilterK, 1, bloomFilterHashes, bloomFilterMinHits, true);
+				t.stop("Made Bloom Filter: ");
+				if(bloomSerial && !RefToIndex.NODISK && !RefToIndex.FORCE_READ_ONLY){
+//					 && serialFile.canWrite()
+					try {
+						ReadWrite.writeObjectInThread(bloomFilter, serialPath, true);
+						outstream.println("Writing Bloom Filter.");
+					} catch (Throwable e) {
+						e.printStackTrace();
+						outstream.println("Can't Write Bloom Filter.");
+					}
+				}
+			}
+			outstream.println(bloomFilter.filter.toShortString());
+			t.start();
+		}
 	}
 		
+	@Override
 	public void testSpeed(String[] args){
 		
 		if(in1==null || maxReads==0){
-			sysout.println("No reads to process; quitting.");
+			outstream.println("No reads to process; quitting.");
 			return;
 		}
 		
@@ -422,18 +450,19 @@ public final class BBMapPacBio extends AbstractMapper  {
 		AbstractMapThread[] mtts=new AbstractMapThread[Shared.threads()];
 		for(int i=0; i<mtts.length; i++){
 			try {
-				mtts[i]=new BBMapThreadPacBio(cris, keylen, 
-						pileup, SLOW_ALIGN, CORRECT_THRESH, minChrom, 
-						maxChrom, keyDensity, maxKeyDensity, minKeyDensity, maxDesiredKeys, REMOVE_DUPLICATE_BEST_ALIGNMENTS, 
+				mtts[i]=new BBMapThreadPacBio(cris, keylen,
+						pileup, SLOW_ALIGN, CORRECT_THRESH, minChrom,
+						maxChrom, keyDensity, maxKeyDensity, minKeyDensity, maxDesiredKeys, REMOVE_DUPLICATE_BEST_ALIGNMENTS,
 						SAVE_AMBIGUOUS_XY, MINIMUM_ALIGNMENT_SCORE_RATIO, TRIM_LIST, MAKE_MATCH_STRING, QUICK_MATCH_STRINGS, rosA, rosM, rosU, rosB,
 						SLOW_ALIGN_PADDING, SLOW_RESCUE_PADDING, OUTPUT_MAPPED_ONLY, DONT_OUTPUT_BLACKLISTED_READS, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS,
-						REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, KILL_BAD_PAIRS, rcompMate, 
+						REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, KILL_BAD_PAIRS, rcompMate,
 						PERFECTMODE, SEMIPERFECTMODE, FORBID_SELF_MAPPING, TIP_SEARCH_DIST,
-						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, qtrimLeft, qtrimRight, untrim, TRIM_QUALITY, minTrimLength, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
+						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, qtrimLeft, qtrimRight, untrim, TRIM_QUALITY, minTrimLength,
+						LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE, bloomFilter);
 			} catch (Exception e) {
 				e.printStackTrace();
 				abort(mtts, "Aborting due to prior error.");
-			}  
+			}
 			mtts[i].idmodulo=idmodulo;
 			if(verbose){
 				mtts[i].verbose=verbose;
@@ -442,20 +471,20 @@ public final class BBMapPacBio extends AbstractMapper  {
 		}
 		
 		cris.start(); //4567
-		sysout.println("Processing reads in "+(paired ? "paired" : "single")+"-ended mode.");
-		sysout.println("Started read stream.");
+		outstream.println("Processing reads in "+(paired ? "paired" : "single")+"-ended mode.");
+		outstream.println("Started read stream.");
 		
 		/* The threads are started after initialization to prevent resource competition between initialization and mapping */
 		for(int i=0; i<mtts.length; i++){mtts[i].start();}
-		sysout.println("Started "+mtts.length+" mapping thread"+(mtts.length==1 ? "" : "s")+".");
+		outstream.println("Started "+mtts.length+" mapping thread"+(mtts.length==1 ? "" : "s")+".");
 		
 		final int broken=shutDownThreads(mtts, false);
 		
-		sysout.println("\n\n   ------------------   Results   ------------------   ");
-		
+		if(printStats){outstream.println("\n\n   ------------------   Results   ------------------   ");}
 		closeStreams(cris, rosA, rosM, rosU, rosB);
-		sysout.println();
-		printSettings(keylen);
+		outstream.println();
+		if(printSettings){printSettings(keylen);}
+		
 		printOutput(mtts, t, keylen, paired, false, pileup, scafNzo, sortStats, statsOutputFile);
 		if(broken>0 || errorState){throw new RuntimeException("BBMap terminated in an error state; the output may be corrupt.");}
 	}
@@ -495,38 +524,38 @@ public final class BBMapPacBio extends AbstractMapper  {
 		printSettings0(k, BBIndexPacBio.MAX_INDEL, MINIMUM_ALIGNMENT_SCORE_RATIO);
 		
 		if(verbose_stats>=2){
-			sysout.println("Key Density:          \t"+keyDensity+" ("+minKeyDensity+" ~ "+maxKeyDensity+")");
-			sysout.println("Max keys:             \t"+maxDesiredKeys);
+			outstream.println("Key Density:          \t"+keyDensity+" ("+minKeyDensity+" ~ "+maxKeyDensity+")");
+			outstream.println("Max keys:             \t"+maxDesiredKeys);
 			
-			sysout.println("Block Subsections:     \t"+BBIndexPacBio.CHROMS_PER_BLOCK);
-			sysout.println("Fraction To Remove:    \t"+String.format("%.4f", (BBIndexPacBio.REMOVE_FREQUENT_GENOME_FRACTION ? BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE : 0)));
+			outstream.println("Block Subsections:     \t"+BBIndexPacBio.CHROMS_PER_BLOCK);
+			outstream.println("Fraction To Remove:    \t"+String.format(Locale.ROOT, "%.4f", (BBIndexPacBio.REMOVE_FREQUENT_GENOME_FRACTION ? BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE : 0)));
 			//		sysout.println("ADD_SCORE_Z:           \t"+IndexPacBio.ADD_SCORE_Z);
-			sysout.println("Hits To Keep:          \t"+BBIndexPacBio.MIN_APPROX_HITS_TO_KEEP);
+			outstream.println("Hits To Keep:          \t"+BBIndexPacBio.MIN_APPROX_HITS_TO_KEEP);
 		}
 		
 		if(verbose_stats>=3){
-			sysout.println("Remove Clumpy:         \t"+BBIndexPacBio.REMOVE_CLUMPY);
+			outstream.println("Remove Clumpy:         \t"+BBIndexPacBio.REMOVE_CLUMPY);
 			if(BBIndexPacBio.REMOVE_CLUMPY){
-				sysout.println("CLUMPY_MAX_DIST:       \t"+BBIndexPacBio.CLUMPY_MAX_DIST);
-				sysout.println("CLUMPY_MIN_LENGTH:     \t"+BBIndexPacBio.CLUMPY_MIN_LENGTH_INDEX);
-				sysout.println("CLUMPY_FRACTION:       \t"+BBIndexPacBio.CLUMPY_FRACTION);
+				outstream.println("CLUMPY_MAX_DIST:       \t"+BBIndexPacBio.CLUMPY_MAX_DIST);
+				outstream.println("CLUMPY_MIN_LENGTH:     \t"+BBIndexPacBio.CLUMPY_MIN_LENGTH_INDEX);
+				outstream.println("CLUMPY_FRACTION:       \t"+BBIndexPacBio.CLUMPY_FRACTION);
 			}
-			sysout.println("Remove Long Lists:     \t"+BBIndexPacBio.TRIM_LONG_HIT_LISTS);
+			outstream.println("Remove Long Lists:     \t"+BBIndexPacBio.TRIM_LONG_HIT_LISTS);
 			if(BBIndexPacBio.TRIM_LONG_HIT_LISTS){
-				sysout.println("HIT_FRACTION_TO_RETAIN:\t"+BBIndexPacBio.HIT_FRACTION_TO_RETAIN);
+				outstream.println("HIT_FRACTION_TO_RETAIN:\t"+BBIndexPacBio.HIT_FRACTION_TO_RETAIN);
 			}
-			sysout.println("Trim By Greedy:        \t"+BBIndexPacBio.TRIM_BY_GREEDY);
-			sysout.println("Trim By Total Sites:   \t"+BBIndexPacBio.TRIM_BY_TOTAL_SITE_COUNT);
+			outstream.println("Trim By Greedy:        \t"+BBIndexPacBio.TRIM_BY_GREEDY);
+			outstream.println("Trim By Total Sites:   \t"+BBIndexPacBio.TRIM_BY_TOTAL_SITE_COUNT);
 			if(BBIndexPacBio.TRIM_BY_TOTAL_SITE_COUNT){
-				sysout.println("MAX_AVG_SITES:         \t"+BBIndexPacBio.MAX_AVERAGE_LIST_TO_SEARCH);
-				sysout.println("MAX_AVG_SITES_2:       \t"+BBIndexPacBio.MAX_AVERAGE_LIST_TO_SEARCH2);
-				sysout.println("MAX_SHORTEST_SITE:     \t"+BBIndexPacBio.MAX_SHORTEST_LIST_TO_SEARCH);
+				outstream.println("MAX_AVG_SITES:         \t"+BBIndexPacBio.MAX_AVERAGE_LIST_TO_SEARCH);
+				outstream.println("MAX_AVG_SITES_2:       \t"+BBIndexPacBio.MAX_AVERAGE_LIST_TO_SEARCH2);
+				outstream.println("MAX_SHORTEST_SITE:     \t"+BBIndexPacBio.MAX_SHORTEST_LIST_TO_SEARCH);
 			}
-			sysout.println("Index Min Score:       \t"+BBIndexPacBio.MIN_SCORE_MULT);
+			outstream.println("Index Min Score:       \t"+BBIndexPacBio.MIN_SCORE_MULT);
 
-			sysout.println("Dynamic Trim:          \t"+BBIndexPacBio.DYNAMICALLY_TRIM_LOW_SCORES);
+			outstream.println("Dynamic Trim:          \t"+BBIndexPacBio.DYNAMICALLY_TRIM_LOW_SCORES);
 			if(BBIndexPacBio.DYNAMICALLY_TRIM_LOW_SCORES){
-				sysout.println("DYNAMIC_SCORE_THRESH:  \t"+BBIndexPacBio.DYNAMIC_SCORE_THRESH);
+				outstream.println("DYNAMIC_SCORE_THRESH:  \t"+BBIndexPacBio.DYNAMIC_SCORE_THRESH);
 			}
 		}
 		

@@ -4,19 +4,22 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
-import stream.ByteBuilder;
-import structures.LongList;
-import dna.Parser;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.ByteStreamWriter;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
+import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.LongList;
 
 /**
  * @author Brian Bushnell
@@ -31,30 +34,28 @@ public class CallPeaks {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		CallPeaks cp=new CallPeaks(args);
-		cp.process(t);
+		CallPeaks x=new CallPeaks(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public CallPeaks(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, outstream, printClass ? getClass() : null, false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
-		if(printClass){outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");}
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
-			if(Parser.isJavaFlag(arg)){
-				//do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
@@ -78,7 +79,7 @@ public class CallPeaks {
 			}else if(a.equals("minpeak") || a.equals("minp")){
 				minPeak=Integer.parseInt(b);
 			}else if(a.equals("maxpeak") || a.equals("maxp")){
-				maxPeak=Integer.parseInt(b);
+				maxPeak=(int)Tools.min(Integer.MAX_VALUE, Tools.parseKMG(b));
 			}else if(a.equals("maxpeakcount") || a.equals("maxpc") || a.equals("maxpeaks")){
 				maxPeakCount=Integer.parseInt(b);
 			}else if(a.equals("smoothradius")){
@@ -95,7 +96,23 @@ public class CallPeaks {
 				countColumn=Integer.parseInt(b);
 			}else if(a.equals("k")){
 				k=Integer.parseInt(b);
-			}else if(in==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
+			}else if(a.equals("logscale")){
+				logScale=Tools.parseBoolean(b);
+			}else if(a.equals("logwidth")){
+				logWidth=Double.parseDouble(b);
+			}else if(a.equals("logpasses")){
+				logPasses=Integer.parseInt(b);
+			}
+			
+			else if(a.equals("byheight")){
+				CALL_MODE=BY_HEIGHT;
+			}else if(a.equals("byvolume")){
+				CALL_MODE=BY_VOLUME;
+			}else if(a.equalsIgnoreCase("weightByRelief")){
+				weightByRelief=Tools.parseBoolean(b);
+			}
+			
+			else if(in==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in=arg;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
@@ -103,8 +120,7 @@ public class CallPeaks {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
-		
-		
+//		assert(logScale);
 		if(out==null){out="stdout.txt";}
 		
 		ffout=FileFormat.testOutput(out, FileFormat.TEXT, null, true, overwrite, append, false);
@@ -116,13 +132,15 @@ public class CallPeaks {
 	/*--------------------------------------------------------------*/
 	
 	public void process(Timer t){
-		LongList hist=loadHistogram(ffin);
-		ArrayList<Peak> peaks=callPeaks(hist);
+		LongList lists[]=loadHistogram(ffin, k);//TODO: Add support for GC here
+		LongList hist=lists[0];
+		LongList gchist=lists[1];
+		ArrayList<Peak> peaks=callPeaks(hist, gchist);
 		long sum=Tools.sum(hist.array);
+		printPeaks(peaks, k, sum, hist.array, (gchist==null ? null : gchist.array));
 		hist=null;
-		printPeaks(peaks, k, sum);
 		t.stop();
-		System.err.println("\nFound "+peaks.size()+" peaks in "+t);
+		System.err.println("Found "+peaks.size()+" peaks in "+t);
 		
 		peaks=null;
 		
@@ -131,8 +149,8 @@ public class CallPeaks {
 		}
 	}
 	
-	public static boolean printPeaks(long[] array, String fname, boolean ow, long minHeight, long minVolume, int minWidth, int minPeak, int maxPeak, int maxPeakCount,
-			int k, int ploidy, ArrayList<String> list){
+	public static boolean printPeaks(long[] array, long[] gcArray, String fname, boolean ow, long minHeight, long minVolume, int minWidth,
+			int minPeak, int maxPeak, int maxPeakCount, int k, int ploidy, boolean logScale, double logWidth, ArrayList<String> list){
 		if(list==null){list=new ArrayList<String>();}
 		list.add("out="+fname);
 		list.add("ow="+ow);
@@ -143,10 +161,14 @@ public class CallPeaks {
 		list.add("maxpeak="+maxPeak);
 		list.add("maxpeaks="+maxPeakCount);
 		list.add("k="+(k<1 ? 31 : k));
+		if(logScale){
+			list.add("logscale=t");
+			list.add("logwidth="+logWidth);
+		}
 		if(ploidy>0){list.add("ploidy="+ploidy);}
 		CallPeaks cp=new CallPeaks(list.toArray(new String[0]));
-		ArrayList<Peak> peaks=cp.callPeaks(array, array.length);
-		cp.printPeaks(peaks, k, Tools.sum(array));
+		ArrayList<Peak> peaks=cp.callPeaks(array, gcArray, array.length);
+		cp.printPeaks(peaks, k, Tools.sum(array), array, gcArray);
 		return cp.errorState;
 	}
 	
@@ -154,8 +176,10 @@ public class CallPeaks {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static LongList loadHistogram(FileFormat ff){
+	public static LongList[] loadHistogram(FileFormat ff, int k){//TODO: Add GC support
 		LongList list=new LongList(8000);
+		LongList gcList=new LongList(8000);
+		boolean hasGC=false;
 		TextFile tf=new TextFile(ff);
 		for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
 			if(line.startsWith("#")){
@@ -165,7 +189,15 @@ public class CallPeaks {
 				if(split.length==1){
 					list.add(Long.parseLong(split[0]));
 				}else{
-					list.set(Integer.parseInt(split[0]), Long.parseLong(split[countColumn]));
+					final int x=Integer.parseInt(split[0]);
+					final long y=Long.parseLong(split[countColumn]);
+					list.set(x, y);
+					String last=split[split.length-1];
+					if(split.length>2 && last.indexOf('.')>=0 && Tools.isNumeric(last)){
+						hasGC=true;
+						double gc=Double.parseDouble(last)*0.01;
+						gcList.set(x, Math.round(y*gc*k));
+					}
 				}
 			}
 		}
@@ -173,7 +205,7 @@ public class CallPeaks {
 		assert(!errorState_) : "Encountered an error when reading "+ff.name()+".\n" +
 				"To skip this error message, run with the '-da' flag.";
 		
-		return list;
+		return new LongList[] {list, hasGC ? gcList : null};
 	}
 	
 	private static ArrayList<Peak> condense(ArrayList<Peak> in, int maxCount){
@@ -182,38 +214,55 @@ public class CallPeaks {
 		ArrayList<Peak> out=new ArrayList<Peak>(Tools.min(maxCount, in.size()));
 		
 		final long hlimit, vlimit;
-		
 		{
-			long[] heights=new long[in.size()];
-			for(int i=0; i<in.size(); i++){
-				Peak p=in.get(i);
-				heights[i]=(callByRawCount ? p.centerHeight2() : p.centerHeight);
+			{
+				long[] heights=new long[in.size()];
+				for(int i=0; i<in.size(); i++){
+					Peak p=in.get(i);
+					heights[i]=(callByRawCount ? p.maxHeight2() : p.maxHeight);
+				}
+				Arrays.sort(heights);
+				hlimit=heights[heights.length-maxCount];
 			}
-			Arrays.sort(heights);
-			hlimit=heights[heights.length-maxCount];
-		}
-		
-		{
-			int mc2=(maxCount+1)/2;
-			long[] volumes=new long[in.size()];
-			for(int i=0; i<in.size(); i++){
-				Peak p=in.get(i);
-				volumes[i]=(callByRawCount ? p.volume2 : p.volume);
+
+			{
+				int mc2=(maxCount+1)/2;
+				long[] volumes=new long[in.size()];
+				for(int i=0; i<in.size(); i++){
+					Peak p=in.get(i);
+					volumes[i]=(callByRawCount ? p.volume2 : p.volume);
+				}
+				Arrays.sort(volumes);
+				vlimit=volumes[volumes.length-mc2];
 			}
-			Arrays.sort(volumes);
-			vlimit=volumes[volumes.length-mc2];
 		}
 		
 		for(Peak p : in){
-			final long height=(callByRawCount ? p.centerHeight2() : p.centerHeight);
+			final long height=(callByRawCount ? p.maxHeight2() : p.maxHeight);
 			final long volume=(callByRawCount ? p.volume2 : p.volume);
-			if(volume>=vlimit || height>=hlimit){out.add(p);}
+			if(volume>=vlimit || height>=hlimit){
+//				assert(!out.contains(p)) : height+", "+volume+", "+hlimit+", "+vlimit+", "+p;
+				out.add(p);
+//				System.err.println("Adding "+height+", "+volume+", "+hlimit+", "+vlimit+", "+p);
+			}
 		}
 		
+//		for(Peak p : in){
+//			final long height=(callByRawCount ? p.maxHeight2() : p.maxHeight);
+//			final long volume=(callByRawCount ? p.volume2 : p.volume);
+//			if(volume>=vlimit || height>=hlimit){
+//				assert(out.contains(p));
+//			}else{
+//				assert(!out.contains(p));
+//				assert(volume<vlimit && height<hlimit);
+//			}
+//		}
+		
 		for(Peak p : in){
-			final long height=(callByRawCount ? p.centerHeight2() : p.centerHeight);
+			final long height=(callByRawCount ? p.maxHeight2() : p.maxHeight);
 			final long volume=(callByRawCount ? p.volume2 : p.volume);
 			if(volume<vlimit && height<hlimit){
+//				assert(!out.contains(p)) : height+", "+volume+", "+hlimit+", "+vlimit+", "+p;
 				Peak p2=out.get(0);
 				for(Peak temp : out){
 					if(Tools.absdif(p.center, temp.center)<Tools.absdif(p.center, p2.center)){
@@ -221,7 +270,11 @@ public class CallPeaks {
 					}
 				}
 				if(p2.compatibleWith(p)){
+//					assert(!out.contains(p)) : height+", "+volume+", "+hlimit+", "+vlimit+", "+p;
+//					assert((callByRawCount ? p2.maxHeight2() : p2.maxHeight)>=hlimit || (callByRawCount ? p2.volume2 : p2.volume)>=vlimit);
 					p2.absorb(p);
+//					assert(!out.contains(p)) : height+", "+volume+", "+hlimit+", "+vlimit+", "+p;
+//					assert((callByRawCount ? p2.maxHeight2() : p2.maxHeight)>=hlimit || (callByRawCount ? p2.volume2 : p2.volume)>=vlimit);
 				}//else discard
 			}
 		}
@@ -229,7 +282,7 @@ public class CallPeaks {
 		return out;
 	}
 	
-	private void capWidth(ArrayList<Peak> peaks, float maxWidthMult, long[] counts){
+	private static void capWidth(ArrayList<Peak> peaks, float maxWidthMult, long[] counts){
 		float mult=1/maxWidthMult;
 		for(Peak p : peaks){
 			p.start=(int)Math.round(Tools.max(p.start, p.center*mult));
@@ -240,23 +293,30 @@ public class CallPeaks {
 //		for(int i=0; i<peaks.)
 	}
 	
-	private void printPeaks(ArrayList<Peak> peaks, int k, long uniqueKmers){
+	private void printPeaks(ArrayList<Peak> peaks, int k, long uniqueKmers, long[] hist, long[] gcHist){
 		if(ffout==null){return;}
 		ByteStreamWriter bsw=new ByteStreamWriter(ffout);
 		bsw.start();
-		
+
+		double gcmult=1.0/k;
 		if(peaks.size()>0){
 			try {
 				final Peak p0=peaks.get(0);
 				final int center0=p0.center;
 				final int ploidyEstimate=calcPloidy(peaks);
 				final int ploidy=ploidyClaimed>0 ? ploidyClaimed : ploidyEstimate;
+				final long errorKmers=errorKmers(p0, hist);
 				final long genomeSize=genomeSize(peaks);
+				final long genomeSize2=genomeSize2(peaks, hist);
+				final double gcContent=(gcHist==null ? -1 : gcContent(peaks, k));
+				final double gcContent2=(gcHist==null ? -1 : gcContent2(peaks, k, hist, gcHist));
 				final long repeatSize=repeatSize(peaks, ploidy);
-				final long haploidSize=genomeSize/ploidy;
+				final long repeatSize2=hist==null ? -1 : repeatSize2(peaks, ploidy, hist);
+				final long haploidSize=genomeSize2/ploidy;
 				final long hetLocs=calcHetLocations(peaks, ploidy, k);
 				final double hetRate=hetLocs/(double)haploidSize;
 				final double repeatRate=repeatSize*1.0/genomeSize;
+				final double repeatRate2=repeatSize2*1.0/genomeSize2;
 				
 				Peak ploidyPeak=p0, mainPeak=p0;
 				int target=center0*ploidy, haploidCov;
@@ -289,31 +349,55 @@ public class CallPeaks {
 
 				if(k>0){bsw.println("#k\t"+k);}
 				bsw.println("#unique_kmers\t"+uniqueKmers);
+				bsw.println("#error_kmers\t"+errorKmers);
+				bsw.println("#genomic_kmers\t"+(uniqueKmers-errorKmers));
 				bsw.println("#main_peak\t"+mainPeak.center);
-				bsw.println("#genome_size\t"+genomeSize);
-				if(ploidy>1 || true){bsw.println("#haploid_genome_size\t"+(genomeSize/ploidy));}
+				bsw.println("#genome_size_in_peaks\t"+genomeSize);
+				bsw.println("#genome_size\t"+genomeSize2);
+				if(mainPeak.gc>0){
+					bsw.println("#main_peak_gc\t"+String.format("%.3f", Tools.mid(0, 1, mainPeak.gc*gcmult/mainPeak.volume)));
+				}
+				if(gcHist!=null){
+					bsw.println("#gc_content_in_peaks\t"+String.format("%.3f", Tools.mid(0, 1, gcContent)));
+					bsw.println("#gc_content\t"+String.format("%.3f", Tools.mid(0, 1, gcContent2)));
+				}
+				if(ploidy>1 || true){bsw.println("#haploid_genome_size\t"+haploidSize);}
 				bsw.println("#fold_coverage\t"+center0);
 				if(ploidy>1 || true){bsw.println("#haploid_fold_coverage\t"+haploidCov);}
 				bsw.println("#ploidy\t"+ploidy);
 				if(ploidy!=ploidyEstimate){bsw.println("#ploidy_detected\t"+ploidyEstimate);}
-				if(ploidy>1){bsw.println("#het_rate\t"+String.format("%.5f", hetRate));}
-				bsw.println("#percent_repeat\t"+String.format("%.3f", (100*repeatRate)));
+				if(ploidy>1){bsw.println("#het_rate\t"+String.format(Locale.ROOT, "%.5f", hetRate));}
+				bsw.println("#percent_repeat_in_peaks\t"+String.format(Locale.ROOT, "%.3f", (100*repeatRate)));
+				if(repeatSize2>=0){bsw.println("#percent_repeat\t"+String.format(Locale.ROOT, "%.3f", (100*repeatRate2)));}
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
 		
-		bsw.println("#start\tcenter\tstop\tmax\tvolume");
+		bsw.println("#start\tcenter\tstop\tmax\tvolume"+(gcHist!=null ? "\tgc":""));
 		ByteBuilder bb=new ByteBuilder(200);
 		for(Peak p : peaks){
-			p.toBytes(bb);
-			bsw.println(bb);
-			bb.setLength(0);
+			if(p.volume>=minVolume){
+				p.toBytes(bb);
+				if(gcHist!=null){bb.tab().append(Tools.mid(0, 1, p.gc*gcmult/p.volume), 3);}
+				bb.nl();
+				bsw.print(bb);
+				bb.setLength(0);
+			}
 		}
 		errorState|=bsw.poisonAndWait();
 	}
 	
-	private long genomeSize(ArrayList<Peak> peaks){
+	private static long errorKmers(Peak p0, long[] hist){
+		if(p0==null || hist==null){return -1;}
+		long sum=0;
+		for(int i=0; i<p0.start; i++){
+			sum+=hist[i];
+		}
+		return sum;
+	}
+	
+	private static long genomeSize(ArrayList<Peak> peaks){
 		if(peaks.size()<1){return 0;}
 		
 		long sizeSum=0;
@@ -327,7 +411,58 @@ public class CallPeaks {
 		return sizeSum;
 	}
 	
-	private long repeatSize(ArrayList<Peak> peaks, int ploidy){
+	private static long genomeSize2(ArrayList<Peak> peaks, long[] hist){
+		if(peaks.size()<1){return 0;}
+		
+		long sizeSum=0;
+		final Peak p0=peaks.get(0);
+		final int center0=p0.center;
+		final double mult=1.0/(Tools.max(1, center0));
+		
+		for(int i=p0.start; i<hist.length; i++){
+			long size=hist[i]*(Tools.max(1, (long)Math.round(i*mult)));
+			sizeSum+=size;
+		}
+		return sizeSum;
+	}
+	
+	private static double gcContent(ArrayList<Peak> peaks, int k){
+		if(peaks.size()<1){return 0;}
+		
+		long sizeSum=0, gcSum=0;
+		final Peak p0=peaks.get(0);
+		final int center0=p0.center;
+		final double mult=1.0/(Tools.max(1, center0));
+		for(Peak p : peaks){
+			final long copies=Math.round(p.center*mult);
+			long size=p.volume*copies;
+			long gc=p.gc*copies;
+			sizeSum+=size;
+			gcSum+=gc;
+		}
+		return (gcSum*1.0)/(sizeSum*k);
+	}
+	
+	private static double gcContent2(ArrayList<Peak> peaks, int k, long[] hist, long[] gcHist){
+		if(peaks.size()<1){return 0;}
+		
+		long sizeSum=0, gcSum=0;
+		final Peak p0=peaks.get(0);
+		final int center0=p0.center;
+		final double mult=1.0/(Tools.max(1, center0));
+		
+		for(int i=p0.start; i<hist.length; i++){
+			final long copies=(Tools.max(1, Math.round(i*mult)));
+			long size=hist[i]*copies;
+			long gc=gcHist[i]*copies;
+			sizeSum+=size;
+			gcSum+=gc;
+		}
+		return (gcSum*1.0)/(sizeSum*k);
+	}
+	
+	/** Based on all peaks */
+	private static long repeatSize(ArrayList<Peak> peaks, int ploidy){
 		if(peaks.size()<2){return 0;}
 		assert(ploidy>0) : ploidy;
 		final int homozygousLoc=homozygousPeak(peaks, ploidy);
@@ -338,13 +473,31 @@ public class CallPeaks {
 		long sizeSum=0;
 		for(int i=homozygousLoc+1; i<peaks.size(); i++){
 			Peak p=peaks.get(i);
-			long size=p.volume*(Math.round(p.center*mult));
+			long size=p.volume*((Math.round(p.center*mult)-1));
 			sizeSum+=size;
 		}
 		return sizeSum;
 	}
 	
-	private int biggestPeak(ArrayList<Peak> peaks){
+	/** Based on primary peak only */
+	private static long repeatSize2(ArrayList<Peak> peaks, int ploidy, long[] hist){
+		assert(ploidy>0) : ploidy;
+		final int homozygousLoc=homozygousPeak(peaks, ploidy);
+		final Peak p0=peaks.get(0);
+		final int center0=p0.center;
+		final double mult=1.0/(Tools.max(1, center0));
+		
+		
+		final int valley=(int)Math.ceil(center0*1.7f);
+		long sizeSum=0;
+		for(int i=valley; i<hist.length; i++){
+			long size=hist[i]*(Math.round(i*mult)-1);
+			sizeSum+=size;
+		}
+		return sizeSum;
+	}
+	
+	private static int biggestPeak(ArrayList<Peak> peaks){
 		if(peaks.size()<2){return peaks.size()-1;}
 
 		final Peak p0=peaks.get(0);
@@ -360,7 +513,7 @@ public class CallPeaks {
 		return loc;
 	}
 	
-	private int secondBiggestPeak(ArrayList<Peak> peaks){
+	private static int secondBiggestPeak(ArrayList<Peak> peaks){
 		if(peaks.size()<2){return peaks.size()-1;}
 		
 		Peak biggest=peaks.get(0);
@@ -391,7 +544,7 @@ public class CallPeaks {
 		return sloc;
 	}
 	
-	private int homozygousPeak(ArrayList<Peak> peaks, final int ploidy){
+	private static int homozygousPeak(ArrayList<Peak> peaks, final int ploidy){
 		if(peaks.size()<2){return peaks.size()-1;}
 		assert(ploidy>0) : ploidy;
 
@@ -413,24 +566,27 @@ public class CallPeaks {
 		return loc;
 	}
 	
-	private int calcPloidy(ArrayList<Peak> peaks){
+	private static int calcPloidy(ArrayList<Peak> peaks){
 		if(peaks.size()<2){return 1;}
 
 		final Peak p0=peaks.get(0);
 		final Peak biggest=peaks.get(biggestPeak(peaks));
 		
 		if(biggest!=p0){
-			int ratio=(int)(biggest.center/(float)p0.center);
+			int ratio=Math.round((biggest.center/(float)p0.center));
+//			System.err.println("A: "+biggest+", "+((biggest.center/(float)p0.center)));
 			return ratio;
 		}else{//p0 is biggest.
 			final Peak second=peaks.get(secondBiggestPeak(peaks));
+//			System.err.println("B: "+biggest+" > "+second);
 			if(second.volume*4<biggest.volume){return 1;} //Probably second is a repeat peak.
 			int ratio=(int)(second.center/(float)biggest.center);
+//			System.err.println("C: "+ratio);
 			return ratio;
 		}
 	}
 	
-	private long calcHetLocations(ArrayList<Peak> peaks, final int ploidy, final int k){
+	private static long calcHetLocations(ArrayList<Peak> peaks, final int ploidy, final int k){
 		if(peaks.size()<2){return 0;}
 		assert(ploidy>0) : ploidy;
 		final int homozygousLoc=homozygousPeak(peaks, ploidy);
@@ -448,21 +604,24 @@ public class CallPeaks {
 		return sum/k;
 	}
 	
-	public ArrayList<Peak> callPeaks(LongList list){
-		return callPeaks(list.array, list.size);
+	public ArrayList<Peak> callPeaks(LongList list, LongList gcList){
+		return callPeaks(list.array, gcList==null ? null : gcList.array, list.size);
 	}
 	
-	public ArrayList<Peak> callPeaks(long[] original, int length){
+	public ArrayList<Peak> callPeaks(final long[] original, final long gcArray[], final int length){
 		
-		final long[] array;
+		long[] array=original;
+		
+		if(logScale){
+			array=logScale(array, logWidth, 1, logPasses);
+		}
+		
 		if(smoothRadius>0){
 			if(smoothProgressiveFlag){
-				array=smoothProgressive(original, smoothRadius);
+				array=smoothProgressive(array, smoothRadius);
 			}else{
-				array=smooth(original, smoothRadius);
+				array=smooth(array, smoothRadius);
 			}
-		}else{
-			array=original;
 		}
 		
 		ArrayList<Peak> peaks=new ArrayList<Peak>();
@@ -482,6 +641,7 @@ public class CallPeaks {
 		int start=dip0, center=-1;
 		long prev=array[dip0];
 		long sum=prev;
+		long gcSum=gcArray==null ? -1 : gcArray[dip0];
 		long sum2=prev*dip0;
 		for(int i=dip0+1; i<length; i++){
 			final long x=array[i];
@@ -516,7 +676,8 @@ public class CallPeaks {
 							}
 						}
 						
-						Peak p=new Peak(center, start, stop, max, array[start], array[stop], sum, sum2);
+						long height1=array[start], height2=array[stop];
+						Peak p=new Peak(center, start, stop, center, max, height1, height2, height1, height2, sum, sum2, gcSum);
 						peaks.add(p);
 					}else{
 //						Peak p=new Peak(center, start, stop, max, sum);
@@ -525,12 +686,13 @@ public class CallPeaks {
 					start=stop;
 					stop=-1;
 					sum=sum2=0;
+					gcSum=0;
 					center=-1;
 					if(i>maxPeak){break;}
 					while(i<array.length && array[i]==0){i++;}//Skip zero regions
 				}
 			}
-			
+			gcSum=(gcArray==null ? -1 : gcSum+gcArray[i]);
 			sum+=x;
 			sum2+=(x*i);
 			prev=x;
@@ -556,7 +718,8 @@ public class CallPeaks {
 				}
 			}
 			if(center>=minPeak && center<=maxPeak && max>=minHeight && (stop-start)>=minWidth && sum>=minVolume){
-				Peak p=new Peak(center, start, stop, max, array[start], array[Tools.min(stop, length-1)], sum, sum2);
+				long height1=array[start], height2=array[Tools.min(stop, length-1)];
+				Peak p=new Peak(center, start, Tools.min(stop, length-1), center, max, height1, height2, height1, height2, sum, sum2, gcSum);
 				peaks.add(p);
 			}else{
 //				Peak p=new Peak(center, start, stop, max, sum);
@@ -564,11 +727,19 @@ public class CallPeaks {
 			}
 		}
 		
+		//Ensure peaks don't violate maxWidthMult by shrinking those that do, for each side, relative to the center.
 		capWidth(peaks, maxWidthMult, array);
 		
+		//Have peaks absorb adjacent smaller peaks
 		if(maxPeakCount<peaks.size()){
 			peaks=condense(peaks, maxPeakCount);
 		}
+		
+//		System.err.println("start\tcenter\tstop\tmax\tvolume");
+//		for(Peak p : peaks){
+//			System.err.println(p.toString());
+//		}
+//		assert(false);
 		
 		capWidth(peaks, maxWidthMult, array);
 		
@@ -579,11 +750,16 @@ public class CallPeaks {
 			}
 		}
 		
+		ArrayList<Peak> peaksOut=peaks;
 		if(array!=original){
+			peaksOut=new ArrayList<Peak>();
 			recalculate(peaks, original);
+			for(Peak p : peaks){
+				if(p.volume>=minVolume){peaksOut.add(p);}
+			}
 		}
 		
-		return peaks;
+		return peaksOut;
 	}
 	
 	private static void recalculate(ArrayList<Peak> peaks, long[] array){
@@ -592,11 +768,34 @@ public class CallPeaks {
 		}
 	}
 	
-	/**
-	 * Display usage information.
-	 */
-	private static void printOptions(){
-		System.err.println("Please consult the shellscript for usage information.");
+	public static long[] logScale(long[] array, double width, double scale, int passes){
+		assert(passes>0);
+		long[] log=array;
+		for(int pass=0; pass<passes; pass++){
+			final double halfWidth=width/2;
+			final double limit=array.length-0.00001;
+			log=new long[array.length];
+			for(int pos=1; pos<array.length; pos++){
+				final double center=pos+0.5;
+				final double min=Tools.max(0, center-halfWidth*pos);
+				final double max=Tools.min(limit, center+halfWidth*pos);
+				final int mini=(int)min;
+				final int maxi=(int)max;
+				if(mini==maxi){
+					log[pos]=Math.round((max-min)*array[mini]*scale);
+				}else{
+					double sum=0;
+					sum+=(array[mini]*(mini+1-min));
+					sum+=(array[maxi]*(max-maxi));
+					for(int i=mini+1; i<maxi; i++){
+						sum+=array[i];
+					}
+					log[pos]=Math.round(sum*scale);
+				}
+			}
+			array=log;
+		}
+		return log;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -713,17 +912,24 @@ public class CallPeaks {
 	
 	private class Peak{
 		
-		Peak(int center_, int start_, int stop_, long centerHeight_, long startHeight_, long stopHeight_, long volume_, long volume2_){
+		Peak(int center_, int start_, int stop_, int maxPos_, long maxHeight_, long startHeight_, long stopHeight_,
+				long leftMin_, long rightMin_, long volume_, long volume2_, long gc_){
 			
 			center=center_;
-			start=start_;
+			start=Tools.max(0, start_);
 			stop=stop_;
+			maxPos=maxPos_;
 			
-			centerHeight=centerHeight_;
+			maxHeight=maxHeight_;
 			startHeight=startHeight_;
 			stopHeight=stopHeight_;
 			volume=volume_;
 			volume2=volume2_;
+			
+			leftMin=leftMin_;
+			rightMin=rightMin_;
+			
+			gc=gc_;
 			
 			assert(center>=0) : this;
 			assert(start<center) : this;
@@ -741,13 +947,22 @@ public class CallPeaks {
 		 * @param array
 		 */
 		public void recalculate(long[] array) {
-			centerHeight=array[center];
+			maxHeight=array[center];
 			startHeight=array[start];
 			stopHeight=array[stop];
+			leftMin=startHeight;
+			rightMin=stopHeight;
+			maxPos=center;
 			volume=0;
 			volume2=0;
 			for(int i=start; i<stop; i++){
 				long x=array[i];
+				if(x>maxHeight){
+					maxPos=i;
+					maxHeight=x;
+				}
+				if(i<center){leftMin=Tools.min(leftMin,  x);}
+				else if(i>center){rightMin=Tools.min(rightMin, x);}
 				volume+=x;
 				volume2+=(x*i);
 			}
@@ -757,6 +972,7 @@ public class CallPeaks {
 		 * @param p
 		 */
 		public void absorb(Peak p) {
+			assert(this!=p);
 			
 			if(center>p.center){
 				assert(p.stop<stop) : "\n"+this+"\n"+p+"\n";
@@ -764,46 +980,58 @@ public class CallPeaks {
 					start=p.start;
 					startHeight=p.startHeight;
 				}
+				leftMin=Tools.min(leftMin, p.leftMin);
 			}else{
 				assert(p.start>start) : "\n"+this+"\n"+p+"\n";
 				if(stop<p.stop){
 					stop=p.stop;
 					stopHeight=p.stopHeight;
 				}
+				rightMin=Tools.min(rightMin, p.rightMin);
 			}
 			
-			long c1=callByRawCount ? centerHeight2() : centerHeight;
-			long c2=callByRawCount ? p.centerHeight2() : p.centerHeight;
+			//Potentially shift the center
+//			{
+//			long c1=callMetric();
+//			long c2=p.callMetric();
+//			System.err.print(this+" absorbed "+p);
+//			if(c1<c2){
+//				assert(false);
+//				center=p.center;
+//			}else{
+//				
+//			}
+//			}
 			
-			if(c1<c2){
-				center=p.center;
-				centerHeight=p.centerHeight;
+			if(maxHeight<p.maxHeight){
+				maxHeight=p.maxHeight;
+				maxPos=p.maxPos;
 			}
 			
 			volume+=p.volume;
 			volume2+=p.volume2;
-			
+			gc+=p.gc;
+//			System.err.println(" -> "+this);
 		}
 
 		int width(){return stop-start;}
 		
 		@Override
 		public String toString(){
-			return start+"\t"+center+"\t"+stop+"\t"+centerHeight+"\t"+volume;
+			return start+"\t"+center+"\t"+stop+"\t"+maxHeight+"\t"+volume;
 		}
 		
 		public ByteBuilder toBytes(ByteBuilder bb){
 			if(bb==null){bb=new ByteBuilder();}
 			bb.append(start);
-			bb.append('\t');
+			bb.tab();
 			bb.append(center);
-			bb.append('\t');
+			bb.tab();
 			bb.append(stop);
-			bb.append('\t');
-			bb.append(centerHeight);
-			bb.append('\t');
+			bb.tab();
+			bb.append(maxHeight);
+			bb.tab();
 			bb.append(volume);
-			bb.append('\t');
 			return bb;
 		}
 
@@ -812,19 +1040,29 @@ public class CallPeaks {
 		public int center;
 		/** Exclusive */
 		public int stop;
-
+		public int maxPos;
+		
 		//Unique counts
 		public long startHeight;
-		public long centerHeight;
+//		public long centerHeight;
 		public long stopHeight;
 		public long volume;
-
 		public long volume2;
+		
+		public long leftMin;
+		public long rightMin;
+		public long maxHeight;
+		public long gc;
 
 		//Raw counts
 		public long startHeight2(){return startHeight*start;}
-		public long centerHeight2(){return centerHeight*center;}
+//		public long centerHeight2(){return centerHeight*center;}
+		public long maxHeight2(){return maxHeight*center;}
 		public long stopHeight2(){return stopHeight*stop;}
+		public long callMetric(){
+			if(CALL_MODE==BY_VOLUME){return callByRawCount ? volume2 : volume;}
+			return callByRawCount ? maxHeight2() : maxHeight;
+		}
 		
 		
 		
@@ -835,17 +1073,21 @@ public class CallPeaks {
 	/*--------------------------------------------------------------*/
 
 	private long minHeight=2;
-	private long minVolume=2;
+	private long minVolume=5;
 	private int minWidth=3;
 	private int minPeak=2;
 	private int maxPeak=Integer.MAX_VALUE;
 	private int maxPeakCount=10;
 	private float maxWidthMult=2.5f;
 	private int smoothRadius=0;
-	private boolean smoothProgressiveFlag=false;
+	private boolean smoothProgressiveFlag=true;
 	private int k=31;
 	
 	private int ploidyClaimed=-1;
+	
+	private boolean logScale=false;
+	private double logWidth=0.1;
+	private int logPasses=1;
 	
 	private String in;
 	private String out;
@@ -872,7 +1114,10 @@ public class CallPeaks {
 	private boolean overwrite=false;
 	private boolean append=false;
 	public static boolean printClass=true;
-	
-	public static boolean callByRawCount=true;
+
+	public static boolean callByRawCount=false;
+	public static boolean weightByRelief=false;
+	public static final int BY_VOLUME=0, BY_HEIGHT=1;
+	public static int CALL_MODE=BY_VOLUME;
 	
 }

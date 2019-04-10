@@ -1,16 +1,16 @@
 package align2;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Random;
 
+import dna.AminoAcid;
+import shared.Tools;
 import stream.Read;
 
-import jgi.Dedupe;
-import shared.Tools;
 
 
-
-/** 
+/**
  * 
  *  @author Brian Bushnell
  *  @date Jul 17, 2011 12:04:06 PM
@@ -31,7 +31,7 @@ public class QualityTools {
 //		byte[] quals=new byte[] {15, 12, 20, 9, 10, 16, 14, 7, 11, 10, 10, 10, 10, 4, 4, 30, 30, 30, 30};
 //		float[] probs=makeKeyProbs(quals, 4);
 //		float[] probs2=makeKeyProbs(quals, 4);
-//		
+//
 //		int[] scores=makeKeyScores(quals, 4, 50, 50, null);
 //
 //		System.out.println(Arrays.toString(probs)+"\n");
@@ -81,7 +81,7 @@ public class QualityTools {
 		byte[] qual=new byte[length];
 		for(int i=0; i<qual.length; i++){
 			qual[i]=(byte)(Math.random()*30+5);
-		}	
+		}
 		for(int i=0; i<rounds; i++){
 			float[] r=makeKeyProbs(qual, null, 8, false);
 			if(r[r.length-1]>1 || r[r.length-1]<0){
@@ -91,7 +91,7 @@ public class QualityTools {
 		
 		time=System.nanoTime()-time;
 		float seconds=(float)(time/1000000000d);
-		System.out.println("Bench Time: "+String.format("%.3f",seconds)+" s");
+		System.out.println("Bench Time: "+String.format(Locale.ROOT, "%.3f",seconds)+" s");
 	}
 	
 	public static void bench2(int length, int rounds){
@@ -101,7 +101,7 @@ public class QualityTools {
 		byte[] qual=new byte[length];
 		for(int i=0; i<qual.length; i++){
 			qual[i]=(byte)(Math.random()*30+5);
-		}	
+		}
 		for(int i=0; i<rounds; i++){
 			float[] r=makeKeyProbs2(qual, 8);
 			if(r[r.length-1]>1 || r[r.length-1]<0){
@@ -111,7 +111,7 @@ public class QualityTools {
 		
 		time=System.nanoTime()-time;
 		float seconds=(float)(time/1000000000d);
-		System.out.println("Bench2 Time: "+String.format("%.3f",seconds)+" s");
+		System.out.println("Bench2 Time: "+String.format(Locale.ROOT, "%.3f",seconds)+" s");
 	}
 	
 	public static int[] makeKeyScores(byte[] qual, byte[] bases, int keylen, int range, int baseScore, int[] out, boolean useModulo){
@@ -140,7 +140,7 @@ public class QualityTools {
 	}
 	
 	public static byte[] makeByteScoreArray(byte[] qual, int maxScore, byte[] out, boolean negative){
-		if(qual==null){return makeByteScoreArray(maxScore, out, negative);} 
+		if(qual==null){return makeByteScoreArray(maxScore, out, negative);}
 		if(out==null){out=new byte[qual.length];}
 		assert(out.length==qual.length);
 		for(int i=0; i<qual.length; i++){
@@ -224,12 +224,12 @@ public class QualityTools {
 				int len=0;
 				for(int i=0; i<bases.length; i++){
 					final byte b=bases[i];
-					final int x=Dedupe.baseToNumber[b];
-					final int x2=Dedupe.baseToComplementNumber[b];
+					final int x=AminoAcid.baseToNumber[b];
+					final int x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
 					
-					if(b=='N'){len=0;}else{len++;}
+					if(x<0){len=0; rkmer=0;}else{len++;}
 					if(len>=keylen){
 						if(kmer%IndexMaker4.MODULO!=0 && rkmer%IndexMaker4.MODULO!=0){
 							out[i-keylen+1]=1f;
@@ -258,12 +258,12 @@ public class QualityTools {
 				int len=0;
 				for(int i=0; i<bases.length; i++){
 					final byte b=bases[i];
-					final int x=Dedupe.baseToNumber[b];
-					final int x2=Dedupe.baseToComplementNumber[b];
+					final int x=AminoAcid.baseToNumber[b];
+					final int x2=AminoAcid.baseToComplementNumber[b];
 					kmer=((kmer<<2)|x)&mask;
 					rkmer=(rkmer>>>2)|(x2<<shift2);
 					
-					if(b=='N'){len=0;}else{len++;}
+					if(x<0){len=0; rkmer=0;}else{len++;}
 					if(len>=keylen){
 						if(kmer%IndexMaker4.MODULO!=0 && rkmer%IndexMaker4.MODULO!=0){
 							out[i-keylen+1]=1f;
@@ -294,7 +294,7 @@ public class QualityTools {
 		out[0]=1-key1;
 		out[mid]=1-key2;
 		
-		for(int a=0, b=keylen, c=mid, d=mid+keylen; d<quality.length; 
+		for(int a=0, b=keylen, c=mid, d=mid+keylen; d<quality.length;
 				a++, b++, c++, d++){
 			byte qa=quality[a];
 			byte qb=quality[b];
@@ -428,7 +428,7 @@ public class QualityTools {
 		return PHRED_MATRIX[qa][qb];
 	}
 	
-	/** Safe version for qualities >=MATRIX_SIZE */ 
+	/** Safe version for qualities >=MATRIX_SIZE */
 	public static byte qualsToPhredSafe(byte qa, byte qb){
 		qa=Tools.max((byte)0, Tools.min(qa, MATRIX_SIZE));
 		qb=Tools.max((byte)0, Tools.min(qb, MATRIX_SIZE));
@@ -469,7 +469,7 @@ public class QualityTools {
 	public static final byte MATRIX_SIZE=50;
 	
 	/** Probability that this base is an error */
-	public static final float[] PROB_ERROR=makeQualityToFloat(127);
+	public static final float[] PROB_ERROR=makeQualityToFloat(128);
 	/** 1/PROB */
 	public static final float[] PROB_ERROR_INVERSE=makeInverse(PROB_ERROR);
 	
@@ -490,6 +490,15 @@ public class QualityTools {
 		if(phred<1){return 1;}
 		return Math.pow(10, 0-.1*phred);
 	}
+
+	public static float[] phredToProbError(float[] trimq){
+		if(trimq==null){return null;}
+		float[] trimE=trimq.clone();
+		for(int i=0; i<trimE.length; i++){
+			trimE[i]=(float)QualityTools.phredToProbError(trimE[i]);
+		}
+		return trimE;
+	}
 	
 	public static byte probCorrectToPhred(double prob){
 		return probErrorToPhred(1-prob);
@@ -499,15 +508,21 @@ public class QualityTools {
 		return probErrorToPhred(prob, true);
 	}
 	
+	public static double phredToProbError(double q){
+		if(q<=0){return 0.75;}
+		if(q<=1){return 0.75-q*0.05;}
+		return Tools.min(0.7, Math.pow(10, -0.1*q));
+	}
+	
 	public static byte probErrorToPhred(double prob, boolean round){
 		double phred=probErrorToPhredDouble(prob);
 		final int q=round ? (int)Math.round(phred) : (int)phred;
-		return  (byte)Tools.mid(0, q, Read.MAX_CALLED_QUALITY);
+		return  (byte)Tools.mid(0, q, Read.MAX_CALLED_QUALITY());
 	}
 	
 	public static double probErrorToPhredDouble(double prob){
 		if(prob>=1){return 0;}
-		if(prob<=0.000001){return 60;} 
+		if(prob<=0.000001){return 60;}
 		
 		double phred=-10*Math.log10(prob);
 		return phred;

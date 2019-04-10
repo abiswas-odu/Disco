@@ -33,11 +33,11 @@ MPI and JNI Flags
 
 System Requirements
 
-BBTools is written in Java and requires Java 1.7 or higher for full functionality.  It is tested on Oracle's JDK, not OpenJDK.  Most tools will work with Java 1.6 (if not, they will throw a ClassNotFound exception), and most tools will work with OpenJDK, but if you experience a problem with Java 1.6 or OpenJDK it is recommended that you install Oracle's latest JDK, which is currently 1.8.  All operating systems that support Java are supported.  Note that many of the tools require a substantial amount of memory, so the 64-bit JDK should be installed if you are using a 64-bit operating system.  You can determine your current Java version like this:
+BBTools is written in Java and requires Java 7 or higher for full functionality.  It is tested on Oracle's JDK, not OpenJDK.  Most tools will work with Java 6 (if not, they will throw a ClassNotFound exception), and most tools will work with OpenJDK, but if you experience a problem with Java 6 or OpenJDK it is recommended that you install Oracle's latest JDK.  All operating systems that support Java are supported.  Note that many of the tools require a substantial amount of memory, so the 64-bit JDK should be installed if you are using a 64-bit operating system.  You can determine your current Java version like this:
 
 java -Xmx90m -version
 
-Installation (for non-Genepool users)
+Installation (for non-NERSC users; if you don't know what NERSC is, you are not a NERSC user)
 
 BBTools can be installed by downloading the gzipped tar file from Sourceforge (http://sourceforge.net/projects/bbmap/files/latest/download)  and decompressing it. In Linux, the command would be:
 
@@ -47,19 +47,12 @@ Then, optionally, you can export the path of the shellscripts to your environmen
 
 BBTools includes bash wrapper scripts to make the command lines shorter. The package also contains C code that can accelerate certain programs, and experimental MPI code that can make it difficult to compile BBTools on systems without MPI support.  None of these is required.  But, you can accelerate BBMerge, Dedupe, and BBMap by following the instructions in /jni/README.txt if you have a C compiler.
 
-Installation (for Genepool users)
 
-BBTools is a module that can be loaded with the command “module load bbtools”.  This will put all of the shellscripts in your path.
-Installation (for Genepool admins)
+Installation (for NERSC users)
 
-A new version of the module is created automatically by Jenkins when BBTools is committed to the Bitbucket repo berkeleylab/jgi-bbtools, with a new version number.  Process:
-Update files in the local repository copy of the master branch (e.g. /global/projectb/sandbox/gaag/bbtools/jgi-bbtools)
-Ensure everything looks correct: git status
-Add the new files: git add .
-Commit changes: git commit -m 'changes go here'
-Tag the new version: git tag -a v35.75 -m 'Version 35.75'
-Push the changes: git push origin master --tags
-Compiled code (.class files, etc) are ignored in this repo; when Jenkins sees the push, it will recompile everything, using the Eclipse JDK, which produces faster bytecode than Oracle’s.
+BBTools is in Shifter, which can be used on Denovo and Cori with no installation.  If you want to run the command "reformat.sh in=x.fq out=y.fq", the syntax would be:
+shifter --image=bryce911/bbtools reformat.sh in=x.fq out=y.fq
+
 
 Terminology Notes
 

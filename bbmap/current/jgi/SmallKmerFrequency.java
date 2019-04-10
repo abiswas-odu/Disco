@@ -28,6 +28,7 @@ public class SmallKmerFrequency extends BBTool_ST {
 		bbt.process(t);
 	}
 	
+	@Override
 	void setDefaults(){
 		k=2;
 		display=3;
@@ -46,10 +47,10 @@ public class SmallKmerFrequency extends BBTool_ST {
 		counts=new int[maxKmer+1];
 		display=Tools.min(display, counts.length);
 		if(out1!=null){
-			ffout1=FileFormat.testOutput(out1, FileFormat.ATTACHMENT, ".info", true, overwrite, append, true);
+			ffout1=FileFormat.testOutput(out1, FileFormat.ATTACHMENT, ".info", true, overwrite, append, false);
 		}
 		kmers=new Kmer[counts.length];
-		for(int i=0; i<kmerIndex.length; i++){ 
+		for(int i=0; i<kmerIndex.length; i++){
 			int index=kmerIndex[i];
 			if(kmers[index]==null){
 				kmers[index]=new Kmer();
@@ -83,7 +84,7 @@ public class SmallKmerFrequency extends BBTool_ST {
 		if(r1!=null){
 			makeKmerProfile(r1.bases, counts, true);
 			sb.append(r1.id);
-			Arrays.sort(kmers, numComparator); 
+			Arrays.sort(kmers, numComparator);
 			for(int i=0; i<counts.length; i++){
 				kmers[i].count=counts[i];
 			}
@@ -100,7 +101,7 @@ public class SmallKmerFrequency extends BBTool_ST {
 		if(r2!=null){
 			makeKmerProfile(r2.bases, counts, true);
 			sb.append(r2.id);
-			Arrays.sort(kmers, numComparator); 
+			Arrays.sort(kmers, numComparator);
 			for(int i=0; i<counts.length; i++){
 				kmers[i].count=counts[i];
 			}
@@ -161,6 +162,7 @@ public class SmallKmerFrequency extends BBTool_ST {
 		int count=0;
 		int num;
 		
+		@Override
 		public String toString(){return "("+s+","+num+","+count+")";}
 		
 	}

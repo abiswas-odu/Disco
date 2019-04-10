@@ -3,16 +3,16 @@ package kmer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
-import stream.ByteBuilder;
-
 
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 import shared.Primes;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -46,9 +46,9 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 		return (TWOD ? new KmerNode2D(kmer, val) : new KmerNode1D(kmer, val));
 	}
 	
-	private KmerNode makeNode(long kmer, int[] vals){
+	private KmerNode makeNode(long kmer, int[] vals, int vlen){
 		assert(TWOD);
-		return new KmerNode2D(kmer, vals);
+		return new KmerNode2D(kmer, vals, vlen);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -56,7 +56,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public int increment(long kmer){
+	public int increment(final long kmer, final int incr){
 		final int cell=(int)(kmer%prime);
 		KmerNode n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -64,7 +64,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 			n=(kmer<n.pivot ? n.left : n.right);
 		}
 		if(n==null){
-			n=makeNode(kmer, 1);
+			n=makeNode(kmer, incr);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -77,13 +77,13 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 			}
 			if(autoResize && size>sizeLimit){resize();}
 		}else{
-			n.increment(kmer);
+			n.increment(kmer, incr);
 		}
 		return n.value();
 	}
 	
 	@Override
-	public int incrementAndReturnNumCreated(long kmer){
+	public int incrementAndReturnNumCreated(final long kmer, final int incr){
 		final int cell=(int)(kmer%prime);
 		KmerNode n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -91,7 +91,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 			n=(kmer<n.pivot ? n.left : n.right);
 		}
 		if(n==null){
-			n=makeNode(kmer, 1);
+			n=makeNode(kmer, incr);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -105,7 +105,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 			if(autoResize && size>sizeLimit){resize();}
 			return 1;
 		}else{
-			n.increment(kmer);
+			n.increment(kmer, incr);
 			return 0;
 		}
 	}
@@ -128,7 +128,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 //		}
 //		return x;
 //	}
-//	
+//
 //	public final int setIfNotPresent_Test(long kmer, int v){
 //		assert(TESTMODE);
 //		final int x;
@@ -148,7 +148,7 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 //		}
 //		return x;
 //	}
-//	
+//
 //	public final int set_Test(final long kmer, final int v[]){
 //		assert(TESTMODE);
 //		final int x;
@@ -184,13 +184,13 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 	}
 	
 	@Override
-	public int set(long kmer, int[] vals) {
+	public int set(long kmer, int[] vals, int vlen) {
 		int x=1, cell=(int)(kmer%prime);
 		final KmerNode n=array[cell];
 		if(n==null){
-			array[cell]=makeNode(kmer, vals);
+			array[cell]=makeNode(kmer, vals, vlen);
 		}else{
-			x=n.set(kmer, vals);
+			x=n.set(kmer, vals, vlen);
 		}
 		size+=x;
 		if(autoResize && size>sizeLimit){resize();}
@@ -375,36 +375,38 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount){
 //		tsw.print("HashForest:\n");
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
 			if(node!=null && node.value()>=mincount){
 //				StringBuilder sb=new StringBuilder();
-//				tsw.print(node.dumpKmersAsText(sb, k, mincount));
-				node.dumpKmersAsText(tsw, k, mincount);
+//				tsw.print(node.dumpKmersAsText(sb, k, mincount, maxcount));
+				node.dumpKmersAsText(tsw, k, mincount, maxcount);
 			}
 		}
 		return true;
 	}
 	
 	@Override
-	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
 			if(node!=null && node.value()>=mincount){
-				node.dumpKmersAsBytes(bsw, k, mincount);
+				if(remaining!=null && remaining.decrementAndGet()<0){return true;}
+				node.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);
 			}
 		}
 		return true;
 	}
 	
 	@Override
-	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
 			if(node!=null && node.value()>=mincount){
-				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount);
+				if(remaining!=null && remaining.decrementAndGet()<0){return true;}
+				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);
 			}
 		}
 		return true;
@@ -416,6 +418,16 @@ public final class HashForest extends AbstractKmerTable implements Iterable<Kmer
 			KmerNode node=array[i];
 			if(node!=null){
 				node.fillHistogram(ca, max);
+			}
+		}
+	}
+	
+	@Override
+	public final void fillHistogram(SuperLongList sll){
+		for(int i=0; i<array.length; i++){
+			KmerNode node=array[i];
+			if(node!=null){
+				node.fillHistogram(sll);
 			}
 		}
 	}

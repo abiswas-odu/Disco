@@ -1,17 +1,15 @@
 package shared;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import align2.QualityTools;
-import stream.ByteBuilder;
-import stream.KillSwitch;
+import dna.AminoAcid;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
-
-import dna.AminoAcid;
-import dna.Gene;
+import structures.ByteBuilder;
 
 /**
  * Helper class for processes that do inline quality trimming.
@@ -33,12 +31,13 @@ public final class TrimRead implements Serializable {
 			for(int i=0; i<quals.length; i++){quals[i]-=32;}
 		}
 		byte[] match=(args.length<3 ? null : args[2].getBytes());
-		int minq=(args.length<4 ? 5 : Integer.parseInt(args[3]));
+		float minq=(args.length<4 ? 5 : Float.parseFloat(args[3]));
+		float minE=(float)QualityTools.phredToProbError(minq);
 		Read r=new Read(bases, quals, 1);
 		r.match=match;
 		System.out.println("Before trim:\n"+r.toFastq()+(r.match==null ? "" : "\n"+new String(r.match)));
 		System.out.println(Arrays.toString(r.quality));
-		TrimRead tr=trim(r, true, true, minq, 1);
+		TrimRead tr=trim(r, true, true, minq, minE, 1);
 		System.out.println("\nAfter trim:\n"+r.toFastq()+(r.match==null ? "" : "\n"+new String(r.match)));
 		if(r.match==null){
 			r.match=new byte[r.length()];
@@ -48,12 +47,31 @@ public final class TrimRead implements Serializable {
 		System.out.println("\nAfter untrim:\n"+r.toFastq()+(r.match==null ? "" : "\n"+new String(r.match)));
 	}
 	
-	public static TrimRead trim(Read r, boolean trimLeft, boolean trimRight, int trimq, int minlen){
+//	public static TrimRead trim(Read r, boolean trimLeft, boolean trimRight, float trimq, int minlen){
+//		if(r==null || r.bases==null){return null;}
+//		
+//		final int a, b;
+//		if(optimalMode){
+//			long packed=testOptimal(r.bases, r.quality, QualityTools.PROB_ERROR[trimq]);
+//			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
+//			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
+//		}else if(windowMode){
+//			a=0;
+//			b=(trimRight ? testRightWindow(r.bases, r.quality, (byte)trimq, windowLength) : 0);
+//		}else{
+//			a=(trimLeft ? testLeft(r.bases, r.quality, (byte)trimq) : 0);
+//			b=(trimRight ? testRight(r.bases, r.quality, (byte)trimq) : 0);
+//		}
+//		return (a+b==0 ? null : new TrimRead(r, a, b, trimq, minlen));
+//	}
+	
+	public static TrimRead trim(Read r, boolean trimLeft, boolean trimRight, 
+			float trimq, float avgErrorRate, int minlen){
 		if(r==null || r.bases==null){return null;}
 		
 		final int a, b;
 		if(optimalMode){
-			long packed=testOptimal(r.bases, r.quality, QualityTools.PROB_ERROR[trimq]);
+			long packed=testOptimal(r.bases, r.quality, avgErrorRate);
 			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
 			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
 		}else if(windowMode){
@@ -74,8 +92,22 @@ public final class TrimRead implements Serializable {
 	 * @param minResult Ensure trimmed read is at least this long
 	 * @return Number of bases trimmed
 	 */
-	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, int trimq, int minResult){
-		return trimFast(r, trimLeft, trimRight, trimq, minResult, 0);
+	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, 
+			float trimq, float avgErrorRate, int minResult){
+		return trimFast(r, trimLeft, trimRight, trimq, avgErrorRate, minResult, false);
+	}
+	
+	/**
+	 * @param r Read to trim
+	 * @param trimLeft Trim left side
+	 * @param trimRight Trim right side
+	 * @param trimq Maximum quality to trim
+	 * @param minResult Ensure trimmed read is at least this long
+	 * @return Number of bases trimmed
+	 */
+	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, 
+			float trimq, float avgErrorRate, int minResult, boolean trimClip){
+		return trimFast(r, trimLeft, trimRight, trimq, avgErrorRate, minResult, 0, trimClip);
 	}
 	
 	/**
@@ -87,10 +119,12 @@ public final class TrimRead implements Serializable {
 	 * @param trimRight Trim right side
 	 * @param trimq Maximum quality to trim
 	 * @param minResult Ensure trimmed read is at least this long
-	 * @param discardUnder Resulting reads shorter than this are not wanted 
+	 * @param discardUnder Resulting reads shorter than this are not wanted
 	 * @return Number of bases trimmed
 	 */
-	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, int trimq, int minResult, int discardUnder){
+	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, 
+			float trimq, float avgErrorRate, int minResult, int discardUnder, boolean trimClip){
+//		assert(avgErrorRate==(float)QualityTools.phredToProbError(trimq)) : trimq+", "+avgErrorRate+", "+(float)QualityTools.phredToProbError(trimq);
 		final byte[] bases=r.bases, qual=r.quality;
 		if(bases==null || bases.length<1){return 0;}
 		
@@ -100,7 +134,7 @@ public final class TrimRead implements Serializable {
 		final int a0, b0;
 		final int a, b;
 		if(optimalMode){
-			long packed=testOptimal(bases, qual, QualityTools.PROB_ERROR[trimq]);
+			long packed=testOptimal(bases, qual, avgErrorRate);
 			a0=(int)((packed>>32)&0xFFFFFFFFL);
 			b0=(int)((packed)&0xFFFFFFFFL);
 			if(trimLeft!=trimRight && discardUnder>0 && len-a0-b0<discardUnder){
@@ -118,7 +152,7 @@ public final class TrimRead implements Serializable {
 			a=(trimLeft ? testLeft(bases, qual, (byte)trimq) : 0);
 			b=(trimRight ? testRight(bases, qual, (byte)trimq) : 0);
 		}
-		return trimByAmount(r, a, b, minResult);
+		return trimByAmount(r, a, b, minResult, trimClip);
 	}
 	
 	public static boolean untrim(Read r){
@@ -128,11 +162,11 @@ public final class TrimRead implements Serializable {
 		return tr.untrim();
 	}
 	
-//	public TrimRead(Read r_, boolean trimLeft, boolean trimRight, int trimq_, int minlen_){
+//	public TrimRead(Read r_, boolean trimLeft, boolean trimRight, float trimq_, int minlen_){
 //		this(r_, (trimLeft ? testLeft(r_.bases, r_.quality, (byte)trimq_) : 0), (trimRight ? testRight(r_.bases, r_.quality, (byte)trimq_) : 0), trimq_, minlen_);
 //	}
 	
-	public TrimRead(Read r_, int trimLeft, int trimRight, int trimq_, int minlen_){
+	public TrimRead(Read r_, int trimLeft, int trimRight, float trimq_, int minlen_){
 		minlen_=Tools.max(minlen_, 0);
 		r=r_;
 		bases1=r.bases;
@@ -203,7 +237,7 @@ public final class TrimRead implements Serializable {
 	/** Trim bases outside of leftLoc and rightLoc, excluding leftLoc and rightLoc */
 	public static int trimToPosition(Read r, int leftLoc, int rightLoc, int minResultingLength){
 		final int len=r.length();
-		return trimByAmount(r, leftLoc, len-rightLoc-1, minResultingLength);
+		return trimByAmount(r, leftLoc, len-rightLoc-1, minResultingLength, false);
 	}
 	
 	/** Remove non-genetic-code from reads */
@@ -228,6 +262,11 @@ public final class TrimRead implements Serializable {
 	
 	/** Trim this many bases from each end */
 	public static int trimByAmount(Read r, int leftTrimAmount, int rightTrimAmount, int minResultingLength){
+		return trimByAmount(r, leftTrimAmount, rightTrimAmount, minResultingLength, false);
+	}
+	
+	/** Trim this many bases from each end */
+	public static int trimByAmount(Read r, int leftTrimAmount, int rightTrimAmount, int minResultingLength, boolean trimClip){
 
 		leftTrimAmount=Tools.max(leftTrimAmount, 0);
 		rightTrimAmount=Tools.max(rightTrimAmount, 0);
@@ -237,7 +276,7 @@ public final class TrimRead implements Serializable {
 		assert(r.sites==null) : "TODO: Handle trimming of reads with SiteScores.";
 		
 		if(r.match!=null){
-			return trimReadWithMatch(r, (SamLine)r.obj, leftTrimAmount, rightTrimAmount, minResultingLength, Integer.MAX_VALUE);
+			return trimReadWithMatch(r, (SamLine)r.obj, leftTrimAmount, rightTrimAmount, minResultingLength, Integer.MAX_VALUE, trimClip);
 		}
 		
 		final byte[] bases=r.bases, qual=r.quality;
@@ -269,7 +308,7 @@ public final class TrimRead implements Serializable {
 	}
 	
 	/** Count number of bases that need trimming on each side, and pack into a long */
-	private static long testOptimal(byte[] bases, byte[] qual, float avgErrorRate){
+	public static long testOptimal(byte[] bases, byte[] qual, float avgErrorRate){
 		if(optimalBias>=0){avgErrorRate=optimalBias;}//Override
 		assert(avgErrorRate>0 && avgErrorRate<=1) : "Average error rate ("+avgErrorRate+") must be between 0 (exclusive) and 1 (inclusive)";
 		if(bases==null || bases.length==0){return 0;}
@@ -291,7 +330,8 @@ public final class TrimRead implements Serializable {
 //			float probError=(b=='N' ? nprob : ADJUST_QUALITY ? CalcTrueQuality.estimateErrorProb2(qual, bases, i) : QualityTools.PROB_ERROR[q]);
 
 //			float probError=(b=='N' ? nprob : q==1 ? PROB1 : QualityTools.PROB_ERROR[q]);
-			float probError=(b=='N' ? nprob : QualityTools.PROB_ERROR[q]);
+//			float probError=(b=='N' ? nprob : QualityTools.PROB_ERROR[q]);
+			float probError=((b=='N' || q<1) ? nprob : QualityTools.PROB_ERROR[q]);
 			
 //			assert(q>0 || b=='N') : "index "+i+": q="+q+", b="+(char)b+"\n"+new String(bases)+"\n"+Arrays.toString(qual)+"\n";
 			
@@ -425,7 +465,7 @@ public final class TrimRead implements Serializable {
 		r.setPerfect(false);
 		
 		final int lt, rt;
-		if(r.strand()==Gene.PLUS){
+		if(r.strand()==Shared.PLUS){
 			lt=leftTrimmed;
 			rt=rightTrimmed;
 		}else{
@@ -438,7 +478,6 @@ public final class TrimRead implements Serializable {
 		if(r.match!=null){
 			if(r.shortmatch()){
 				r.toLongMatchString(false);
-				r.setShortMatch(false);
 				returnToShort=true;
 			}
 			byte[] match2=new byte[r.match.length+lt+rt];
@@ -459,8 +498,7 @@ public final class TrimRead implements Serializable {
 		r.start-=lt;
 		r.stop+=rt;
 		if(returnToShort){
-			r.match=Read.toShortMatchString(r.match);
-			r.setShortMatch(true);
+			r.toShortMatchString(true);
 		}
 		
 		if(r.sites!=null){
@@ -476,7 +514,7 @@ public final class TrimRead implements Serializable {
 		ss.perfect=ss.semiperfect=false;
 		
 		final int lt, rt;
-		if(ss.strand==Gene.PLUS){
+		if(ss.strand==Shared.PLUS){
 			lt=leftTrimmed;
 			rt=rightTrimmed;
 		}else{
@@ -490,7 +528,7 @@ public final class TrimRead implements Serializable {
 			
 			boolean shortmatch=false;
 			for(byte b : ss.match){
-				if(Character.isDigit(b)){shortmatch=true; break;}
+				if(Tools.isDigit(b)){shortmatch=true; break;}
 			}
 			
 			if(shortmatch){
@@ -543,32 +581,56 @@ public final class TrimRead implements Serializable {
 	
 
 	
-	public static int trimReadWithMatch(final Read r, final SamLine sl, final int leftTrimAmount, final int rightTrimAmount, int minFinalLength, int scafLen){
-		if(leftTrimAmount<1 && rightTrimAmount<1){return 0;}
-		if(leftTrimAmount+rightTrimAmount>r.length()){return 0;}
+	public static int trimReadWithMatch(final Read r, final SamLine sl, int leftTrimAmount, int rightTrimAmount, int minFinalLength, int scafLen,
+			boolean trimClip){
 		if(r.match==null || r.bases==null){return 0;}
+		
+		if(trimClip){
+			r.toLongMatchString(false);
+			byte[] match=r.match;
+			int leftClip=0, rightClip=0;
+			for(int i=0; i<match.length; i++){
+				if(match[i]=='C'){leftClip++;}
+				else{break;}
+			}
+			for(int i=match.length-1; i>=0; i--){
+				if(match[i]=='C'){rightClip++;}
+				else{break;}
+			}
+			leftTrimAmount=Tools.max(leftTrimAmount, leftClip);
+			rightTrimAmount=Tools.max(rightTrimAmount, rightClip);
+		}
+		
+		if(leftTrimAmount<1 && rightTrimAmount<1){return 0;}
+		if(leftTrimAmount+rightTrimAmount>=r.length()){return -leftTrimAmount-rightTrimAmount;}
 
+		final int oldPos=sl.pos;
+		
 		r.toLongMatchString(false);
 		byte[] match=r.match;
 		
 		assert(!r.shortmatch());
 
+//		System.err.println("Q: "+sl);
+//		System.err.println(new String(match));
 		
 		ByteBuilder bb=new ByteBuilder(match.length);
+//		System.err.println("leftTrimAmount="+leftTrimAmount+", rightTrimAmount="+rightTrimAmount);
 		
 		int leftTrim=leftTrimAmount>0 ? r.length() : 0, rightTrim=rightTrimAmount>0 ? r.length() : 0;
+//		System.err.println("leftTrim="+leftTrim+", rightTrim="+rightTrim);
 		{
 			final int mlen=match.length;
 			boolean keep=leftTrimAmount<1;
 			int rpos=(sl==null ? 1 : sl.pos);
 			for(int mpos=0, cpos=0; mpos<mlen; mpos++){
 				final byte m=match[mpos];
-				if(m=='m' || m=='C' || m=='S' || m=='V' || m=='N'){
+				if(m=='m' || m=='S' || m=='V' || m=='N'){
 					cpos++;
 					rpos++;
 				}else if(m=='D'){
 					rpos++;
-				}else if(m=='I'){
+				}else if(m=='I' || m=='C'){
 					cpos++;
 				}else{
 					assert(false) : "Unknown symbol "+(char)m;
@@ -586,6 +648,7 @@ public final class TrimRead implements Serializable {
 				}
 			}
 		}
+//		System.err.println("R: "+sl);
 		match=bb.toBytes();
 		Tools.reverseInPlace(match);
 		bb.clear();
@@ -594,10 +657,10 @@ public final class TrimRead implements Serializable {
 			boolean keep=rightTrimAmount<1;
 			for(int mpos=0, cpos=0; mpos<mlen; mpos++){
 				final byte m=match[mpos];
-				if(m=='m' || m=='C' || m=='S' || m=='V' || m=='N'){
+				if(m=='m' || m=='S' || m=='V' || m=='N'){
 					cpos++;
 				}else if(m=='D'){
-				}else if(m=='I'){
+				}else if(m=='I' || m=='C'){
 					cpos++;
 				}else{
 					assert(false) : "Unknown symbol "+(char)m;
@@ -616,30 +679,54 @@ public final class TrimRead implements Serializable {
 				}
 			}
 		}
+//		System.err.println("S: "+sl);
 		match=bb.toBytes();
 		Tools.reverseInPlace(match);
 		
-		if(leftTrim+rightTrim>=r.length()){return 0;}
+//		System.err.println("leftTrim="+leftTrim+", rightTrim="+rightTrim);
 		
+		if(leftTrim+rightTrim>=r.length()){
+			sl.pos=oldPos;
+			return -leftTrim-rightTrim;
+		}
+		
+//		System.err.println("T: "+sl);
 		r.match=null;
-		if(sl.strand()==Gene.MINUS){
+		if(sl.strand()==Shared.MINUS){
 			int temp=leftTrim;
 			leftTrim=rightTrim;
 			rightTrim=temp;
 		}
-		final int trimmed=trimByAmount(r, leftTrim, rightTrim, minFinalLength);
+		final int trimmed=trimByAmount(r, leftTrim, rightTrim, minFinalLength, false);
+//		System.err.println("tba: "+leftTrim+", "+rightTrim+", "+minFinalLength);
 		r.match=match;
 		
 		if(sl!=null){
 			int start=sl.pos-1;
 			int stop=start+Read.calcMatchLength(match)-1;
-			sl.cigar=SamLine.toCigar14(match, start, stop, scafLen, r.bases);
+			if(SamLine.VERSION>1.3){
+				sl.cigar=SamLine.toCigar14(match, start, stop, scafLen, r.bases);
+			}else{
+				sl.cigar=SamLine.toCigar13(match, start, stop, scafLen, r.bases);
+			}
 			sl.seq=r.bases;
 			sl.qual=r.quality;
+			if(trimmed>0 && sl.optional!=null && sl.optional.size()>0){
+				ArrayList<String> list=new ArrayList<String>(2);
+				for(int i=0; i<sl.optional.size(); i++){
+					String s=sl.optional.get(i);
+					if(s.startsWith("PG:") || s.startsWith("RG:") || s.startsWith("X") || s.startsWith("Y") || s.startsWith("Z")){list.add(s);} //Only keep safe flags.
+				}
+				sl.optional.clear();
+				sl.optional.addAll(list);
+			}
 		}
 		return trimmed;
 	}
-	
+
+	public int trimmed() {
+		return leftTrimmed+rightTrimmed;
+	}
 	
 	public final Read r;
 	
@@ -653,11 +740,11 @@ public final class TrimRead implements Serializable {
 	public byte[] qual2;
 	
 	
-	public final byte trimq;
+	public final float trimq;
 	public int leftTrimmed;
 	public int rightTrimmed;
 	
-	/** Require this many consecutive good bases to stop trimming.  Minimum is 1. 
+	/** Require this many consecutive good bases to stop trimming.  Minimum is 1.
 	 * This is for the old trimming mode and not really used anymore */
 	public static int minGoodInterval=2;
 	

@@ -1,8 +1,8 @@
 package driver;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 
 import dna.AminoAcid;
 import dna.ChromosomeArray;
@@ -27,7 +27,7 @@ public class MeasureGene {
 		
 		for(byte chrom=minChrom; chrom<=maxChrom; chrom++){
 			Data.getChromosome(chrom);
-			Gene[] genes=Data.getGenes(chrom, Gene.PLUS);
+			Gene[] genes=Data.getGenes(chrom, Shared.PLUS);
 			genes=toNormalGenes(genes);
 			
 			for(Gene g : genes){
@@ -35,13 +35,13 @@ public class MeasureGene {
 				
 				analyzeGene(g);
 //				System.out.println("\nchr"+g.chromosome+"\t"+g.name+"\t"+g.nameTranscript);
-//				
+//
 //				for(int i=0; i<g.exons.length; i++){
 //					Exon e=g.exons[i];
 //
 //					float f2=measureExonFrequency(e.a, e.b, e.chromosome, e.strand);
 //					float f1, f3;
-//					
+//
 //					if(i==0 && g.exons.length==1){
 //						f1=mGStart.matchStrength(ca.array, e.a);
 //						f3=mGStop.matchStrength(ca.array, e.b);
@@ -55,11 +55,11 @@ public class MeasureGene {
 //						f1=mEStart.matchStrength(ca.array, e.a);
 //						f3=mEStop.matchStrength(ca.array, e.b);
 //					}
-//					
+//
 //					if(f2!=0){
 //						sum+=f2;
 //						count++;
-//						System.out.println(String.format("%.3f, %.3f, %.5f", f1, f3, f2));
+//						System.out.println(String.format(Locale.ROOT, "%.3f, %.3f, %.5f", f1, f3, f2));
 //					}
 //				}
 			}
@@ -75,7 +75,7 @@ public class MeasureGene {
 	
 	
 	public static float analyzeGene(Gene g){
-		assert(g.strand==Gene.PLUS) : "TODO";
+		assert(g.strand==Shared.PLUS) : "TODO";
 		ChromosomeArray ca=Data.getChromosome(g.chromosome);
 
 		System.out.println("\nchr"+g.chromosome+"\t"+g.symbol+"\t"+g.mrnaAcc);
@@ -104,12 +104,12 @@ public class MeasureGene {
 			
 			sum=sum+f1+f3;
 
-//			if(f2!=0){System.out.println(String.format("%.3f, %.3f, %.5f", f1, f3, f2));}
+//			if(f2!=0){System.out.println(String.format(Locale.ROOT, "%.3f, %.3f, %.5f", f1, f3, f2));}
 		}
 		
 		float avg=(float)(sum/(2*g.exons.length));
 		
-		System.out.println(String.format("Average: %.3f", avg));
+		System.out.println(String.format(Locale.ROOT, "Average: %.3f", avg));
 		return avg;
 	}
 	
@@ -148,7 +148,7 @@ public class MeasureGene {
 		double sum=0;
 		int count=0;
 		
-		assert(strand==Gene.PLUS) : "TODO";
+		assert(strand==Shared.PLUS) : "TODO";
 		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		for(int i=start; i<stop; i++){

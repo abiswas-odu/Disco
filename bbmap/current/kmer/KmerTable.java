@@ -1,16 +1,16 @@
 package kmer;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
-import stream.ByteBuilder;
-
 
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 import shared.Primes;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -40,7 +40,7 @@ public final class KmerTable extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	@Override
-	public int increment(long kmer){
+	public int increment(final long kmer, final int incr){
 		final int cell=(int)(kmer%prime);
 		KmerLink n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -48,7 +48,7 @@ public final class KmerTable extends AbstractKmerTable {
 			n=n.next;
 		}
 		if(n==null){
-			n=new KmerLink(kmer, 1);
+			n=new KmerLink(kmer, incr);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -57,14 +57,14 @@ public final class KmerTable extends AbstractKmerTable {
 			}
 			if(autoResize && size>sizeLimit){resize();}
 		}else{
-			n.value++;
+			n.value+=incr;
 			if(n.value<0){n.value=Integer.MAX_VALUE;}
 		}
 		return n.value;
 	}
 	
 	@Override
-	public int incrementAndReturnNumCreated(long kmer){
+	public int incrementAndReturnNumCreated(final long kmer, final int incr){
 		final int cell=(int)(kmer%prime);
 		KmerLink n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -72,7 +72,7 @@ public final class KmerTable extends AbstractKmerTable {
 			n=n.next;
 		}
 		if(n==null){
-			n=new KmerLink(kmer, 1);
+			n=new KmerLink(kmer, incr);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -82,7 +82,7 @@ public final class KmerTable extends AbstractKmerTable {
 			if(autoResize && size>sizeLimit){resize();}
 			return 1;
 		}else{
-			n.value++;
+			n.value+=incr;
 			if(n.value<0){n.value=Integer.MAX_VALUE;}
 			return 0;
 		}
@@ -103,7 +103,7 @@ public final class KmerTable extends AbstractKmerTable {
 	}
 	
 	@Override
-	public int set(long kmer, int[] vals) {
+	public int set(long kmer, int[] vals, int vlen) {
 		throw new RuntimeException("Unimplemented.");
 	}
 	
@@ -278,16 +278,16 @@ public final class KmerTable extends AbstractKmerTable {
 	
 	@Deprecated
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount){
 		throw new RuntimeException("TODO");
 	}
 	
 	@Override
-	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, int maxcount, AtomicLong remaining){
 		for(int i=0; i<array.length; i++){
 			KmerLink node=array[i];
 			if(node!=null && node.value>=mincount){
-				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount);
+				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);
 			}
 		}
 		return true;
@@ -295,13 +295,19 @@ public final class KmerTable extends AbstractKmerTable {
 	
 	@Deprecated
 	@Override
-	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		throw new RuntimeException("TODO");
 	}
 	
 	@Deprecated
 	@Override
 	public void fillHistogram(long[] ca, int max){
+		throw new RuntimeException("TODO");
+	}
+	
+	@Deprecated
+	@Override
+	public void fillHistogram(SuperLongList sll){
 		throw new RuntimeException("TODO");
 	}
 	

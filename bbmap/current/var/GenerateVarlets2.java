@@ -3,11 +3,17 @@ package var;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 
+import align2.MultiStateAligner9ts;
+import align2.TranslateColorspaceRead;
+import dna.Data;
+import fileIO.ReadWrite;
+import fileIO.TextFile;
 import pacbio.CalcCoverageFromSites;
 import pacbio.SiteR;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -17,18 +23,18 @@ import stream.Read;
 import stream.SiteScore;
 import stream.SiteScoreR;
 import structures.ListNum;
-import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
-import fileIO.TextFile;
-import align2.MultiStateAligner9ts;
-import align2.TranslateColorspaceRead;
 
 /** Splits output files across blocks for low memory usage */
 public class GenerateVarlets2 {
 	
 	
 	public static void main(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
 		
 		Data.GENOME_BUILD=-1;
 		
@@ -48,13 +54,9 @@ public class GenerateVarlets2 {
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
-			if("t".equals(b)){b="true";}
-			if("f".equals(b)){b="false";}
+			String b=split.length>1 ? split[1] : null;
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseZip(arg, a, b)){
+			if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(a.equals("condense")){
 				CONDENSE=Tools.parseBoolean(b);
@@ -205,7 +207,7 @@ public class GenerateVarlets2 {
 	 */
 	private static final HashMap<Long, SiteR> loadSites(String fname) {
 		HashMap<Long, SiteR> map=new HashMap<Long, SiteR>(4096);
-		TextFile tf=new TextFile(fname, false, false);
+		TextFile tf=new TextFile(fname, false);
 		
 		for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
 			SiteScoreR[] array=CalcCoverageFromSites.toSites(s);
@@ -256,11 +258,11 @@ public class GenerateVarlets2 {
 				
 				while(!terminate && reads!=null && reads.size()>0){
 					if(processReads){processReads(reads);}
-					cris.returnList(ln.id, ln.list.isEmpty());
+					cris.returnList(ln);
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 			}else{
 				ArrayList<Read> reads=stream.nextList();
 				while(!terminate && reads!=null && reads.size()>0){
@@ -471,7 +473,7 @@ public class GenerateVarlets2 {
 //				System.err.println(r.mate.toText(false));
 //				System.err.println(r.mate.copies);
 //				System.err.println();
-//				
+//
 //				for(Varlet v : vars){
 //					System.err.println(v.toText());
 //					System.err.println(v.numReads);
@@ -555,7 +557,7 @@ public class GenerateVarlets2 {
 		protected boolean finished(){return finished;}
 		protected void terminate(){terminate=true;}
 		
-		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ? 
+		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ?
 				new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS));
 		private boolean finished=false;
 		private boolean terminate=false;

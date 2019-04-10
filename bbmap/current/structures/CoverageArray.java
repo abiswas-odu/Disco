@@ -1,6 +1,7 @@
 package structures;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Locale;
 
 import fileIO.ReadWrite;
 
@@ -45,7 +46,9 @@ public abstract class CoverageArray implements Serializable {
 	 */
 	public abstract void increment(int loc);
 
+	public final void incrementRange(int min, int max){incrementRange(min, max, 1);}
 	public abstract void incrementRange(int min, int max, int amt);
+	public abstract void incrementRangeSynchronized(int min, int max, int amt);
 	
 	public void incrementRanges(IntList ranges, int amt){
 		for(int i=0; i<ranges.size; i+=2){
@@ -110,11 +113,12 @@ public abstract class CoverageArray implements Serializable {
 		assert(false) : "Smoother disabled in this code purely to reduce dependancies.";
 		StringBuilder sb=new StringBuilder(data.length*20);
 		for(double[] d : data){
-			sb.append(String.format("%d\t%.2f\n",(int)d[0],d[1]));
+			sb.append(String.format(Locale.ROOT, "%d\t%.2f\n",(int)d[0],d[1]));
 		}
 		System.out.print(sb);
 	}
 	
+	@Override
 	public abstract String toString();
 	
 	static final long min(long x, long y){return x<y ? x : y;}

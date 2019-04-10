@@ -5,26 +5,25 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-
-import stream.ConcurrentReadOutputStream;
-import stream.Read;
-import stream.SiteScore;
-
+import java.util.Locale;
 
 import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
+import stream.ConcurrentReadOutputStream;
+import stream.Read;
+import stream.SiteScore;
 
 /**
  * @author Brian Bushnell
@@ -61,10 +60,12 @@ public class BBSplitter {
 	}
 	
 	public static String[] processArgs(String[] args){
-		for(String s : args){
-			if(s.endsWith("=stdout") || s.contains("=stdout.")){Data.sysout=System.err;}
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
 		}
-		Data.sysout.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		
 //		if(ReadWrite.ZIPLEVEL<2){ReadWrite.ZIPLEVEL=2;} //Should be fine for a realistic number of threads, except in perfect mode with lots of sites and a small index.
 		String[] oldargs=args;
 		args=remakeArgs(args);
@@ -147,7 +148,7 @@ public class BBSplitter {
 					unparsed.add(args[i]);
 				}else if(a.equals("basename") || a.equals("pattern")){
 					basename=b;
-					assert(b==null || (b.indexOf('%')>=0 && (b.indexOf('%')<b.lastIndexOf('.')))) : 
+					assert(b==null || (b.indexOf('%')>=0 && (b.indexOf('%')<b.lastIndexOf('.')))) :
 						"basename must contain a '%' symbol prior to file extension.";
 				}else if(a.equals("append") || a.equals("app")){
 					append=ReadStats.append=Tools.parseBoolean(b);
@@ -204,9 +205,8 @@ public class BBSplitter {
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("mapmode") && b!=null){
+			
+			if(a.equals("mapmode") && b!=null){
 				args[i]=null;
 				removed++;
 				if(b.equalsIgnoreCase("normal")){MAP_MODE=MAP_NORMAL;}
@@ -327,11 +327,11 @@ public class BBSplitter {
 			String[] oldrefs=null;
 			String[] oldnames=null;
 			if(reflistExists){
-				TextFile tf=new TextFile(reflist, false, false);
+				TextFile tf=new TextFile(reflist, false);
 				oldrefs=tf.toStringLines();
 				tf.close();
 				
-				tf=new TextFile(namelist, false, false);
+				tf=new TextFile(namelist, false);
 				oldnames=tf.toStringLines();
 				tf.close();
 			}
@@ -409,7 +409,7 @@ public class BBSplitter {
 		TextStreamWriter tsw=new TextStreamWriter(refname, overwrite || forceRebuild, false, true);
 		tsw.start();
 		for(String fname : fnames){
-			TextFile tf=new TextFile(fname, false, false);
+			TextFile tf=new TextFile(fname, false);
 			LinkedHashSet<String> listnames=fileToNameTable.get(fname);
 //			assert(false) : "\n\n"+fname+"\n\n"+listnames+"\n\n"+fileToNameTable+"\n\n"+nameSet+"\n\n"+nameToFileTable+"\n\n";
 			String prefix=null;
@@ -446,10 +446,10 @@ public class BBSplitter {
 		return refname;
 	}
 	
-	/** Returns the set of scaffold name prefixes or suffixes. 
+	/** Returns the set of scaffold name prefixes or suffixes.
 	 * 
-	 * @param prefix True to return prefixes (set names), false to return suffixes (scaffold names)
-	 * @return
+	 * @param getPrefixes True to return prefixes (set names), false to return suffixes (scaffold names)
+	 * @return A set of affixes
 	 */
 	public static HashSet<String> getScaffoldAffixes(boolean getPrefixes){
 		final byte[][][] b3=Data.scaffoldNames;
@@ -493,7 +493,7 @@ public class BBSplitter {
 		return set;
 	}
 	
-	public static synchronized HashMap<String, ConcurrentReadOutputStream> makeOutputStreams(String[] args, boolean OUTPUT_READS, boolean OUTPUT_ORDERED_READS, 
+	public static synchronized HashMap<String, ConcurrentReadOutputStream> makeOutputStreams(String[] args, boolean OUTPUT_READS, boolean OUTPUT_ORDERED_READS,
 			int buff, boolean paired, boolean overwrite_, boolean append_, boolean ambiguous){
 //		assert(false) : Arrays.toString(args);
 		HashMap<String, ConcurrentReadOutputStream> table=new HashMap<String, ConcurrentReadOutputStream>();
@@ -502,8 +502,10 @@ public class BBSplitter {
 			String a=split[0];
 			String b=split.length>1 ? split[1] : null;
 			if(b!=null && b.equalsIgnoreCase("null")){b=null;}
+//			assert(b!=null) : "Bad parameter: "+arg+"\n"+Arrays.toString(args);
 			
 			if(arg.indexOf('=')>0 && a.toLowerCase().startsWith("out_")){
+				assert(b!=null) : "Bad parameter: "+arg+"\n"+Arrays.toString(args);
 				String name=a.substring(4).replace('\\', '/');
 				
 				final String fname1, fname2;
@@ -543,7 +545,7 @@ public class BBSplitter {
 	public static synchronized LinkedHashMap<String, SetCount> makeSetCountTable(){
 		assert(setCountTable==null);
 		HashSet<String> names=getScaffoldAffixes(true);
-		setCountTable=new LinkedHashMap<String, SetCount>(); 
+		setCountTable=new LinkedHashMap<String, SetCount>();
 		for(String s : names){setCountTable.put(s, new SetCount(s));}
 		return setCountTable;
 	}
@@ -552,7 +554,7 @@ public class BBSplitter {
 	public static synchronized LinkedHashMap<String, SetCount> makeScafCountTable(){
 		assert(scafCountTable==null);
 		HashSet<String> names=getScaffoldAffixes(false);
-		scafCountTable=new LinkedHashMap<String, SetCount>(); 
+		scafCountTable=new LinkedHashMap<String, SetCount>();
 		for(String s : names){scafCountTable.put(s, new SetCount(s));}
 //		System.out.println("Made table "+scafCountTable);
 		return scafCountTable;
@@ -736,9 +738,10 @@ public class BBSplitter {
 							if(s2!=null){primarySet.addAll(s2);}
 						}
 						//	System.out.println(primarySet);
-						final int incrR=1+(r2==null ? 0 : 1);
-						final int incrB=r1.length()+(r1.mateLength());
+						final int incrR=r1.pairCount();
+						final int incrB=r1.pairLength();
 
+						int num=0;
 						for(String s : primarySet){
 							SetCount sc=setCountTable.get(s);
 							assert(sc!=null) : s;
@@ -747,14 +750,23 @@ public class BBSplitter {
 									//										System.out.println("Incrementing set "+sc);
 									sc.ambiguousReads+=incrR;
 									sc.ambiguousBases+=incrB;
+									if(num==0){
+										sc.assignedReads+=incrR;
+										sc.assignedBases+=incrB;
+									}
 								}
 							}else{
 								synchronized(sc){
 									//										System.out.println("Incrementing set "+sc);
 									sc.mappedReads+=incrR;
 									sc.mappedBases+=incrB;
+									if(num==0){
+										sc.assignedReads+=incrR;
+										sc.assignedBases+=incrB;
+									}
 								}
 							}
+							num++;
 						}
 					}
 					for(HashSet<String> set : sets){set.clear();}
@@ -785,6 +797,7 @@ public class BBSplitter {
 	}
 	
 	private static void addToScafCounts(Read r, int clearzone, HashSet<String> hss0){
+		if(r==null || !r.mapped()){return;}
 		assert((scafCountTable!=null)==TRACK_SCAF_STATS) : TRACK_SCAF_STATS;
 		if(scafCountTable!=null){
 			HashSet<String> set=getScaffolds(r, clearzone, hss0, false);
@@ -793,15 +806,23 @@ public class BBSplitter {
 				int incrRA=0;
 				int incrBM=0;
 				int incrBA=0;
-				if(r!=null){
-					if(r.ambiguous()){
-						incrRA+=1;
-						incrBA+=r.length();
-					}else{
-						incrRM+=1;
-						incrBM+=r.length();
+
+				int incrRS=1+(r.mate!=null && !r.mateMapped() ? 1 : 0);
+				int incrBS=r.length()+(r.mate!=null && !r.mateMapped() ? r.mateLength() : 0);
+				
+				
+				if(r.ambiguous()){
+					incrRA+=1;
+					incrBA+=r.length();
+					if(r.mate!=null && !r.mateMapped()){
+						incrRA++;
+						incrBA+=r.mateLength();
 					}
+				}else{
+					incrRM+=1;
+					incrBM+=r.length();
 				}
+				int num=0;
 				for(String s : set){
 					SetCount sc=scafCountTable.get(s);
 					assert(sc!=null) : "Can't find "+s+"\nin\n"+scafCountTable.keySet()+"\n";
@@ -814,10 +835,15 @@ public class BBSplitter {
 						sc.mappedBases+=incrBM;
 						sc.ambiguousReads+=incrRA;
 						sc.ambiguousBases+=incrBA;
+						if(num==0){
+							sc.assignedReads+=incrRS;
+							sc.assignedBases+=incrBS;
+						}
 					}
 //					System.out.println(sc);
 //					System.out.println();
 //					assert(false) : "\n"+incrRM+", "+incrRA+", "+incrBM+", "+incrBA+"\n"+set;
+					num++;
 				}
 				set.clear();
 			}
@@ -1090,7 +1116,7 @@ public class BBSplitter {
 			tsw.println("#!/bin/bash");
 //			tsw.println("module unload samtools");
 //			tsw.println("module load samtools/0.1.19");
-			tsw.println("module load samtools");
+			if(Data.GENEPOOL){tsw.println("module load samtools"+(Data.SAMTOOLS_VERSION_1x ? "/1.4" : ""));}
 			
 			long mem=Runtime.getRuntime().maxMemory()/3400000;
 			mem=Tools.min(100000, mem);
@@ -1106,7 +1132,7 @@ public class BBSplitter {
 			String bam;
 			if(sam.endsWith(".sam.gz")){bam=sam.substring(0, sam.length()-6)+"bam";}
 			else if(sam.endsWith(".sam")){bam=sam.substring(0, sam.length()-3)+"bam";}
-			else{bam=sam;} //Hopefully, they must have outputted a bam file using samtools. 
+			else{bam=sam;} //Hopefully, they must have outputted a bam file using samtools.
 			String bam2=bam.substring(0, bam.length()-4)+"_sorted";
 			String bam3=bam2+".bam";
 			
@@ -1122,7 +1148,7 @@ public class BBSplitter {
 					tsw.println("echo \"Note: Please ignore any warnings about 'EOF marker is absent'; " +
 							"this is a bug in samtools that occurs when using piped input.\"");
 //				}
-				tsw.println("samtools view -bSh1 "+sam+" | samtools sort -m "+memstring+" -@ 3 - "+bam2);
+				tsw.println("samtools view -bShu "+sam+" | samtools sort -m "+memstring+" -@ 3 - "+bam2);
 			}else{
 				if(sam!=bam){tsw.println("samtools view -bSh1 -o "+bam+" "+sam);}
 				tsw.println("samtools sort -m "+memstring+" -@ 3 "+bam+" "+bam2);
@@ -1147,8 +1173,15 @@ public class BBSplitter {
 			name=s;
 		}
 
+		@Override
 		public boolean equals(Object other){return equals((SetCount)other);}
 		public boolean equals(SetCount other){return compareTo(other)==0;}
+		
+		@Override
+		public int hashCode() {
+			assert(false) : "This class should not be hashed.";
+			return super.hashCode();
+		}
 		
 		@Override
 		public int compareTo(SetCount o) {
@@ -1157,6 +1190,7 @@ public class BBSplitter {
 			return name.compareTo(o.name);
 		}
 		
+		@Override
 		public String toString(){
 			return name+", "+mappedReads+", "+ambiguousReads+", "+mappedBases+", "+ambiguousBases;
 		}
@@ -1164,8 +1198,10 @@ public class BBSplitter {
 		public final String name;
 		public long mappedReads;
 		public long ambiguousReads;
+		public long assignedReads;
 		public long mappedBases;
-		public long ambiguousBases;
+		public long ambiguousBases;	
+		public long assignedBases;
 		
 	}
 	
@@ -1182,20 +1218,23 @@ public class BBSplitter {
 		}
 		
 		if(header){
-			tsw.print("#name\t%unambiguousReads\tunambiguousMB\t%ambiguousReads\tambiguousMB\tunambiguousReads\tambiguousReads\n");
+			tsw.print("#name\t%unambiguousReads\tunambiguousMB\t%ambiguousReads\tambiguousMB\tunambiguousReads\tambiguousReads\tassignedReads\tassignedBases\n");
 		}
 		final StringBuilder sb=new StringBuilder(1024);
 		final double divR=100.0/(totalReads);
 		final double divB=1.0/1000000;
 		for(SetCount sc : list){
-			if(!nzo || sc.mappedReads>0 || sc.ambiguousReads>0){
+			if(!nzo || sc.mappedReads>0 || sc.ambiguousReads>0 || sc.assignedReads>0){
 				sb.append(sc.name).append('\t');
-				sb.append(String.format("%.5f\t", sc.mappedReads*divR));
-				sb.append(String.format("%.5f\t", sc.mappedBases*divB));
-				sb.append(String.format("%.5f\t", sc.ambiguousReads*divR));
-				sb.append(String.format("%.5f\t", sc.ambiguousBases*divB));
+				sb.append(String.format(Locale.ROOT, "%.5f\t", sc.mappedReads*divR));
+				sb.append(String.format(Locale.ROOT, "%.6f\t", sc.mappedBases*divB));
+				sb.append(String.format(Locale.ROOT, "%.5f\t", sc.ambiguousReads*divR));
+				sb.append(String.format(Locale.ROOT, "%.6f\t", sc.ambiguousBases*divB));
 				sb.append(sc.mappedReads).append('\t');
-				sb.append(sc.ambiguousReads).append('\n');
+				sb.append(sc.ambiguousReads).append('\t');
+				sb.append(sc.assignedReads).append('\t');
+				sb.append(sc.assignedBases);
+				sb.append('\n');
 				tsw.print(sb.toString());
 				sb.setLength(0);
 			}

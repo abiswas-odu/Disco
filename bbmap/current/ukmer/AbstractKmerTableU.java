@@ -1,15 +1,17 @@
 package ukmer;
 
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 
-import stream.ByteBuilder;
-import stream.KillSwitch;
 import dna.AminoAcid;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * @author Brian Bushnell
@@ -48,12 +50,12 @@ public abstract class AbstractKmerTableU {
 	 * @param singleton A blank array of length 1.
 	 * @return An array filled with values.  Values of -1 are invalid.
 	 */
-	public abstract int[] getValues(Kmer kmer, int[] singleton); 
+	public abstract int[] getValues(Kmer kmer, int[] singleton);
 
 	public abstract boolean contains(Kmer kmer);
 	
 //	public abstract boolean contains(Kmer kmer, int v);
-//	
+//
 //	public abstract boolean contains(Kmer kmer, int[] vals);
 //
 //	public abstract Object get(Kmer kmer);
@@ -78,24 +80,24 @@ public abstract class AbstractKmerTableU {
 	
 //	/** Returns count */
 //	public final int increment(long[] key){throw new RuntimeException();}
-//	
+//
 //	/** Returns number of entries created */
 //	public final int incrementAndReturnNumCreated(final long[] key){throw new RuntimeException();}
 //
 //	public final int set(long[] key, int value){throw new RuntimeException();}
-//	
+//
 //	public final int set(long[] key, int[] vals){throw new RuntimeException();}
-//	
+//
 //	/** Returns number of kmers added */
 //	public final int setIfNotPresent(long[] key, int value){throw new RuntimeException();}
-//	
+//
 //	/**
 //	 * Fetch the value associated with a kmer.
 //	 * @param kmer
 //	 * @return A value.  -1 means the kmer was not present.
 //	 */
 //	final int getValue(long[] key){throw new RuntimeException();}
-//	
+//
 //	/**
 //	 * Fetch the values associated with a kmer.
 //	 * @param kmer
@@ -142,11 +144,12 @@ public abstract class AbstractKmerTableU {
 	public abstract int arrayLength();
 	public abstract boolean canRebalance();
 
-	public abstract boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount);
-	public abstract boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount);
-	public abstract boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount);
+	public abstract boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount);
+	public abstract boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining);
+	public abstract boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, final int maxcount, AtomicLong remaining);
 	
 	public abstract void fillHistogram(long[] ca, int max);
+	public abstract void fillHistogram(SuperLongList sll);
 	public abstract void countGC(long[] gcCounts, int max);
 	
 	public static final int gc(long kmer){
@@ -184,78 +187,27 @@ public abstract class AbstractKmerTableU {
 	/*---------------       Allocation Methods      ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	final AtomicIntegerArray allocAtomicInt(int len){
-		AtomicIntegerArray ret=null;
-		try {
-			ret=new AtomicIntegerArray(len);
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static AtomicIntegerArray allocAtomicInt(int len){
+		return KillSwitch.allocAtomicInt(len);
 	}
 	
-	final long[] allocLong1D(int len){
-		long[] ret=null;
-		try {
-			ret=new long[len];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static long[] allocLong1D(int len){
+		return KillSwitch.allocLong1D(len);
 	}
 	
-	final long[][] allocLong2D(int mult, int len){
-		long[][] ret=null;
-		try {
-			ret=new long[mult][len];
-		} catch (OutOfMemoryError e) {
-			ret=null;
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static long[][] allocLong2D(int mult, int len){
+		return KillSwitch.allocLong2D(mult, len);
 	}
 	
-	final int[] allocInt1D(int len){
-		int[] ret=null;
-		try {
-			ret=new int[len];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static int[] allocInt1D(int len){
+		return KillSwitch.allocInt1D(len);
 	}
 	
-	final int[][] allocInt2D(int len){
-		int[][] ret=null;
-		try {
-			ret=new int[len][];
-		} catch (OutOfMemoryError e) {
-			synchronized(killMessage){
-				e.printStackTrace();
-				System.err.println(killMessage);
-				KillSwitch.killSilent();
-			}
-		}
-		return ret;
+	final static int[][] allocInt2D(int len){
+		return KillSwitch.allocInt2D(len);
 	}
 	
-	final KmerNodeU[] allocKmerNodeArray(int len){
+	final static KmerNodeU[] allocKmerNodeArray(int len){
 		KmerNodeU[] ret=null;
 		try {
 			ret=new KmerNodeU[len];
@@ -445,7 +397,7 @@ public abstract class AbstractKmerTableU {
 	static void appendKmerText(long[] array, int count, int k, ByteBuilder bb){
 		bb.setLength(0);
 		toBytes(array, count, k, bb);
-		bb.append('\n');
+		bb.nl();
 	}
 	
 	
@@ -458,11 +410,10 @@ public abstract class AbstractKmerTableU {
 	 * This allocates the data structures in multiple threads.  Unfortunately, it does not lead to any speedup, at least for ARRAY type.
 	 * @param ways
 	 * @param tableType
-	 * @param initialSize
-	 * @param growable
-	 * @return
+	 * @param schedule
+	 * @return Preallocated tables.
 	 */
-	public static final AbstractKmerTableU[] preallocate(int ways, int tableType, int initialSize, int kbig, boolean growable){
+	public static final AbstractKmerTableU[] preallocate(int ways, int tableType, int[] schedule, int k, int kbig){
 
 		final AbstractKmerTableU[] tables=new AbstractKmerTableU[ways];
 		
@@ -470,7 +421,7 @@ public abstract class AbstractKmerTableU {
 			final int t=Tools.max(1, Tools.min(Shared.threads(), 2, ways));
 			final AllocThread[] allocators=new AllocThread[t];
 			for(int i=0; i<t; i++){
-				allocators[i]=new AllocThread(tableType, initialSize, i, t, kbig, growable, tables);
+				allocators[i]=new AllocThread(tableType, schedule, i, t, k, kbig, tables);
 			}
 			for(AllocThread at : allocators){at.start();}
 			for(AllocThread at : allocators){
@@ -503,13 +454,16 @@ public abstract class AbstractKmerTableU {
 	
 	private static class AllocThread extends Thread{
 		
-		AllocThread(int type_, int initialSize_, int mod_, int div_, int kbig_, boolean growable_, AbstractKmerTableU[] tables_){
+		AllocThread(int type_, int[] schedule_, int mod_, int div_,
+				int k_, int kbig_, AbstractKmerTableU[] tables_){
 			type=type_;
-			size=initialSize_;
+			schedule=schedule_;
+			size=schedule[0];
 			mod=mod_;
 			div=div_;
-			growable=growable_;
+			growable=schedule.length>1;
 			tables=tables_;
+			k=k_;
 			kbig=kbig_;
 		}
 		
@@ -519,21 +473,24 @@ public abstract class AbstractKmerTableU {
 //				System.err.println("T"+i+" allocating "+i);
 				final AbstractKmerTableU akt;
 				if(type==FOREST1D){
-					akt=new HashForestU(size, growable, false);
+					akt=new HashForestU(size, k, growable, false);
 				}else if(type==ARRAY1D){
-					akt=new HashArrayU1D(size, kbig, growable);
+					akt=new HashArrayU1D(schedule, k, kbig);
+//					akt=new HashArrayU1D(size, k, kbig, growable);
 				}else if(type==NODE1D){
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 //					akt=new KmerNode2(-1, 0);
 				}else if(type==FOREST2D){
-					akt=new HashForestU(size, growable, true);
+					akt=new HashForestU(size, k, growable, true);
 				}else if(type==ARRAY2D){
-					akt=new HashArrayU2D(size, kbig, growable);
+					akt=new HashArrayU2D(schedule, k, kbig);
+//					akt=new HashArrayU2D(size, k, kbig, growable);
 				}else if(type==NODE2D){
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 //					akt=new KmerNode(-1, 0);
 				}else if(type==ARRAYH){
-					akt=new HashArrayUHybrid(size, kbig, growable);
+					akt=new HashArrayUHybrid(schedule, k, kbig);
+//					akt=new HashArrayUHybrid(size, k, kbig, growable);
 				}else{
 					throw new RuntimeException("Must use forest, table, or array data structure. Type="+type);
 				}
@@ -545,9 +502,11 @@ public abstract class AbstractKmerTableU {
 		}
 		
 		private final int type;
+		private final int[] schedule;
 		private final int size;
 		private final int mod;
 		private final int div;
+		private final int k;
 		private final int kbig;
 		private final boolean growable;
 		final AbstractKmerTableU[] tables;
@@ -569,6 +528,6 @@ public abstract class AbstractKmerTableU {
 	public static final int NOT_PRESENT=-1, HASH_COLLISION=-2;
 	public static final int NO_OWNER=-1;
 	
-	private final static String killMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
+	private static final String killMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
 	
 }

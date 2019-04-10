@@ -1,5 +1,4 @@
 #!/bin/bash
-#tadwrapper in=<infile>
 
 usage(){
 echo "
@@ -13,21 +12,22 @@ Usage:
 tadwrapper.sh in=reads.fq out=contigs%.fa k=31,62,93
 
 Parameters:
-out=<file>          Output file name.  Must contain a % symbol.
-outfinal=<file>     Optional.  If set, the best assembly file 
-                    will be renamed to this.
-k=31                Comma-delimited list of kmer lengths.
-delete=f            Delete assemblies before terminating.
-quitearly=f         Quit once metrics stop improving with longer kmers.
-bisect=f            Recursively assemble with the kmer midway between
-                    the two best kmers until improvement halts.
-expand=f            Recursively assemble with kmers shorter or longer
-                    than the current best until improvement halts.
+out=<file>      Output file name.  Must contain a % symbol.
+outfinal=<file> Optional.  If set, the best assembly file 
+                will be renamed to this.
+k=31            Comma-delimited list of kmer lengths.
+delete=f        Delete assemblies before terminating.
+quitearly=f     Quit once metrics stop improving with longer kmers.
+bisect=f        Recursively assemble with the kmer midway between
+                the two best kmers until improvement halts.
+expand=f        Recursively assemble with kmers shorter or longer
+                than the current best until improvement halts.
 
 All other parameters are passed to Tadpole.
 "
 }
 
+#This block allows symlinked shellscripts to correctly set classpath.
 pushd . > /dev/null
 DIR="${BASH_SOURCE[0]}"
 while [ -h "$DIR" ]; do
@@ -44,6 +44,7 @@ CP="$DIR""current/"
 z="-Xmx14g"
 z2="-Xms14g"
 EA="-ea"
+EOOM=""
 set=0
 
 if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
@@ -64,12 +65,25 @@ calcXmx () {
 calcXmx "$@"
 
 tadwrapper() {
-	if [[ $NERSC_HOST == genepool ]]; then
+	if [[ $SHIFTER_RUNTIME == 1 ]]; then
+		#Ignore NERSC_HOST
+		shifter=1
+	elif [[ $NERSC_HOST == genepool ]]; then
 		module unload oracle-jdk
-		module load oracle-jdk/1.8_64bit
+		module load oracle-jdk/1.8_144_64bit
+		module load pigz
+	elif [[ $NERSC_HOST == denovo ]]; then
+		module unload java
+		module load java/1.8.0_144
+		module load pigz
+	elif [[ $NERSC_HOST == cori ]]; then
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/jgi
+		module use /global/common/software/m342/nersc-builds/denovo/Modules/usg
+		module unload java
+		module load java/1.8.0_144
 		module load pigz
 	fi
-	local CMD="java $EA $z $z2 -cp $CP assemble.TadpoleWrapper $@"
+	local CMD="java $EA $EOOM $z $z2 -cp $CP assemble.TadpoleWrapper $@"
 	echo $CMD >&2
 	eval $CMD
 }

@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import shared.Primes;
 import shared.Timer;
 import shared.Tools;
+import structures.ByteBuilder;
 
 
 /**
@@ -22,6 +23,11 @@ import shared.Tools;
  *
  */
 public final class KCountArray7MTA extends KCountArray {
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 568264681638739631L;
 	
 	public static void main(String[] args){
 		long cells=Long.parseLong(args[0]);
@@ -297,6 +303,7 @@ public final class KCountArray7MTA extends KCountArray {
 		throw new RuntimeException("Operation not supported.");
 	}
 	
+	@Override
 	public int incrementAndReturnUnincremented(final long rawKey, final int incr){
 
 		if(verbose){System.err.println("\n*** Incrementing raw key "+rawKey+" ***");}
@@ -323,6 +330,7 @@ public final class KCountArray7MTA extends KCountArray {
 		return value;
 	}
 	
+	@Override
 	public int incrementAndReturnUnincremented(final long[] rawKeys, final int incr){
 
 		if(verbose){System.err.println("\n*** Incrementing raw keys "+Arrays.toString(rawKeys)+" ***");}
@@ -352,13 +360,15 @@ public final class KCountArray7MTA extends KCountArray {
 		return value;
 	}
 	
+	@Override
 	public long[] transformToFrequency(){
 		return transformToFrequency(matrix);
 	}
 	
-	public String toContentsString(){
-		StringBuilder sb=new StringBuilder();
-		sb.append("[");
+	@Override
+	public ByteBuilder toContentsString(){
+		ByteBuilder sb=new ByteBuilder();
+		sb.append('[');
 		String comma="";
 		for(AtomicIntegerArray array : matrix){
 			for(int i=0; i<array.length(); i++){
@@ -372,14 +382,17 @@ public final class KCountArray7MTA extends KCountArray {
 				}
 			}
 		}
-		sb.append("]");
-		return sb.toString();
+		sb.append(']');
+		return sb;
 	}
 	
+	@Override
 	public double usedFraction(){return cellsUsed()/(double)cells;}
 	
+	@Override
 	public double usedFraction(int mindepth){return cellsUsed(mindepth)/(double)cells;}
 	
+	@Override
 	public long cellsUsed(int mindepth){
 		return cellsUsedMT(mindepth);
 	}
@@ -412,6 +425,7 @@ public final class KCountArray7MTA extends KCountArray {
 			array=a_;
 			mindepth=mindepth_;
 		}
+		@Override
 		public void run(){
 			long temp=0;
 			if(array!=null){
@@ -446,12 +460,14 @@ public final class KCountArray7MTA extends KCountArray {
 	}
 	
 	
+	@Override
 	final long hash(long key, int row){
 		int cell=(int)((Long.MAX_VALUE&key)%(hashArrayLength-1));
 //		int cell=(int)(hashCellMask&(key));
 		
 		if(row==0){//Doublehash only first time
-			key=key^hashMasks[(row+4)%hashMasks.length][cell];
+			key=key^hashMasks[(row+4)&7][cell];
+//			key=key^hashMasks[4][cell];
 			cell=(int)(hashCellMask&(key>>5));
 //			cell=(int)(hashCellMask&(key>>hashBits));
 //			cell=(int)((Long.MAX_VALUE&key)%(hashArrayLength-1));
@@ -462,6 +478,19 @@ public final class KCountArray7MTA extends KCountArray {
 		return key^hashMasks[row][cell];
 	}
 	
+	
+//	@Override
+//	final long hash(long key, int row){
+//		long code=key;
+//		for(int i=0; i<6; i++){
+//			int row2=((row+i)&7);
+//			int cell=(int)(key&hashCellMask);
+//			code^=hashMasks[row2][cell];
+//			key>>=6;
+//		}
+//		return code;
+//	}
+	
 	/**
 	 * @param i
 	 * @param j
@@ -471,8 +500,8 @@ public final class KCountArray7MTA extends KCountArray {
 		
 		long seed;
 		synchronized(KCountArray7MTA.class){
-			seed=counter;
-			counter++;
+			seed=counter^SEEDMASK;
+			counter+=7;
 		}
 		
 		Timer t=new Timer();
@@ -486,12 +515,6 @@ public final class KCountArray7MTA extends KCountArray {
 		return r;
 	}
 	
-	
-	/**
-	 * @param cols
-	 * @param randy
-	 * @return
-	 */
 	private static void fillMasks(long[] r, Random randy) {
 //		for(int i=0; i<r.length; i++){
 //			long x=0;
@@ -543,8 +566,10 @@ public final class KCountArray7MTA extends KCountArray {
 	}
 	
 	
+	@Override
 	public void initialize(){}
 	
+	@Override
 	public void shutdown(){
 		if(finished){return;}
 		synchronized(this){
@@ -628,12 +653,22 @@ public final class KCountArray7MTA extends KCountArray {
 		return cellsUsed;
 	}
 	
+	@Override
 	public KCountArray prefilter(){
 		return prefilter;
 	}
 	
+	@Override
 	public void purgeFilter(){
 		prefilter=null;
+	}
+	
+	public static synchronized void setSeed(long seed){
+		if(seed>=0){SEEDMASK=seed;}
+		else{
+			Random randy=new Random();
+			SEEDMASK=randy.nextLong();
+		}
 	}
 	
 	private boolean finished=false;
@@ -652,7 +687,8 @@ public final class KCountArray7MTA extends KCountArray {
 	private static final int hashCellMask=hashArrayLength-1;
 	
 	private KCountArray prefilter;
-	
+
 	private static long counter=0;
+	private static long SEEDMASK=0;
 	
 }

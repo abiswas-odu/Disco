@@ -3,14 +3,17 @@ package stream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.Gene;
 import dna.ScafLoc;
+import shared.KillSwitch;
 import shared.Shared;
 import shared.Tools;
+import structures.ByteBuilder;
 import var2.ScafMap;
 import var2.Scaffold;
 
@@ -275,7 +278,7 @@ public class SamLine implements Serializable {
 				if(inbounds && perfect && !r1.containsNonM()){//r.containsNonM() should be unnecessary...  it's there in case of clipping...
 					cigar=(r1.length()+"=");
 //					System.err.println("SETTING cigar14="+cigar);
-//					
+//
 //					byte[] match=r.match;
 //					if(r.shortmatch()){match=Read.toLongMatchString(match);}
 //					cigar=toCigar13(match, a1, b1, scaflen, r.bases);
@@ -290,7 +293,7 @@ public class SamLine implements Serializable {
 				if(inbounds && (perfect || !r1.containsNonNMS())){
 					cigar=(r1.length()+"M");
 //					System.err.println("SETTING cigar13="+cigar);
-//					
+//
 //					byte[] match=r.match;
 //					if(r.shortmatch()){match=Read.toLongMatchString(match);}
 //					cigar=toCigar13(match, a1, b1, scaflen, r.bases);
@@ -318,7 +321,7 @@ public class SamLine implements Serializable {
 //		rnext=(r2==null ? stringstar : (r.mapped() && !r2.mapped()) ? "chr"+Gene.chromCodes[r.chrom] : "chr"+Gene.chromCodes[r2.chrom]);
 		rnext=((r2==null || (!r1.mapped() && !r2.mapped())) ? bytestar : (r1.mapped() && r2.mapped()) ? (sameScaf ? byteequals : name2) : byteequals);
 		
-		assert(rnext!=byteequals || name1==name2 || name1==bytestar || name2==bytestar) : 
+		assert(rnext!=byteequals || name1==name2 || name1==bytestar || name2==bytestar) :
 			new String(rname)+", "+new String(rnext)+", "+new String(name1)+", "+new String(name2)+"\n"+r1+"\n"+r2;
 		
 //		assert(r1.pairnum()==0) : r1.mapped()+", "+r2.mapped()+"fragNum="+fragNum+
@@ -344,7 +347,7 @@ public class SamLine implements Serializable {
 //		}else{
 //			//They overlap... a lot.  Physically shorter than read length.
 //			if(r.start<=r2.start){
-//				
+//
 //			}else{
 //				tlen=-tlen;
 //			}
@@ -411,7 +414,7 @@ public class SamLine implements Serializable {
 			}
 		}
 		
-		
+		trimNames();
 		optional=makeOptionalTags(r1, r2, perfect, scafloc, scaflen, inbounds, inbounds2);
 //		assert(r.pairnum()==1) : "\n"+r.toText(false)+"\n"+this+"\n"+r2;
 	}
@@ -436,17 +439,17 @@ public class SamLine implements Serializable {
 //		} catch (NumberFormatException e) {
 //			System.err.println(Arrays.toString(s));
 //		}
-		mapq=Character.isDigit(s[4].charAt(0)) ? Integer.parseInt(s[4]) : 99; //Added for non-compliant mappers that put * here
+		mapq=Tools.isDigit(s[4].charAt(0)) ? Integer.parseInt(s[4]) : 99; //Added for non-compliant mappers that put * here
 		cigar=s[5];
 		rnext=s[6].getBytes();
 		pnext=(s[7].charAt(0)=='*' ? 0 : Integer.parseInt(s[7]));
-		tlen=Character.isDigit(s[8].charAt(0)) ? Integer.parseInt(s[8]) : 0; //Added for non-compliant mappers that put * here
+		tlen=Tools.isDigit(s[8].charAt(0)) ? Integer.parseInt(s[8]) : 0; //Added for non-compliant mappers that put * here
 //		seq=s[9];
 //		qual=s[10];
 		seq=(s[9].equals(stringstar) ? null : s[9].getBytes());
 		qual=(s[10].equals(stringstar) ? null : s[10].getBytes());
 		
-		if(mapped() && strand()==Gene.MINUS){
+		if(mapped() && strand()==Shared.MINUS){
 			if(seq!=bytestar){AminoAcid.reverseComplementBasesInPlace(seq);}
 			if(qual!=bytestar){Tools.reverseInPlace(qual);}
 		}
@@ -471,6 +474,8 @@ public class SamLine implements Serializable {
 				optional.add(s[i]);
 			}
 		}
+		
+		trimNames();
 	}
 	
 	public SamLine(byte[] s){
@@ -555,7 +560,7 @@ public class SamLine implements Serializable {
 		assert((seq==bytestar)==(Tools.equals(seq, bytestar)));
 		assert((qual==bytestar)==(Tools.equals(qual, bytestar)));
 		
-		if(mapped() && strand()==Gene.MINUS){
+		if(mapped() && strand()==Shared.MINUS){
 			if(seq!=bytestar){AminoAcid.reverseComplementBasesInPlace(seq);}
 			if(qual!=bytestar){Tools.reverseInPlace(qual);}
 		}
@@ -596,6 +601,29 @@ public class SamLine implements Serializable {
 				a=b;
 			}
 		}
+		
+		trimNames();
+	}
+	
+	public void trimNames(){
+//		System.err.println();
+//		System.err.println("rname= "+new String(rname));
+//		System.err.println("qname= "+new String(qname));
+		if(Shared.TRIM_RNAME){
+			if(RNAME_AS_BYTES){
+				setRname(Tools.trimToWhitespace(rname()));
+				setRnext(Tools.trimToWhitespace(rnext()));
+			}else{
+				setRname(Tools.trimToWhitespace(rnameS()));
+				setRnext(Tools.trimToWhitespace(rnext()));
+			}
+		}
+		if(Shared.TRIM_READ_COMMENTS){
+			qname=(Tools.trimToWhitespace(qname));
+		}
+//		System.err.println("rname2="+new String(rname));
+//		System.err.println("qname2="+new String(qname));
+//		assert(false) : Shared.TRIM_RNAME+", "+Shared.TRIM_READ_COMMENTS+", "+new String(rname)+", "+qname;
 	}
 	
 	public static final int parseFlagOnly(byte[] s){
@@ -633,7 +661,7 @@ public class SamLine implements Serializable {
 	
 	public static String toCigar13(byte[] match, int readStart, int readStop, int reflen, byte[] bases){
 		if(match==null || readStart==readStop){return null;}
-		StringBuilder sb=new StringBuilder(8);
+		ByteBuilder sb=new ByteBuilder(8);
 		int count=0;
 		char mode='=';
 		char lastMode='=';
@@ -652,7 +680,7 @@ public class SamLine implements Serializable {
 				mode='S'; //soft-clip out-of-bounds
 				if(m!='I'){refloc++;}
 				if(m=='D'){sfdflag=true;} //Don't add soft-clip count for deletions!
-			}else if(m=='m' || m=='s' || m=='S' || m=='N' || m=='B'){//Little 's' is for a match classified as a sub to improve the affine score.  
+			}else if(m=='m' || m=='s' || m=='S' || m=='N' || m=='B'){//Little 's' is for a match classified as a sub to improve the affine score.
 				mode='M';
 				refloc++;
 			}else if(m=='I' || m=='X' || m=='Y'){
@@ -702,11 +730,11 @@ public class SamLine implements Serializable {
 
 		int current=0;
 		int mcount=0;
-		StringBuilder sb=new StringBuilder(len);
+		ByteBuilder sb=new ByteBuilder(len);
 		
 		for(int i=0; i<len; i++){
 			char b=cigar14.charAt(i);
-			if(Character.isDigit(b)){
+			if(Tools.isDigit(b)){
 				current=(10*current)+(b-'0');
 			}else{
 				if(b=='X' || b=='=' || b=='M'){
@@ -736,7 +764,7 @@ public class SamLine implements Serializable {
 	public static String toCigar14(byte[] match, int readStart, int readStop, int reflen, byte[] bases){
 //		assert(false) : readStart+", "+readStop+", "+reflen;
 		if(match==null || readStart==readStop){return null;}
-		StringBuilder sb=new StringBuilder(8);
+		ByteBuilder sb=new ByteBuilder(8);
 		int count=0;
 		char mode='=';
 		char lastMode='=';
@@ -755,7 +783,7 @@ public class SamLine implements Serializable {
 				mode='S'; //soft-clip out-of-bounds
 				if(m!='I'){refloc++;}
 				if(m=='D'){sfdflag=true;} //Don't add soft-clip count for deletions!
-			}else if(m=='m' || m=='s'){//Little 's' is for a match classified as a sub to improve the affine score.  
+			}else if(m=='m' || m=='s'){//Little 's' is for a match classified as a sub to improve the affine score.
 				mode='=';
 				refloc++;
 			}else if(m=='S' || m=='V'){
@@ -818,14 +846,14 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 			}else{
 				if(c=='M' || c=='=' || c=='X' || c=='D' || c=='N'){
 					len+=current;
 				}else if(c=='S'){
 					if(includeSoftClip){len+=current;}
-				}else if (c=='H'){ 
+				}else if (c=='H'){
 					//In this case, the base string is the wrong length since letters were truncated.
 					//Therefore, the bases cannot be used for calling variations after mapping.
 					//Hard clipping messes up original location verification.
@@ -853,14 +881,14 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 			}else{
 				if(c=='M' || c=='=' || c=='X' || c=='I'){
 					len+=current;
 				}else if(c=='D' || c=='N'){
 					//do nothing
-				}else if (c=='H'){ 
+				}else if (c=='H'){
 					if(includeHardClip){len+=current;}
 				}else if(c=='S'){
 					if(includeSoftClip){len+=current;}
@@ -883,7 +911,7 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isLetter(c) || c=='='){
+			if(Tools.isLetter(c) || c=='='){
 				if(c=='H'){
 					if(includeHardClip){
 						len+=current;
@@ -914,7 +942,7 @@ public class SamLine implements Serializable {
 		int i;
 		for(i=last-1; i>=0; i--){
 			char c=cigar.charAt(i);
-			if(Character.isLetter(c) || c=='='){
+			if(Tools.isLetter(c) || c=='='){
 				break;
 			}
 			len+=(len+(c-'0')*mult);
@@ -933,7 +961,7 @@ public class SamLine implements Serializable {
 		int i;
 		for(i=last-1; i>=0; i--){
 			char c=cigar.charAt(i);
-			if(Character.isLetter(c) || c=='='){
+			if(Tools.isLetter(c) || c=='='){
 				break;
 			}
 			len+=(len+(c-'0')*mult);
@@ -956,14 +984,14 @@ public class SamLine implements Serializable {
 			if(mdTag.startsWith("MD:Z:")){i=5;}
 			for(final int max=mdTag.length(); i<max; i++){
 				char c=mdTag.charAt(i);
-				if(Character.isDigit(c)){
+				if(Tools.isDigit(c)){
 					current=(current*10)+(c-'0');
 					mode=NORMAL;
 				}else{
 					if(current>0){
 						if(mode==NORMAL){normals+=current;}
 						else{assert(false) : mode+", "+current;}
-						current=0;	
+						current=0;
 					}
 					if(c=='^'){mode=DEL;}
 					else if(mode==DEL){
@@ -985,7 +1013,7 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int mloc=0; mloc<match.length; mloc++){
 			byte b=match[mloc];
-			if(Character.isDigit(b)){
+			if(Tools.isDigit(b)){
 				current=current*10+(b-'0');
 			}else{
 				if(current>0){
@@ -1008,7 +1036,7 @@ public class SamLine implements Serializable {
 		int mloc=0;
 		for(; mloc<match.length; mloc++){
 			byte b=match[mloc];
-			if(b!='C' && !Character.isDigit(b)){return mloc;}
+			if(b!='C' && !Tools.isDigit(b)){return mloc;}
 		}
 		return match.length;
 	}
@@ -1019,7 +1047,7 @@ public class SamLine implements Serializable {
 		int clips=0;
 		for(int mloc=match.length-1; mloc>=0; mloc--){
 			byte b=match[mloc];
-			assert(!Character.isDigit(b));
+			assert(!Tools.isDigit(b)) : new String(match);
 			if(b=='C'){
 				clips++;
 			}else{
@@ -1037,7 +1065,7 @@ public class SamLine implements Serializable {
 		int cloc=0;
 		for(int mloc=0; mloc<match.length && rloc<0; mloc++){
 			byte b=match[mloc];
-			assert(!Character.isDigit(b));
+			assert(!Tools.isDigit(b));
 			if(b=='D'){
 				dels++;
 				rloc++;
@@ -1060,7 +1088,7 @@ public class SamLine implements Serializable {
 		int cloc=0;
 		for(int mloc=match.length; mloc>=0 && rloc>=rlen; mloc--){
 			byte b=match[mloc];
-			assert(!Character.isDigit(b));
+			assert(!Tools.isDigit(b));
 			if(b=='D'){
 				dels++;
 				rloc--;
@@ -1086,7 +1114,7 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 			}else{
 				if(c=='M' || c=='='){
@@ -1117,7 +1145,7 @@ public class SamLine implements Serializable {
 		int current=0;
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 			}else{
 				if(c=='M' || c=='='){
@@ -1138,7 +1166,7 @@ public class SamLine implements Serializable {
 	}
 	
 	/**
-	 * @param cigar
+	 * @param allowM Allow M symbols in the cigar string
 	 * @return Match string of this cigar string when possible, otherwise null.
 	 * Takes into account MD tag and bases, but not reference (other than in MD tag).
 	 */
@@ -1147,9 +1175,11 @@ public class SamLine implements Serializable {
 		if(allowM){return cigarToShortMatch_old(cigar, allowM);}
 		
 //		System.err.println("\nInput: cigar="+cigar+", MD="+mdTag());//123
-		
-		final boolean processMD;
-		boolean foundXE=false;
+
+		final boolean fixMatchSubs;
+		final boolean fixMatchNs;
+		boolean foundE=false;
+		boolean foundX=false;
 		boolean foundM=false;
 //		System.err.println("Block 1.");//123
 		{
@@ -1157,7 +1187,7 @@ public class SamLine implements Serializable {
 			for(int i=0; i<cigar.length(); i++){
 				char c=cigar.charAt(i);
 
-				if(Character.isDigit(c)){
+				if(Tools.isDigit(c)){
 					current=(current*10)+(c-'0');
 				}else{
 
@@ -1166,7 +1196,8 @@ public class SamLine implements Serializable {
 					}else if(c=='P'){
 						return null; //Undefined symbol
 					}
-					foundXE|=(c=='=' || c=='X');
+					foundE|=(c=='=');
+					foundX|=(c=='X');
 					foundM|=(c=='M');
 
 					total+=current;
@@ -1174,42 +1205,65 @@ public class SamLine implements Serializable {
 				}
 			}
 			if(total<1){return null;}
-			processMD=(!allowM && !foundXE && foundM);
+			fixMatchSubs=(!allowM && foundM && !foundX && !foundE);//Note: allowM already exited.
+			fixMatchNs=(FIX_MATCH_NS && foundX && !foundM); //Means no-calls are possibly marked as X, which is technically OK.
 
 //			System.err.println("allowM="+allowM);//123
-//			System.err.println("foundXE="+foundXE);//123
+//			System.err.println("foundE="+foundE);//123
+//			System.err.println("foundX="+foundX);//123
 //			System.err.println("foundM="+foundM);//123
 		}
-		final int baseNocalls=(seq==null ? -1 : Read.countNocalls(seq));
 		
 //		System.err.println("Block 2.");//123
 		final String mdTag;
 		final int mdSubs;
-		final String md0=processMD ? mdTag() : null;
-		final byte[] refBases; 
-		if(md0!=null){
-			mdSubs=countMdSubs(md0);
-			mdTag=(mdSubs==0 ? null : md0);
-			refBases=null;
-		}else{
-			mdTag=null;
-			mdSubs=-1;
-			if(processMD){
-				assert(false) : "TODO: Encountered a read with 'M' in cigar string but no MD tag.";
-				ScafMap map=ScafMap.defaultScafMap;
-				if(map==null){return null;}
-				Scaffold scaf=map.getScaffold(rnameS);
-				assert(scaf!=null);
-				refBases=scaf.bases;
-				if(refBases==null){return null;}
-			}else{
+		final byte[] refBases;
+		
+		//1) if fixMatch, grab MD tag
+		//2) if MD and no subs, return
+		//3) grab ref bases
+		
+		if(fixMatchSubs || fixMatchNs){
+			final String md0=mdTag();
+			mdSubs=(md0==null ? -1 : countMdSubs(md0));
+			if(mdSubs==0 && !fixMatchNs){
 				refBases=null;
+				mdTag=null;
+			}else{
+				mdTag=md0;
+				if(mdTag!=null && PREFER_MDTAG){
+					refBases=null;
+				}else{
+					ScafMap map=ScafMap.defaultScafMap();
+					assert(!fixMatchSubs || mdTag!=null || map!=null) : "TODO: Encountered a read with 'M' in cigar string but no MD tag and no ScafMap loaded.\n"
+							+ "This can normally be resolved by adding the flag ref=file, where file is the fasta file to which the reads were mapped.\n\n"+this;
+					if(map==null){
+						refBases=null;
+					}else{
+						Scaffold scaf=map.getScaffold(rnameS());
+						assert(!fixMatchSubs || mdTag!=null || scaf!=null) : "Encountered a read with 'M' in cigar string but no scaffold loaded for "+rnameS();
+						if(scaf==null){
+							refBases=null;
+						}else{
+							refBases=scaf.bases;
+							assert(!fixMatchSubs || mdTag!=null || refBases!=null) : "Encountered a read with 'M' in cigar string but no ref bases loaded for "+rnameS();
+							if(fixMatchSubs && refBases==null && mdTag==null){
+								return null;
+							}
+						}
+					}
+				}
 			}
+		}else{
+			mdSubs=-1;
+			mdTag=null;
+			refBases=null;
 		}
+		
 //		System.err.println("mdTag="+mdTag);//123
 //		System.err.println("mdSubs="+mdSubs);//123
 		
-		char mSymbol=((foundXE || !foundM) ? 'N' : mdSubs>=0 ? 'm' : 'N');
+		char mSymbol=((foundX || foundE || !foundM) ? 'N' : mdSubs>=0 ? 'm' : 'N');
 		
 //		System.err.println("Block 3.");//123
 		final byte[] match0;
@@ -1218,7 +1272,7 @@ public class SamLine implements Serializable {
 			int current=0;
 			for(int cpos=0, max=cigar.length(); cpos<max; cpos++){
 				char c=cigar.charAt(cpos);
-				if(Character.isDigit(c)){
+				if(Tools.isDigit(c)){
 					current=(current*10)+(c-'0');
 				}else{
 					if(c=='='){
@@ -1237,7 +1291,6 @@ public class SamLine implements Serializable {
 						sb.append('C');
 						if(current>1){sb.append(current);}
 					}else if(c=='M'){
-						//					sb.append('B');
 						sb.append(mSymbol);
 						if(current>1){sb.append(current);}
 					}
@@ -1249,102 +1302,121 @@ public class SamLine implements Serializable {
 		}
 		
 //		System.err.println("Block 4.");//123
-		if((!processMD || mdSubs<1) && (baseNocalls<1)){return match0;}
-		assert((mdTag!=null && processMD && mdSubs>0) || baseNocalls>0);
+		
+		if((!fixMatchSubs || mdSubs==0) && (!fixMatchNs || seq==null || refBases==null)){return match0;}
+		assert(((mdTag!=null || refBases!=null) && fixMatchSubs && mdSubs!=0) || fixMatchNs /*|| noCalls>0*/) : 
+			(mdTag!=null)+", "+(refBases!=null)+", "+(fixMatchSubs)+", "+(mdSubs!=0)+", "+fixMatchNs/*+", "+(noCalls)*/;
+		
+//		assert(false) : mdTag+", "+refBases+", "+processMD+", "+mdSubs+"\n"+this;
 		
 //		System.err.println("processMD="+processMD+", mdSubs="+mdSubs+", mdTag="+mdTag);//123
 		
 		final byte[] bases;
-		if(seq!=null && baseNocalls>0){
-			bases=(strand()==1) ? AminoAcid.reverseComplementBases(seq) : seq;
+		if(refBases!=null){
+//			bases=(strand()==1) ? AminoAcid.reverseComplementBases(seq) : seq;//Why not reverse in place?
+			if(strand()==1){AminoAcid.reverseComplementBasesInPlace(seq);}
+			bases=seq;
 		}else{bases=null;}
 
 //		System.err.println("Block 5.");//123
 		final byte[] longmatch=Read.toLongMatchString(match0);
+
+//		final int noCalls=((foundE || foundX) && foundM ? 1 : seq==null ? -1 : Read.countNocalls(seq));
 		
-		if(baseNocalls>0){
-			int bpos=0;
-			for(int mpos=0; mpos<longmatch.length; mpos++){
-				final byte m=longmatch[mpos];
-				if(m=='C'){
-					bpos++;
-				}else if(m=='m' || m=='s' || m=='S' || m=='N'){
-					if(!AminoAcid.isFullyDefined(bases[bpos])){longmatch[mpos]='N';}
-					bpos++;
-				}else if(m=='I' || m=='X' || m=='Y'){
-					bpos++;
-				}else if(m=='D'){
-					//do nothing
-				}else{
-					assert(false) : m;
+//		System.err.println("Block 6");//123
+		
+		if(mdTag!=null && (refBases==null || PREFER_MDTAG)){
+//			System.err.println("match="+new String(longmatch));//123
+
+			final int noCalls=seq==null ? -1 : Read.countNocalls(seq);
+			if(noCalls>0 && bases!=null && refBases==null){//Not necessary if ref sequence is present
+				int bpos=0;
+				for(int mpos=0; mpos<longmatch.length; mpos++){
+					final byte m=longmatch[mpos];
+					if(m=='C'){
+						bpos++;
+					}else if(m=='m' || m=='s' || m=='S' || m=='N'){
+						if(!AminoAcid.isFullyDefined(bases[bpos])){longmatch[mpos]='N';}
+						bpos++;
+					}else if(m=='I' || m=='X' || m=='Y'){
+						bpos++;
+					}else if(m=='D'){
+						//do nothing
+					}else{
+						assert(false) : m;
+					}
 				}
 			}
-		}
-		
-		final byte[] match;
-//		System.err.println("Block 6");//123
-		if(mdTag!=null){
-//			System.err.println("match="+new String(longmatch));//123
-			final MDWalker walker=new MDWalker(mdTag, longmatch);
+			
+			final MDWalker walker=new MDWalker(mdTag, cigar, longmatch, this);
 			
 			walker.fixMatch(bases);
-			
-//			assert((seq==null || Read.calcMatchLength(longmatch)==seq.length)) : 
-//				seq.length+", "+Read.calcMatchLength(longmatch)+"\n"+new String(longmatch)+"\n"
-//						+ new String(Read.toShortMatchString(longmatch))+"\n"+mdTag+"\n"+cigar;
-			
-//			//Position in bases
-//			int bpos=0;
-//			//Position in bases, excluding clips and insertions
-//			int bpos2=0;
-//			//Position in match
-//			int mpos=0;
-//			//Position in match, excluding clips and insertions
-//			int mpos2=0;
-//			
-////			assert(false) : "\n"+new String(longmatch);
-//			
-//			while(walker.nextSub()){
-////				System.err.println("Called nextSub(): "+walker.matchPosition()+", "+walker.symbol());//123
-//				final int subPos=walker.matchPosition();
-//				final byte subBase=(byte)walker.symbol();
-//				while(mpos2<subPos){
-//					assert(mpos<longmatch.length) : subPos+", "+mpos2+", "+mpos;
-//					final byte m=longmatch[mpos];
-//					mpos++;
-//					if(m=='C'){ //Do nothing for clipped bases
-//						mpos2++;
-//						bpos++;
-//					}else if(m=='m' || m=='s' || m=='S' || m=='N'){
-//						mpos2++;
-//						bpos++;
-//						bpos2++;
-//					}else if(m=='I' || m=='X' || m=='Y'){
-//						bpos++;
-//					}else if(m=='D'){
-//						mpos2++;
-//					}else{
-//						assert(false) : m;
-//					}
-//				}
-////				System.err.println(mpos+", "+mpos2+", "+bpos+", "+bpos2+", "+subPos);//123
-//				assert(mpos2==subPos) : this.toString();
-//				if(bases!=null && !AminoAcid.isFullyDefined(bases[bpos])){
-//					longmatch[mpos]='N';
-//				}else if(!AminoAcid.isFullyDefined(subBase)){
-//					longmatch[mpos]='N';
-//				}else{
-//					assert(bases==null || bases[bpos]!=subBase) : this.toString();
-//					longmatch[mpos]='S';
-//				}
-////				System.err.println("match="+new String(longmatch));//123
-//			}
+		}else
+		if(refBases!=null){
+			final int refStart=start(true, false);
+			fixMatch(bases, refBases, longmatch, refStart, false);
 		}
-		match=Read.toShortMatchString(longmatch);
+		
+//		else if(refBases!=null){
+//			final int refStart=start(true, false);
+//			fixMatch(bases, refBases, longmatch, refStart, false);
+//		}
+		else{
+			assert(false) : "Fallthorugh.";
+		}
+		
+		final byte[] match=Read.toShortMatchString(longmatch);
+		
+		if(bases!=null && strand()==1){AminoAcid.reverseComplementBasesInPlace(seq);}
 		
 //		System.err.println("Block 7.");//123
 //		System.err.println("Returning "+new String(match));//123
 		return match;
+	}
+	
+	/** Requires longmatch.
+	 * Replaces M  */
+	public static void fixMatch(byte[] call, byte[] ref, byte[] match, int refstart, boolean unClip){
+		for(int mpos=0, rpos=refstart, cpos=0; mpos<match.length; mpos++){
+			assert(cpos>=0 && cpos<call.length) : "\n"+new String(match)+"\n"+new String(call)+"\n"+mpos+", "+cpos;
+			final byte m=match[mpos];
+			
+			if(rpos<0 || rpos>=ref.length){
+				if(m=='I'){
+					assert(false) : "Insertion off scaffold end: "+refstart+", "+ref.length+"\n"+new String(call)+"\n"+new String(match);
+					cpos++;
+				}else if(m=='D'){
+					assert(false) : "Deletion off scaffold end: "+refstart+", "+ref.length+"\n"+new String(call)+"\n"+new String(match);
+					rpos++;	
+				}else{
+					match[mpos]='C';
+					rpos++;
+					cpos++;
+				}
+			}else if(m=='m' || m=='S' || m=='N' || m=='s' || (m=='C' && unClip)){
+				final byte c=Tools.toUpperCase(call[cpos]);
+				final byte r=Tools.toUpperCase(ref[rpos]);
+				final boolean defined=(AminoAcid.isFullyDefined(c) && AminoAcid.isFullyDefined(r));
+				if(!defined){
+					match[mpos]='N';
+				}else if(c==r){
+					match[mpos]='m';
+				}else{
+					match[mpos]='S';
+				}
+				rpos++;
+				cpos++;
+			}else if(m=='C'){ //Do nothing for clipped call
+				rpos++;
+				cpos++;
+			}else if(m=='I' || m=='X' || m=='Y'){
+				cpos++;
+			}else if(m=='D'){
+				rpos++;
+			}else{
+				assert(false) : Character.toString((char)m);
+			}
+		}
 	}
 	
 	/**
@@ -1358,7 +1430,7 @@ public class SamLine implements Serializable {
 		
 		for(int i=0; i<cigar.length(); i++){
 			char c=cigar.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				current=(current*10)+(c-'0');
 			}else{
 				if(c=='='){
@@ -1407,7 +1479,7 @@ public class SamLine implements Serializable {
 	public static String makeIdentityTag(byte[] match, boolean perfect){
 		if(perfect){return "YI:f:100";}
 		float f=Read.identity(match);
-		return String.format("YI:f:%.2f", (100*f));
+		return String.format(Locale.ROOT, "YI:f:%.2f", (100*f));
 	}
 	
 	public static String makeScoreTag(int score){
@@ -1427,7 +1499,7 @@ public class SamLine implements Serializable {
 	private String makeXSTag(Read r){
 		if(r.mapped() && cigar!=null && cigar.indexOf('N')>=0){
 //			System.err.println("For read "+r.pairnum()+" mapped to strand "+r.strand());
-			boolean plus=(r.strand()==Gene.PLUS); //Assumes secondstrand=false
+			boolean plus=(r.strand()==Shared.PLUS); //Assumes secondstrand=false
 //			System.err.println("plus="+plus);
 			if(r.pairnum()!=0){plus=!plus;}
 //			System.err.println("plus="+plus);
@@ -1441,7 +1513,7 @@ public class SamLine implements Serializable {
 	
 	public static String makeMdTag(int chrom, int refstart, byte[] match, byte[] call, int scafloc, int scaflen){
 		if(match==null || chrom<0){return null;}
-		StringBuilder md=new StringBuilder(8);
+		ByteBuilder md=new ByteBuilder(8);
 		md.append("MD:Z:");
 		
 		ChromosomeArray cha=Data.getChromosome(chrom);
@@ -1530,7 +1602,7 @@ public class SamLine implements Serializable {
 		int len=0;
 		for(int i=0; i<cig.length(); i++){
 			char c=cig.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				len=len*10+(c-'0');
 			}else{
 				assert(c!='S' || i<cig.length()-1);//ban entirely soft-clipped reads
@@ -1543,14 +1615,14 @@ public class SamLine implements Serializable {
 	public static int calcRightClip(String cig, String id){
 		if(cig==null || cig.length()<1 || cig.charAt(cig.length()-1)!='S'){return 0;}
 		int pos=cig.length()-2;
-		for(; pos>=0 && Character.isDigit(cig.charAt(pos)); pos--){}
+		for(; pos>=0 && Tools.isDigit(cig.charAt(pos)); pos--){}
 		
 		assert(pos>0) : cig+", id="+id+", pos="+pos;//ban entirely soft-clipped reads
 		
 		int len=0;
 		for(int i=pos+1; i<cig.length(); i++){
 			char c=cig.charAt(i);
-			if(Character.isDigit(c)){
+			if(Tools.isDigit(c)){
 				len=len*10+(c-'0');
 			}else{
 				return (c=='S') ? len : 0;
@@ -1579,7 +1651,7 @@ public class SamLine implements Serializable {
 //				int len=0;
 //				for(int i=0; i<cigar.length(); i++){
 //					char c=cigar.charAt(i);
-//					if(Character.isDigit(c)){
+//					if(Tools.isDigit(c)){
 //						len=len*10+(c-'0');
 //					}else{
 //						if(c=='X' || c=='I' || c=='D' || c=='M'){
@@ -1667,7 +1739,7 @@ public class SamLine implements Serializable {
 				if(xs!=null){
 					optionalTags.add(xs);
 					assert(r2==null || r.pairnum()!=r2.pairnum());
-					//					assert(r2==null || !r2.mapped() || r.strand()==r2.strand() || makeXSTag(r2)==xs) : 
+					//					assert(r2==null || !r2.mapped() || r.strand()==r2.strand() || makeXSTag(r2)==xs) :
 					//						"XS problem:\n"+r+"\n"+r2+"\n"+xs+"\n"+makeXSTag(r2)+"\n";
 				}
 			}
@@ -1694,7 +1766,7 @@ public class SamLine implements Serializable {
 			if(MAKE_SCORE_TAG && r.mapped()){optionalTags.add(makeScoreTag(r.mapScore));}
 
 			if(MAKE_INSERT_TAG && r2!=null){
-				if(r.mapped() ||r.originalSite!=null){
+				if((r.mapped() && r.paired()) || r.originalSite!=null){
 					optionalTags.add("X8:Z:"+r.insertSizeMapped(false)+(r.originalSite==null ? "" : ","+r.insertSizeOriginalSite()));
 				}
 			}
@@ -1714,7 +1786,7 @@ public class SamLine implements Serializable {
 		if(MAKE_CUSTOM_TAGS){
 			int sites=r.numSites() + (r.originalSite==null ? 0 : 1);
 			if(sites>0){
-				StringBuilder sb=new StringBuilder();
+				ByteBuilder sb=new ByteBuilder();
 				sb.append("X1:Z:");
 				if(r.sites!=null){
 					for(SiteScore ss : r.sites){
@@ -1770,13 +1842,13 @@ public class SamLine implements Serializable {
 	
 	/** Length of read bases */
 	public int length(){
-		assert((seq!=null && (seq.length!=1 || seq[0]!='*')) || cigar!=null) : 
+		assert((seq!=null && (seq.length!=1 || seq[0]!='*')) || cigar!=null) :
 			"This program requires bases or a cigar string for every sam line.  Problem line:\n"+this+"\n";
 		return seq==null ? calcCigarBases(cigar, true, false) : seq.length;
 	}
 	
 //	public int length(boolean includeSoftClip){
-//		assert((seq!=null && (seq.length!=1 || seq[0]!='*')) || cigar!=null) : 
+//		assert((seq!=null && (seq.length!=1 || seq[0]!='*')) || cigar!=null) :
 //			"This program requires bases or a cigar string for every sam line.  Problem line:\n"+this+"\n";
 //		return seq==null ? calcCigarBases(cigar, includeSoftClip, false) : seq.length;
 //	}
@@ -1813,7 +1885,7 @@ public class SamLine implements Serializable {
 			int trueStop=Integer.parseInt(answer[4]);
 //			for(int i=0; i<quals.length; i++){quals[i]-=33;}
 //			Read r=new Read(seq.getBytes(), trueChrom, trueStrand, trueLoc, trueStop, qname, quals, false, id);
-			Read r=new Read(seq, trueChrom, trueStrand, trueLoc, trueStop, qname, qual, id);
+			Read r=new Read(seq, qual, qname, id, trueStrand, trueChrom, trueLoc, trueStop);
 			return r;
 		} catch (NumberFormatException e) {
 			// TODO Auto-generated catch block
@@ -1823,7 +1895,8 @@ public class SamLine implements Serializable {
 	}
 	
 	public long parseNumericId(){
-		return Long.parseLong(qname.substring(0, qname.indexOf('_')));
+//		return Long.parseLong(qname.substring(0, qname.indexOf('_')));
+		return Long.parseLong(qname.split("_")[1]);
 	}
 	
 	public Read toRead(boolean parseCustom){
@@ -1837,23 +1910,36 @@ public class SamLine implements Serializable {
 		boolean synthetic=false;
 		
 		if(parseCustom){
-			try {
-				String[] answer=qname.split("_");
-				numericId_=Long.parseLong(answer[0]);
-				int trueChrom=Gene.toChromosome(answer[1]);
-				byte trueStrand=Byte.parseByte(answer[2]);
-				int trueLoc=Integer.parseInt(answer[3]);
-				int trueStop=Integer.parseInt(answer[4]);
-				
-				originalSite=new SiteScore(trueChrom, trueStrand, trueLoc, trueStop, 0, 0);
-				synthetic=true;
-				
-			} catch (NumberFormatException e) {
-				System.err.println("Failed to parse "+qname);
-			} catch (NullPointerException e) {
-				System.err.println("Bad read with no name.");
-				return null;
-			}
+			
+			
+			Header h=new Header(qname, pairnum());
+			
+			numericId_=h.id;
+			int trueChrom=h.bbchrom;
+			byte trueStrand=(byte)h.strand;
+			int trueLoc=h.bbstart;
+			int trueStop=h.bbstop();
+			
+			originalSite=new SiteScore(trueChrom, trueStrand, trueLoc, trueStop, 0, 0);
+			synthetic=true;
+			
+//			try {
+//				String[] answer=qname.split("_");
+//				numericId_=Long.parseLong(answer[0]);
+//				int trueChrom=Gene.toChromosome(answer[1]);
+//				byte trueStrand=Byte.parseByte(answer[2]);
+//				int trueLoc=Integer.parseInt(answer[3]);
+//				int trueStop=Integer.parseInt(answer[4]);
+//				
+//				originalSite=new SiteScore(trueChrom, trueStrand, trueLoc, trueStop, 0, 0);
+//				synthetic=true;
+//				
+//			} catch (NumberFormatException e) {
+//				System.err.println("Failed to parse "+qname);
+//			} catch (NullPointerException e) {
+//				System.err.println("Bad read with no name.");
+//				return null;
+//			}
 		}
 //		assert(false) : originalSite;
 		
@@ -1862,7 +1948,7 @@ public class SamLine implements Serializable {
 			
 		}
 		
-		int chrom_=-1; 
+		int chrom_=-1;
 		byte strand_=strand();
 		int start_=start(true, includeHardClip);
 		int stop_=stop(start_, true, includeHardClip);
@@ -1903,7 +1989,7 @@ public class SamLine implements Serializable {
 			byte[] seqX=(seq==null || (seq.length==1 && seq[0]=='*')) ? null : seq;
 			byte[] qualX=(qual==null || (qual.length==1 && qual[0]=='*')) ? null : qual;
 			String qnameX=(qname==null || qname.equals(stringstar)) ? null : qname;
-			r=new Read(seqX, chrom_, strand_, start_, stop_, qnameX, qualX, numericId_);
+			r=new Read(seqX, qualX, qnameX, numericId_, strand_, chrom_, start_, stop_);
 		}
 		
 		r.setMapped(mapped());
@@ -2013,6 +2099,8 @@ public class SamLine implements Serializable {
 		return len;
 	}
 	
+	public ByteBuilder toText(){return toBytes((ByteBuilder)null);}
+	
 	public ByteBuilder toBytes(ByteBuilder bb){
 		
 		final int buflen=Tools.max(rnameLen(), (rnext==null ? 1 : rnext.length), (seq==null ? 1 : seq.length), (qual==null ? 1 : qual.length));
@@ -2022,24 +2110,23 @@ public class SamLine implements Serializable {
 		bb.append(flag).append('\t');
 		if(RNAME_AS_BYTES){
 			assert(!(rname==null && rnameS!=null));
-			append(bb, rname).append('\t');
+			appendTo(bb, rname).append('\t');
 		}else{
 			assert(!(rname!=null && rnameS==null));
-			bb.append(rnameS).append('\t');
-			append(bb, rnameS).append('\t');
+			appendTo(bb, rnameS).append('\t');
 		}
 		bb.append(pos).append('\t');
 		bb.append(mapq).append('\t');
 		if(cigar==null){bb.append('*').append('\t');}else{bb.append(cigar).append('\t');}
-		append(bb, rnext).append('\t');
+		appendTo(bb, rnext).append('\t');
 		bb.append(pnext).append('\t');
 		bb.append(tlen).append('\t');
 		
-		if(mapped() && strand()==Gene.MINUS){
+		if(mapped() && strand()==Shared.MINUS){
 			appendReverseComplimented(bb, seq).append('\t');
 			appendQualReversed(bb, qual);
 		}else{
-			append(bb, seq).append('\t');
+			appendTo(bb, seq).append('\t');
 			appendQual(bb, qual);
 		}
 
@@ -2050,124 +2137,21 @@ public class SamLine implements Serializable {
 		
 		if(optional!=null){
 			for(String s : optional){
-				bb.append('\t').append(s);
+				bb.tab().append(s);
 			}
 		}
 		return bb;
 	}
 	
-	public StringBuilder toText(){
-		
-		final int buflen=Tools.max((rname==null ? 1 : rname.length), (rnext==null ? 1 : rnext.length), (seq==null ? 1 : seq.length), (qual==null ? 1 : qual.length));
-		final char[] buffer=Shared.getTLCB(buflen);
-		
-		StringBuilder sb=new StringBuilder(textLength()+4);
-		if(qname==null){sb.append('*').append('\t');}else{sb.append(qname).append('\t');}
-		sb.append(flag).append('\t');
-		if(RNAME_AS_BYTES){
-			assert(!(rname==null && rnameS!=null));
-			append(sb, rname, buffer).append('\t');
-		}else{
-			assert(!(rname!=null && rnameS==null));
-			append(sb, rnameS).append('\t');
-		}
-		sb.append(pos).append('\t');
-		sb.append(mapq).append('\t');
-		if(cigar==null){sb.append('*').append('\t');}else{sb.append(cigar).append('\t');}
-		append(sb, rnext, buffer).append('\t');
-		sb.append(pnext).append('\t');
-		sb.append(tlen).append('\t');
-		
-		if(mapped() && strand()==Gene.MINUS){
-			appendReverseComplimented(sb, seq, buffer).append('\t');
-			appendQualReversed(sb, qual, buffer);
-		}else{
-			append(sb, seq, buffer).append('\t');
-			appendQual(sb, qual, buffer);
-		}
-
-//		assert(seq.getClass()==String.class);
-//		assert(qual.getClass()==String.class);
-//		sb.append(seq).append('\t');
-//		sb.append(qual);
-		
-		if(optional!=null){
-			for(String s : optional){
-				sb.append('\t').append(s);
-			}
-		}
-		return sb;
-	}
+	@Override
+	public String toString(){return toBytes(null).toString();}
 	
-	public String toString(){return toText().toString();}
-	
-
-
-	private static StringBuilder append(StringBuilder sb, byte[] a, char[] buffer){
-		if(a==null || a==bytestar || (a.length==1 && a[0]=='*')){return sb.append('*');}
-		{//This is actually faster
-			assert(buffer.length>=a.length);
-			for(int i=0; i<a.length; i++){
-				buffer[i]=(char)a[i];
-			}
-			sb.append(buffer, 0, a.length);
-		}
-//		for(byte b : a){
-//			sb.append((char)b);
-//		}
-		return sb;
-	}
-	
-	private static StringBuilder append(StringBuilder sb, String a){
-		if(a==null || a==stringstar || (a.length()==1 && a.charAt(0)=='*')){return sb.append('*');}
-		return sb.append(a);
-	}
-	
-	private static StringBuilder appendReverseComplimented(StringBuilder sb, byte[] a, char[] buffer){
-		if(a==null || a==bytestar || (a.length==1 && a[0]=='*')){return sb.append('*');}
-		{//This is actually faster
-			assert(buffer.length>=a.length);
-			for(int i=0, j=a.length-1; j>=0; i++, j--){buffer[i]=(char)AminoAcid.baseToComplementExtended[a[j]];}
-			sb.append(buffer, 0, a.length);
-		}
-//		for(int i=a.length-1; i>=0; i--){
-//			sb.append((char)AminoAcid.baseToComplementEbuffertended[a[i]]);
-//		}
-		return sb;
-	}
-	
-	private static StringBuilder appendQual(StringBuilder sb, byte[] a, char[] buffer){
-		if(a==null || a==bytestar || (a.length==1 && a[0]=='*')){return sb.append('*');}
-		{//This is actually faster
-			assert(buffer.length>=a.length);
-			for(int i=0; i<a.length; i++){buffer[i]=(char)(a[i]+33);}
-			sb.append(buffer, 0, a.length);
-		}
-//		for(byte b : a){
-//			sb.append((char)(b+33));
-//		}
-		return sb;
-	}
-	
-	private static StringBuilder appendQualReversed(StringBuilder sb, byte[] a, char[] buffer){
-		if(a==null || a==bytestar || (a.length==1 && a[0]=='*')){return sb.append('*');}
-		{//This is actually faster
-			assert(buffer.length>=a.length);
-			for(int i=0, j=a.length-1; j>=0; i++, j--){buffer[i]=(char)(a[j]+33);}
-			sb.append(buffer, 0, a.length);
-		}
-//		for(int i=a.length-1; i>=0; i--){
-//			sb.append((char)(a[i]+33));
-//		}
-		return sb;
-	}
-	
-	private static ByteBuilder append(ByteBuilder sb, byte[] a){
+	private static ByteBuilder appendTo(ByteBuilder sb, byte[] a){
 		if(a==null || a==bytestar || (a.length==1 && a[0]=='*')){return sb.append('*');}
 		return sb.append(a);
 	}
 	
-	private static ByteBuilder append(ByteBuilder sb, String a){
+	private static ByteBuilder appendTo(ByteBuilder sb, String a){
 		if(a==null || a==stringstar || (a.length()==1 && a.charAt(0)=='*')){return sb.append('*');}
 		return sb.append(a);
 	}
@@ -2257,8 +2241,8 @@ public class SamLine implements Serializable {
 		}
 		if(!r.mapped()){flag|=0x4;}
 		if(r2!=null && !r2.mapped()){flag|=0x8;}
-		if(r.strand()==Gene.MINUS){flag|=0x10;}
-		if(r2!=null && r2.strand()==Gene.MINUS){flag|=0x20;}
+		if(r.strand()==Shared.MINUS){flag|=0x10;}
+		if(r2!=null && r2.strand()==Shared.MINUS){flag|=0x20;}
 		if(r.secondary()){flag|=0x100;}
 		if(r.discarded()){flag|=0x200;}
 		return flag;
@@ -2347,16 +2331,16 @@ public class SamLine implements Serializable {
 	/** Assumes rname is an integer. */
 	public int chrom_old(){
 		assert(false);
-		if(!Character.isDigit(rname[0]) && !Character.isDigit(rname[rname.length-1])){
+		if(!Tools.isDigit(rname[0]) && !Tools.isDigit(rname[rname.length-1])){
 			if(warning){
 				warning=false;
 				System.err.println("Warning - sam lines need a chrom field.");
 			}
 			return -1;
 		}
-		assert(Shared.anomaly || '*'==rname[0] || (Character.isDigit(rname[0]) && Character.isDigit(rname[rname.length-1]))) : 
+		assert(Shared.anomaly || '*'==rname[0] || (Tools.isDigit(rname[0]) && Tools.isDigit(rname[rname.length-1]))) :
 			"This is no longer correct, considering that sam lines are named by scaffold.  They need a chrom field.\n"+new String(rname);
-		if(rname==null || Arrays.equals(rname, bytestar) || !(Character.isDigit(rname[0]) && Character.isDigit(rname[rname.length-1]))){return -1;}
+		if(rname==null || Arrays.equals(rname, bytestar) || !(Tools.isDigit(rname[0]) && Tools.isDigit(rname[rname.length-1]))){return -1;}
 		//return Gene.toChromosome(new String(rname));
 		//return Integer.parseInt(new String(rname)));
 		final byte z='0';
@@ -2426,7 +2410,7 @@ public class SamLine implements Serializable {
 		int mult=1;
 		for(int i=loc+1; i<qname.length(); i++){
 			char c=qname.charAt(i);
-			if(!Character.isDigit(c)){
+			if(!Tools.isDigit(c)){
 				if(i==loc+1 && c=='-'){mult=-1;}
 				else{break;}
 			}else{
@@ -2452,6 +2436,9 @@ public class SamLine implements Serializable {
 
 	public void setRname(byte[] x){assert(RNAME_AS_BYTES);rname=x;}
 	public void setRnext(byte[] x){rnext=x;}
+
+	public void setRname(String x){assert(!RNAME_AS_BYTES);rnameS=x;}
+	public void setRnext(String x){rnext=(x==null ? null : x.getBytes());}
 	
 	public String rnameS(){return rnameS!=null ? rnameS : rname==null ? null : new String(rname);}
 	public String rnextS(){return rnext==null ? null : new String(rnext);}
@@ -2522,6 +2509,24 @@ public class SamLine implements Serializable {
 	/*----------------     Public Static Fields     ----------------*/
 	/*--------------------------------------------------------------*/
 
+	public static boolean makeReadgroupTags(){
+		return READGROUP_ID!=null || READGROUP_CN!=null || READGROUP_DS!=null || READGROUP_DT!=null ||
+				READGROUP_FO!=null || READGROUP_KS!=null || READGROUP_LB!=null || READGROUP_PG!=null || 
+				READGROUP_PI!=null || READGROUP_PL!=null || READGROUP_PU!=null || READGROUP_SM!=null ||
+				READGROUP_TAG!=null;
+	}
+	
+	public static boolean makeOtherTags(){
+		if(NO_TAGS){return false;}
+		return MAKE_AM_TAG || MAKE_NM_TAG || MAKE_SM_TAG || MAKE_XM_TAG || MAKE_XS_TAG || MAKE_AS_TAG ||
+				MAKE_NH_TAG || MAKE_TOPHAT_TAGS || MAKE_IDENTITY_TAG || MAKE_SCORE_TAG || MAKE_STOP_TAG || MAKE_LENGTH_TAG ||
+				MAKE_CUSTOM_TAGS || MAKE_INSERT_TAG || MAKE_CORRECTNESS_TAG || MAKE_TIME_TAG || MAKE_BOUNDS_TAG;
+	}
+	
+	public static boolean makeAnyTags(){
+		return makeReadgroupTags() || makeOtherTags();
+	}
+	
 	public static String READGROUP_ID=null;
 	public static String READGROUP_CN=null;
 	public static String READGROUP_DS=null;
@@ -2541,8 +2546,7 @@ public class SamLine implements Serializable {
 	public static boolean MAKE_MD_TAG=false;
 	
 	public static boolean NO_TAGS=false;
-
-//	public static boolean MAKE_RG_TAG=false;
+	
 	public static boolean MAKE_AM_TAG=true;
 	public static boolean MAKE_NM_TAG=true;
 	public static boolean MAKE_SM_TAG=false;
@@ -2575,6 +2579,12 @@ public class SamLine implements Serializable {
 	public static int INTRON_LIMIT=Integer.MAX_VALUE;
 	public static boolean RNAME_AS_BYTES=true;//Effect on speed is negligible for pileup...
 	
+	/** Prefer MD tag over reference for translating cigar strings to match */
+	public static boolean PREFER_MDTAG=false;
+	/** Determine whether cigar X means match N or S.
+	 * This makes sam loading substantially slower. */
+	public static boolean FIX_MATCH_NS=false;
+	
 	public static boolean setxs=false;
 	public static boolean setintron=false;
 	
@@ -2583,12 +2593,19 @@ public class SamLine implements Serializable {
 	/** Sort header scaffolds in alphabetical order to be more compatible with Tophat */
 	public static boolean SORT_SCAFFOLDS=false;
 
+	/** qname */
 	public static boolean PARSE_0=true;
+	/** rname */
 	public static boolean PARSE_2=true;
+	/** cigar */
 	public static boolean PARSE_5=true;
+	/** rnext */
 	public static boolean PARSE_6=true;
+	/** pnext */
 	public static boolean PARSE_7=true;
+	/** tlen */
 	public static boolean PARSE_8=true;
+	/** qual */
 	public static boolean PARSE_10=true;
 	public static boolean PARSE_OPTIONAL=true;
 	public static boolean PARSE_OPTIONAL_MD_ONLY=false;

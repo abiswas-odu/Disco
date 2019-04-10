@@ -54,10 +54,12 @@ public class Scaffold implements Comparable<Scaffold> {
 		return name.hashCode();
 	}
 	
+	@Override
 	public int compareTo(Scaffold other){
 		return name.compareTo(other.name);
 	}
 	
+	@Override
 	public String toString(){
 		return "@SQ\tSN:"+name+"\tLN:"+length+(assembly==null ? "" : "\tAS:"+assembly);
 	}

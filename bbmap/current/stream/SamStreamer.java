@@ -4,9 +4,11 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import fileIO.ByteFile;
 import fileIO.FileFormat;
 import shared.Shared;
 import shared.Timer;
+import structures.ListNum;
 
 /**
  * Loads sam files rapidly with multiple threads.
@@ -32,42 +34,40 @@ public abstract class SamStreamer {
 		//Create an instance of this class
 		int threads=Shared.threads();
 		if(args.length>1){threads=Integer.parseInt(args[1]);}
-		SamStreamer as=new SamReadStreamer(args[0], threads);
-//		SamStreamer as=new SamStreamer(args[0], 1);
+		SamStreamer x=new SamReadStreamer(args[0], threads, false);
 		
 		//Run the object
-		as.start();
-		as.test();
+		x.start();
+		x.test();
 		
 		t.stop("Time: ");
 	}
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamStreamer(String fname_, int threads_){
-		this(FileFormat.testInput(fname_, FileFormat.SAM, null, true, false), threads_);
+	public SamStreamer(String fname_, int threads_, boolean saveHeader_){
+		this(FileFormat.testInput(fname_, FileFormat.SAM, null, true, false), threads_, saveHeader_);
 	}
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamStreamer(FileFormat ffin_){
-		this(ffin_, DEFAULT_THREADS);
+	public SamStreamer(FileFormat ffin_, boolean saveHeader_){
+		this(ffin_, DEFAULT_THREADS, saveHeader_);
 	}
 	
 	/**
 	 * Constructor.
-	 * @param args Command line arguments
 	 */
-	public SamStreamer(FileFormat ffin_, int threads_){
+	public SamStreamer(FileFormat ffin_, int threads_, boolean saveHeader_){
 		fname=ffin_.name();
 		threads=threads_;
 		ffin=ffin_;
+		saveHeader=saveHeader_;
+		header=(saveHeader ? new ArrayList<byte[]>() : null);
 		
-		inq=new ArrayBlockingQueue<ArrayList<byte[]>>(threads/2+1);
+		inq=new ArrayBlockingQueue<ListNum<byte[]>>(threads/2+1);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -76,7 +76,7 @@ public abstract class SamStreamer {
 
 	
 	final void test(){
-		for(ArrayList<Read> list=nextReads(); list!=null; list=nextReads()){
+		for(ListNum<Read> list=nextReads(); list!=null; list=nextReads()){
 			if(verbose){outstream.println("Got list of size "+list.size());}
 		}
 	}
@@ -95,14 +95,89 @@ public abstract class SamStreamer {
 		if(verbose){outstream.println("Finished; closing streams.");}
 	}
 
-	public final ArrayList<Read> nextList(){return nextReads();}
-	public abstract ArrayList<Read> nextReads();
-	public abstract ArrayList<SamLine> nextLines();
+	public final ListNum<Read> nextList(){return nextReads();}
+	public abstract ListNum<Read> nextReads();
+	public abstract ListNum<SamLine> nextLines();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public final void processBytes0(int tid){
+		if(verbose){outstream.println("tid "+tid+" started processBytes.");}
+
+//		ByteFile.FORCE_MODE_BF1=true;
+		ByteFile.FORCE_MODE_BF2=true;
+		ByteFile bf=ByteFile.makeByteFile(ffin);
+		
+		long number=0;
+		
+		final int limit=LIST_SIZE;
+		ArrayList<byte[]> list=new ArrayList<byte[]>(limit);
+		for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
+			assert(line!=null);
+//			outstream.println("a");
+			if(header!=null && line[0]=='@'){
+				if(Shared.TRIM_RNAME){line=SamReadInputStream.trimHeaderSQ(line);}
+				header.add(line);
+			}else{
+				if(header!=null){
+					SamReadInputStream.setSharedHeader(header);
+					header=null;
+				}
+				list.add(line);
+				if(list.size()>=limit){
+					//					outstream.println("b");
+					//					outstream.println(inq.size()+", "+inq.remainingCapacity());
+					putBytes(new ListNum<byte[]>(list, number));
+					number++;
+					//					outstream.println("c");
+					list=new ArrayList<byte[]>(limit);
+				}
+			}
+//			outstream.println("d");
+		}
+		if(verbose){outstream.println("tid "+tid+" ran out of input.");}
+		if(list.size()>0){
+			putBytes(new ListNum<byte[]>(list, number));
+			number++;
+			list=null;
+		}
+		if(verbose || verbose2){outstream.println("tid "+tid+" done reading bytes.");}
+		putBytes(POISON_BYTES);
+		if(verbose || verbose2){outstream.println("tid "+tid+" done poisoning.");}
+		bf.close();
+		if(verbose || verbose2){outstream.println("tid "+tid+" closed stream.");}
+	}
+	
+	final void putBytes(ListNum<byte[]> list){
+//		if(verbose){outstream.println("tid "+tid+" putting blist size "+list.size());}
+		while(list!=null){
+			try {
+				inq.put(list);
+				list=null;
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+//		if(verbose){outstream.println("tid "+tid+" done putting blist");}
+	}
+	
+	final ListNum<byte[]> takeBytes(){
+//		if(verbose){outstream.println("tid "+tid+" taking blist");}
+		ListNum<byte[]> list=null;
+		while(list==null){
+			try {
+				list=inq.take();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+//		if(verbose){outstream.println("tid "+tid+" took blist size "+list.size());}
+		return list;
+	}
 	
 	/** Spawn process threads */
 	abstract void spawnThreads();
@@ -128,22 +203,26 @@ public abstract class SamStreamer {
 	/*----------------         Final Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 
+	final boolean saveHeader;
+	
 	/** Primary input file */
 	final FileFormat ffin;
 	
-	final ArrayBlockingQueue<ArrayList<byte[]>> inq;
+	final ArrayBlockingQueue<ListNum<byte[]>> inq;
 	
 	final int threads;
+	
+	ArrayList<byte[]> header;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 
-	static final ArrayList<Read> POISON_READS=new ArrayList<Read>(0);
-	static final ArrayList<SamLine> POISON_LINES=new ArrayList<SamLine>(0);
-	static final ArrayList<byte[]> POISON_BYTES=new ArrayList<byte[]>(0);
-	static final int LIST_SIZE=200;
-	public static int DEFAULT_THREADS=3;
+	static final ListNum<Read> POISON_READS=new ListNum<Read>(null, -1);
+	static final ListNum<SamLine> POISON_LINES=new ListNum<SamLine>(null, -1);
+	static final ListNum<byte[]> POISON_BYTES=new ListNum<byte[]>(null, -1);
+	public static int LIST_SIZE=200;
+	public static int DEFAULT_THREADS=6;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Common Fields         ----------------*/

@@ -1,11 +1,9 @@
 package var;
 
-import java.io.Serializable;
-
 import dna.Gene;
 
 
-public class VarLine extends Variation implements Serializable, Cloneable{
+public class VarLine extends Variation{
 	
 	public static final long serialVersionUID = -4089933371294357462L;
 	
@@ -91,6 +89,7 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 		intern();
 	}
 	
+	@Override
 	public VarLine clone(){
 		VarLine v=null;
 //		try {
@@ -132,9 +131,11 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 		return v;
 	}
 	
+	@Override
 	public String toSuperString(){return super.toString();}
 	
 	
+	@Override
 	public String toString(){
 		StringBuilder sb=new StringBuilder(256);
 
@@ -161,6 +162,7 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 	}
 	//locus	ploidy	allele	chromosome	begin	end	varType	reference	alleleSeq	varScoreVAF	varScoreEAF	varQuality	hapLink	xRef
 	
+	@Override
 	public String toSourceString(){
 		StringBuilder sb=new StringBuilder(256);
 
@@ -186,6 +188,7 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 	}
 	
 	
+	@Override
 	public String toShortString(){
 		StringBuilder sb=new StringBuilder(256);
 		
@@ -222,6 +225,7 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 		return haplotype-other.haplotype;
 	}
 	
+	@Override
 	public boolean equals(Object other){
 		if(other.getClass()==VarLine.class){
 			return equals((VarLine)other);
@@ -233,6 +237,7 @@ public class VarLine extends Variation implements Serializable, Cloneable{
 		return compareTo(other)==0;
 	}
 	
+	@Override
 	public boolean equals(Variation other){
 		return super.equals(other);
 	}

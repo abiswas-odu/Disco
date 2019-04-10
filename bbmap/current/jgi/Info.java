@@ -1,6 +1,9 @@
 package jgi;
 
 import java.util.Arrays;
+import java.util.Locale;
+
+import shared.Tools;
 
 /**
  * @author Brian Bushnell
@@ -12,12 +15,12 @@ public final class Info {
 	public static void main(String[] args){
 		
 		if(args.length>0){
-			if(args.length==2 && Character.isDigit(args[1].charAt(0))){
+			if(args.length==2 && Tools.isDigit(args[1].charAt(0))){
 				byte[] s=args[0].getBytes();
 				int b=Integer.parseInt(args[1]);
 				int len=prefixForInfoBits(s, b);
 				if(len<0){
-					System.out.println("Input string only contains "+String.format("%.2f",infoInBitsDouble(s, 0, s.length))+" bits.");
+					System.out.println("Input string only contains "+String.format(Locale.ROOT, "%.2f",infoInBitsDouble(s, 0, s.length))+" bits.");
 				}else{
 					System.out.println("Prefix needed for "+b+" bits is length "+len+": "+args[0].substring(0, len));
 //					assert(false) : "TODO: This is clearly broken.";
@@ -81,7 +84,7 @@ public final class Info {
 	public static void printInfo(String s){
 		long r=info(s);
 		double bits=Math.log(r)/Math.log(2);
-		System.out.println(s+"\nlen="+s.length()+" \tinfo = "+String.format("%.2f", bits)+" bits. \t("+r+")");
+		System.out.println(s+"\nlen="+s.length()+" \tinfo = "+String.format(Locale.ROOT, "%.2f", bits)+" bits. \t("+r+")");
 	}
 	
 	public static long info(String s){
@@ -154,7 +157,7 @@ public final class Info {
 //			    r=temp;
 			    
 			    r=r/counts[num];
-//			    
+//
 //			    {
 //			    	String s=new String(array).substring(0, i+1);
 //			    	System.out.println("\n"+s);
@@ -165,7 +168,7 @@ public final class Info {
 			}
 		}
 		return r<info ? -1 : i;
-	}	
+	}
 	
 	private static final byte[] numberToBase={
 		'A','C','G','T','N'
@@ -180,7 +183,7 @@ public final class Info {
 			char x=(char)numberToBase[i];
 			if(x=='A' || x=='C' || x=='G' || x=='T'){
 				baseToNumber[x]=(byte)i;
-				baseToNumber[Character.toLowerCase(x)]=(byte)i;
+				baseToNumber[Tools.toLowerCase(x)]=(byte)i;
 			}
 		}
 		baseToNumber['U']=3;

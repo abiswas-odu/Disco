@@ -1,11 +1,12 @@
-package var2;
+ package var2;
 
-import dna.Gene;
+import shared.Shared;
 import shared.Tools;
 import stream.SamLine;
 import structures.CoverageArray;
 import structures.CoverageArray2;
 import structures.CoverageArray3;
+import structures.CoverageArray3A;
 
 public class Scaffold {
 	
@@ -48,18 +49,57 @@ public class Scaffold {
 		increment(start, stop, sl.strand());
 	}
 	
-	public synchronized void increment(int from, int to, int strand){
+	public void increment(int from, int to, int strand){
+//		assert(trackStrand);
+		if(!initialized()){
+			synchronized(this){
+				if(!initialized()){
+//					assert(ca==null);
+//					assert(caMinus==null);
+//					assert(trackStrand);
+					ca=useCA3A ? new CoverageArray3A(number, length) : useCA3 ? new CoverageArray3(number, length) : new CoverageArray2(number, length);
+					if(trackStrand){
+						caMinus=useCA3A ? new CoverageArray3A(number, length) : useCA3 ? new CoverageArray3(number, length) : new CoverageArray2(number, length);
+					}
+				}
+				initialized=true;
+			}
+//			assert(ca!=null);
+//			assert(!trackStrand || caMinus!=null) : trackStrand;
+		}
+//		assert(initialized());
+//		assert(ca!=null);
+//		assert(!trackStrand || caMinus!=null) : trackStrand;
+//		assert(trackStrand);
+		ca.incrementRangeSynchronized(from, to, 1);
+		if(trackStrand && strand==Shared.MINUS){caMinus.incrementRangeSynchronized(from, to, 1);}
+	}
+	
+	public synchronized void incrementOld(int from, int to, int strand){
 		if(ca==null){
 			ca=useCA3 ? new CoverageArray3(number, length) : new CoverageArray2(number, length);
 		}
-		ca.incrementRange(from, to, 1);
-		
-		if(trackStrand && strand==Gene.MINUS){
+		ca.incrementRange(from, to);
+		if(trackStrand && strand==Shared.MINUS){
 			if(caMinus==null){
 				caMinus=useCA3 ? new CoverageArray3(number, length) : new CoverageArray2(number, length);
 			}
-			caMinus.incrementRange(from, to, 1);
+			caMinus.incrementRange(from, to);
 		}
+	}
+	
+	public String getSequence(SamLine sl) {
+		int start=sl.start(false, false);
+		int stop=sl.stop(start, false, false);
+		return getSequence(start, stop);
+	}
+	
+	public String getSequence(int start, int stop) {
+		assert(bases!=null) : this;
+		start=Tools.max(0, start);
+		stop=Tools.min(bases.length-1, stop);
+		String s=new String(bases, start, stop-start+1);
+		return s;
 	}
 	
 	public int calcCoverage(Var v){
@@ -84,7 +124,7 @@ public class Scaffold {
 			for(int i=a; i<b; i++){
 				sum+=ca.get(i);
 			}
-			avg=Math.round(sum/(float)rlen);
+			avg=(int)Math.round(sum/(double)rlen);
 		}else if(type==Var.INS){
 			assert(rlen==0 && a==b);
 //			if(a<=0){sum=2*ca.get(0);}
@@ -96,12 +136,21 @@ public class Scaffold {
 				sum=ca.get(a)+ca.get(b);
 				avg=(int)Math.ceil(sum/2);
 			}
+		}else if(type==Var.LJUNCT){
+			//Take coverage from right of junction, unless that's off the end.
+			//but it should be impossible for that to be off the end.
+			avg=ca.get(Tools.min(ca.maxIndex, a+1));
+		}else if(type==Var.RJUNCT){
+			//Take coverage from left of junction, unless that's off the end.
+			//but it should be impossible for that to be off the end.
+			avg=ca.get(Tools.max(0, a-1));
 		}else{
-			throw new RuntimeException("Unknown type "+type);
+			throw new RuntimeException("Unknown type "+type+"\n"+v);
 		}
 		return avg;
 	}
 	
+	@Override
 	public String toString(){
 		return "@SQ\tSN:"+name+"\tLN:"+length+"\tID:"+number;
 	}
@@ -117,8 +166,16 @@ public class Scaffold {
 	public CoverageArray ca;
 	public CoverageArray caMinus;
 	public byte[] bases;
+	private boolean initialized(){return initialized;};
+	private boolean initialized;
 
-	public static boolean useCA3=false;
-	public static boolean trackStrand=true;
+	public static void setCA3(boolean b){useCA3=b;}
+	public static void setCA3A(boolean b){useCA3A=b;}
+	public static void setTrackStrand(boolean b){trackStrand=b;}
+	public static boolean trackStrand(){return trackStrand;}
+
+	private static boolean useCA3=false;
+	private static boolean useCA3A=true;
+	private static boolean trackStrand=false;
 	
 }

@@ -4,19 +4,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
-import stream.KillSwitch;
+import dna.AminoAcid;
+import dna.ChromosomeArray;
+import dna.Data;
+import shared.KillSwitch;
+import shared.Shared;
+import shared.Tools;
 import stream.Read;
 import stream.SiteScore;
 import var.Variation;
 import var.Varlet;
-
-import dna.AminoAcid;
-import dna.ChromosomeArray;
-import dna.Data;
-import dna.Gene;
-import shared.Shared;
-import shared.Timer;
-import shared.Tools;
 
 public final class TranslateColorspaceRead {
 	
@@ -70,7 +67,7 @@ public final class TranslateColorspaceRead {
 		final ChromosomeArray chacs=Data.getChromosome(r.chrom);
 		if(verbose){
 			System.err.println("Realigning.");
-			System.err.println("Original: "+r.start+", "+r.stop+", "+Gene.strandCodes[r.strand()]);
+			System.err.println("Original: "+r.start+", "+r.stop+", "+Shared.strandCodes[r.strand()]);
 		}
 
 		{
@@ -98,7 +95,7 @@ public final class TranslateColorspaceRead {
 		final int maxQ=msa.maxQuality(r.length());
 		final int maxI=msa.maxImperfectScore(r.length());
 
-		if(r.strand()==Gene.PLUS){
+		if(r.strand()==Shared.PLUS){
 			assert(maxQ>maxI);
 
 			byte[][] matchR=new byte[1][];
@@ -205,9 +202,9 @@ public final class TranslateColorspaceRead {
 				r.mapScore=score[0];
 			}
 		}
-		if(verbose){System.err.println("Final: "+r.start+", "+r.stop+", "+Gene.strandCodes[r.strand()]);}
+		if(verbose){System.err.println("Final: "+r.start+", "+r.stop+", "+Shared.strandCodes[r.strand()]);}
 		
-		if(recur && r.stop<chacs.maxIndex && r.start>0 && (r.match[0]=='X' || r.match[0]=='I' || 
+		if(recur && r.stop<chacs.maxIndex && r.start>0 && (r.match[0]=='X' || r.match[0]=='I' ||
 				r.match[r.match.length-1]=='Y' || r.match[r.match.length-1]=='X' || r.match[r.match.length-1]=='I')){
 			int xy=0;
 			for(int i=0; i<r.match.length; i++){
@@ -229,7 +226,7 @@ public final class TranslateColorspaceRead {
 	}
 	
 	/** For some reason realign was making the match string backwards... */
-	public static void realign_new(final SiteScore ss, final byte[] bases, final MSA msa, int padding, final int recur, int minValidScore, 
+	public static void realign_new(final SiteScore ss, final byte[] bases, final MSA msa, int padding, final int recur, int minValidScore,
 			boolean forbidIndels, boolean fixXY, final long id){
 		if(verbose){System.err.println("Calling realign_new on ss "+ss);}
 		if(ss.matchContainsXY()){ss.fixXY(bases, false, msa);} //This must run regardless of 'fixXY' or else an XY read could be semiperfect but not marked as such
@@ -252,7 +249,7 @@ public final class TranslateColorspaceRead {
 		final ChromosomeArray chacs=Data.getChromosome(ss.chrom);
 		if(verbose){
 			System.err.println("Realigning.");
-			System.err.println("Original: "+ss.start()+", "+ss.stop()+", "+Gene.strandCodes[ss.strand()]);
+			System.err.println("Original: "+ss.start()+", "+ss.stop()+", "+Shared.strandCodes[ss.strand()]);
 			if(verbose){System.err.println("F. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 		}
 		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
@@ -306,7 +303,7 @@ public final class TranslateColorspaceRead {
 
 			assert(padding>=0) : id+", "+padding;
 
-//			assert(GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps)<msa.maxColumns) : 
+//			assert(GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps)<msa.maxColumns) :
 //				oldPadding+", "+padding+", "+bases.length+", "+GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps)+", "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps);
 		}
 		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
@@ -314,7 +311,7 @@ public final class TranslateColorspaceRead {
 		final int maxQ=msa.maxQuality(bases.length);
 		final int maxI=msa.maxImperfectScore(bases.length);
 
-		if(ss.strand()==Gene.PLUS){
+		if(ss.strand()==Shared.PLUS){
 			assert(maxQ>maxI);
 
 			byte[][] matchR=new byte[1][];
@@ -626,7 +623,7 @@ public final class TranslateColorspaceRead {
 			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 		}
-		if(verbose){System.err.println("Final: "+ss.start()+", "+ss.stop()+", "+Gene.strandCodes[ss.strand()]+", recur="+recur);}
+		if(verbose){System.err.println("Final: "+ss.start()+", "+ss.stop()+", "+Shared.strandCodes[ss.strand()]+", recur="+recur);}
 		assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 		
 		final int leftPaddingNeeded=ss.leftPaddingNeeded(4, 5), rightPaddingNeeded=ss.rightPaddingNeeded(4, 5);
@@ -922,7 +919,7 @@ public final class TranslateColorspaceRead {
 //		byte[] colors=crbmq[0];
 //		byte[] colorRef=crbmq[1];
 //		byte[] baseRef=crbmq[2];
-//		
+//
 //		int fixedRef=0;
 //		int fixedCall=0;
 //		assert(colors.length==colorRef.length) : "\n"+Arrays.toString(colors)+"\n"+Arrays.toString(colorRef)+
@@ -937,7 +934,7 @@ public final class TranslateColorspaceRead {
 //				fixedRef++;
 //			}
 //		}
-//		
+//
 //		if(fixedRef>0){
 //			for(int i=1; i<colorRef.length; i++){
 //				if(baseRef[i]=='N'){
@@ -964,7 +961,7 @@ public final class TranslateColorspaceRead {
 		int fixedCall=0;
 		
 //		boolean indels=false;
-//		
+//
 //		int indexOfIndel=colors.length;
 //		for(int i=0; i<match.length; i++){
 //			if(match[i]=='I' || match[i]=='X' || match[i]=='Y' || match[i]=='D'){
@@ -1268,7 +1265,7 @@ public final class TranslateColorspaceRead {
 	}
 	
 	//TODO: Add support for deletions
-	/** thresh: Must see this many consecutive 'm' to stop. */ 
+	/** thresh: Must see this many consecutive 'm' to stop. */
 	private static int trimEnd(final byte[][] crbmq, int thresh, Read r){
 		
 		byte[] colors=crbmq[0];
@@ -1333,7 +1330,7 @@ public final class TranslateColorspaceRead {
 		crbmq[3]=match;
 		crbmq[4]=quality;
 
-		if(r.strand()==Gene.PLUS){
+		if(r.strand()==Shared.PLUS){
 			r.stop-=(trim-insertions);
 		}else{
 			r.start+=(trim-insertions);
@@ -1343,7 +1340,7 @@ public final class TranslateColorspaceRead {
 		return trim;
 	}
 	
-	/** thresh: Must see this many consecutive 'm' to stop. */ 
+	/** thresh: Must see this many consecutive 'm' to stop. */
 	private static int trimStart(final byte[][] crbmq, int thresh, Read r){
 		assert(false) : "TODO";
 		byte[] colors=crbmq[0];
@@ -1399,7 +1396,7 @@ public final class TranslateColorspaceRead {
 			crbmq[3]=match;
 			crbmq[4]=quality;
 			
-			if(r.strand()==Gene.PLUS){
+			if(r.strand()==Shared.PLUS){
 				r.stop-=(trim-insertions);
 			}else{
 				r.start+=(trim-insertions);
@@ -1412,15 +1409,15 @@ public final class TranslateColorspaceRead {
 	
 	
 //	private static int trimStart(final byte[][] crbmq, Read r){
-//		
+//
 //		byte[] colors=crbmq[0];
 //		byte[] colorRef=crbmq[1];
 //		byte[] baseRef=crbmq[2];
 //		byte[] match=crbmq[3];
 //		byte[] quality=crbmq[4];
-//		
+//
 //		if(match[0]=='m' || match[0]=='S'){return 0;}
-//		
+//
 //		int index=0;
 //		int insertions=0;
 //		while(index<match.length && (match[index]=='I' || match[index]=='X')){
@@ -1430,9 +1427,9 @@ public final class TranslateColorspaceRead {
 //		if(index==0){return 0;}
 //		System.err.println("*** "+r.toText(false));
 //		System.err.println(toString(crbmq));
-//		
+//
 //		int start2=index-insertions;
-//		
+//
 //		colors=KillSwitch.copyOfRange(colors, index, colors.length);
 //		if(start2!=0){
 //			colorRef=KillSwitch.copyOfRange(colorRef, index-insertions, colorRef.length);
@@ -1441,7 +1438,7 @@ public final class TranslateColorspaceRead {
 //		match=KillSwitch.copyOfRange(match, index, match.length);
 //		quality=KillSwitch.copyOfRange(quality, index, quality.length);
 //
-//		
+//
 //		crbmq[0]=colors;
 //		crbmq[1]=colorRef;
 //		crbmq[2]=baseRef;
@@ -1449,13 +1446,13 @@ public final class TranslateColorspaceRead {
 //		crbmq[4]=quality;
 //
 //		System.err.println("\n"+toString(crbmq));
-//		
+//
 //		if(r.strand()==Gene.PLUS){
 //			r.start+=(index-insertions);
 //		}else{
 //			r.stop-=(index-insertions);
 //		}
-//		
+//
 //		return index;
 //	}
 	
@@ -1560,13 +1557,13 @@ public final class TranslateColorspaceRead {
 		}
 		
 //		byte[] original=Arrays.copyOf(call, call.length);
-		if(r.strand()==Gene.MINUS){
+		if(r.strand()==Shared.MINUS){
 			AminoAcid.reverseComplementBasesInPlace(r.bases);
 			Tools.reverseInPlace(r.quality);
 		}
 		
 		
-		//assert(checkArray(call)) : 
+		//assert(checkArray(call)) :
 //			"\n"+new String(original)+"\n"+new String(Tools.reverseAndCopy(call))+"\n"+
 //			"\n"+Arrays.toString(original)+"\n"+Arrays.toString(Tools.reverseAndCopy(call))+"\n";
 		
@@ -1584,7 +1581,7 @@ public final class TranslateColorspaceRead {
 			b=true;//ignores the problem.
 		}
 		
-		if(r.strand()==Gene.MINUS){
+		if(r.strand()==Shared.MINUS){
 			AminoAcid.reverseComplementBasesInPlace(r.bases);
 			Tools.reverseInPlace(r.quality);
 		}
@@ -1741,13 +1738,13 @@ public final class TranslateColorspaceRead {
 		if(maxVars==0){return null;}
 		
 //		byte[] original=Arrays.copyOf(call, call.length);
-		if(read.strand()==Gene.MINUS){
+		if(read.strand()==Shared.MINUS){
 			AminoAcid.reverseComplementBasesInPlace(call);
 			Tools.reverseInPlace(quality);
 		}
 		
 		
-		//assert(checkArray(call)) : 
+		//assert(checkArray(call)) :
 //			"\n"+new String(original)+"\n"+new String(Tools.reverseAndCopy(call))+"\n"+
 //			"\n"+Arrays.toString(original)+"\n"+Arrays.toString(Tools.reverseAndCopy(call))+"\n";
 		
@@ -1932,7 +1929,7 @@ public final class TranslateColorspaceRead {
 						"\n'"+cs+"', '"+rs+"'\n"+new String(match);
 					assert(cstop2<call.length);
 					
-					if(read.strand()==Gene.PLUS){
+					if(read.strand()==Shared.PLUS){
 						headDist=cstart2;
 						tailDist=call.length-cstop2-1;
 					}else{
@@ -1967,8 +1964,8 @@ public final class TranslateColorspaceRead {
 				
 //				assert(read.mapScore>0) : read.toText(false);
 				v=new Varlet(read.chrom, read.strand(), rstart, rstop, mstart, mstop, varType, rs.toString(), cs.toString(),
-						 varQuality, readQuality, read.mapScore, read.errors, expectedErrors, (read.paired() ? 1 : 0), read.numericID, 
-						 read.length(), read.start, read.stop, read.copies, headDist, tailDist, endDist, 
+						 varQuality, readQuality, read.mapScore, read.errors, expectedErrors, (read.paired() ? 1 : 0), read.numericID,
+						 read.length(), read.start, read.stop, read.copies, headDist, tailDist, endDist,
 						 read.pairnum());
 				
 //				if(v.varType==Variation.NOREF){System.err.print("R");}
@@ -2116,14 +2113,14 @@ public final class TranslateColorspaceRead {
 //			}
 //			System.err.println(" "+nr);
 //		}
-//		
+//
 //		assert(!fail);
 
 //		assert(read.numericID!=3448228) : CONDENSE+"\n"+vars;
 		
 		//assert(checkArray(call));
 		//Don't exit early and forget to undo this!
-		if(read.strand()==Gene.MINUS){
+		if(read.strand()==Shared.MINUS){
 			AminoAcid.reverseComplementBasesInPlace(call);
 			Tools.reverseInPlace(quality);
 		}

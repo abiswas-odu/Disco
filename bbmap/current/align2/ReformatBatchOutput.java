@@ -4,25 +4,26 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import fileIO.TextFile;
+import shared.Tools;
 
 public class ReformatBatchOutput {
 	
-//	Elapsed:	31.7			
-//	
-//	Mapping Statistics for 0s_default.sam:				
-//	mapped:                	100.00%			
-//	retained:              	96.06%			
-//	discarded:             	0.00%			
-//	ambiguous:             	3.94%			
-//					
-//	Strict correctness (both ends exactly correct):				
-//	true positive:         	96.06%			
-//	false positive:        	0.00%			
-//					
-//	Loose correctness (one end approximately correct):				
-//	true positive:         	96.06%			
-//	false positive:        	0.00%			
-//					
+//	Elapsed:	31.7
+//
+//	Mapping Statistics for 0s_default.sam:
+//	mapped:                	100.00%
+//	retained:              	96.06%
+//	discarded:             	0.00%
+//	ambiguous:             	3.94%
+//
+//	Strict correctness (both ends exactly correct):
+//	true positive:         	96.06%
+//	false positive:        	0.00%
+//
+//	Loose correctness (one end approximately correct):
+//	true positive:         	96.06%
+//	false positive:        	0.00%
+//
 //	false negative:        	0.00%
 //	Elapsed:	2.34
 //	Elapsed:	20.51
@@ -50,7 +51,7 @@ public class ReformatBatchOutput {
 	
 	
 	public static void main(String[] args){
-		TextFile tf=new TextFile(args[0], false, false);
+		TextFile tf=new TextFile(args[0], false);
 		String[] lines=tf.toStringLines();
 		ArrayList<String> list=new ArrayList<String>();
 		
@@ -90,7 +91,7 @@ public class ReformatBatchOutput {
 //		String[] split=name.substring(0, name.length()-4).split("_");
 		String[] split=name.split("_");
 		String r=(split[split.length-1]);
-		if(r.charAt(0)=='r' && Character.isDigit(r.charAt(r.length()-1))){
+		if(r.charAt(0)=='r' && Tools.isDigit(r.charAt(r.length()-1))){
 			assert(r.charAt(0)=='r') : Arrays.toString(split)+", "+name;
 			r=r.substring(1);
 			if(r.contains("x")){
@@ -99,7 +100,7 @@ public class ReformatBatchOutput {
 			return Integer.parseInt(r);
 		}else{
 			for(String s : split){
-				if(s.endsWith("bp") && s.contains("x") && Character.isDigit(s.charAt(0))){
+				if(s.endsWith("bp") && s.contains("x") && Tools.isDigit(s.charAt(0))){
 					r=s.substring(0, s.indexOf('x')-1);
 					return Integer.parseInt(r);
 				}
@@ -113,7 +114,7 @@ public class ReformatBatchOutput {
 		String[] split=name.split("_");
 		for(String s : split){
 			char c=s.charAt(0);
-			if(Character.isDigit(c) && c!='0' && !s.endsWith("bp")){
+			if(Tools.isDigit(c) && c!='0' && !s.endsWith("bp")){
 				return s.charAt(s.length()-1);
 			}
 		}
@@ -125,7 +126,7 @@ public class ReformatBatchOutput {
 		String[] split=name.split("_");
 		for(String s : split){
 			char c=s.charAt(0);
-			if(Character.isDigit(c) && c!='0' && !s.endsWith("bp")){
+			if(Tools.isDigit(c) && c!='0' && !s.endsWith("bp")){
 				String r=s.substring(0, s.length()-1);
 				return Integer.parseInt(r);
 			}
@@ -153,7 +154,7 @@ public class ReformatBatchOutput {
 		for(String s : list){
 			String[] split=s.split("\t");
 			String a=split[0];
-			String b=(split.length>1 ? split[1] : null);
+			String b=split.length>1 ? split[1] : null;
 			if(a.equals("Elapsed:")){
 				time=b;
 			}else if(a.startsWith("lines:")){
@@ -161,12 +162,14 @@ public class ReformatBatchOutput {
 			}else if(a.startsWith("Mapping Statistics for ")){
 				name=a.replace("Mapping Statistics for ", "").replace(".sam:", "");
 			}else if(a.startsWith("primary alignments:")){
+				assert(b!=null) : "Bad line: "+s;
 				b=b.replace(" found of ", "_");
 				b=b.replace(" expected", "");
 				String[] split2=b.split("_");
 				primary=Integer.parseInt(split2[0]);
 				expected=Integer.parseInt(split2[1]);
 			}else if(a.startsWith("secondary alignments:")){
+				assert(b!=null) : "Bad line: "+s;
 				b=b.replace(" found", "");
 				secondary=Integer.parseInt(b);
 			}else if(b!=null){
@@ -178,14 +181,14 @@ public class ReformatBatchOutput {
 		
 //		if(name!=null){
 //			count="";
-//			
+//
 //			String[] split=name.split("_");
-//			
+//
 //			for(String s : split){
 //				if(s!=null && s.length()>0 && s.charAt(0)!='0'){
 //					for(int i=0; i<s.length(); i++){
 //						char c=s.charAt(i);
-//						if(Character.isDigit(c)){count=count+c;}
+//						if(Tools.isDigit(c)){count=count+c;}
 //						else{break;}
 //					}
 //				}

@@ -2,7 +2,6 @@ package stream;
 
 import java.util.ArrayList;
 
-import dna.Data;
 import fileIO.ByteFile;
 import fileIO.FileFormat;
 import shared.Shared;
@@ -21,11 +20,10 @@ public class FastqReadInputStream extends ReadInputStream {
 	public FastqReadInputStream(String fname, boolean allowSubprocess_){
 		this(FileFormat.testInput(fname, FileFormat.FASTQ, null, allowSubprocess_, false));
 	}
-
 	
 	public FastqReadInputStream(FileFormat ff){
 		if(verbose){System.err.println("FastqReadInputStream("+ff+")");}
-		
+		flag=(Shared.AMINO_IN ? Read.AAMASK : 0);
 		stdin=ff.stdio();
 		if(!ff.fastq()){
 			System.err.println("Warning: Did not find expected fastq file extension for filename "+ff.name());
@@ -40,7 +38,7 @@ public class FastqReadInputStream extends ReadInputStream {
 //				maxSubs=toNumber(s[6]);
 				
 //				s=s[8].split("\\.");
-//				
+//
 //				s=s[0].split("-");
 				
 //				if(s.length!=8 && s.length!=9){
@@ -57,8 +55,8 @@ public class FastqReadInputStream extends ReadInputStream {
 			}
 		}
 //		interleaved=false;
-		interleaved=(ff.stdio()) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(ff.name(), false);
-		tf=ByteFile.makeByteFile(ff, false);
+		interleaved=ff.interleaved();//(ff.stdio()) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(ff.name(), false);
+		tf=ByteFile.makeByteFile(ff);
 //		assert(false) : interleaved;
 	}
 
@@ -106,8 +104,7 @@ public class FastqReadInputStream extends ReadInputStream {
 		
 		buffer=null;
 		next=0;
-		
-		buffer=FASTQ.toReadList(tf, BUF_LEN, nextReadID, interleaved);
+		buffer=FASTQ.toReadList(tf, BUF_LEN, nextReadID, interleaved, flag);
 		int bsize=(buffer==null ? 0 : buffer.size());
 		nextReadID+=bsize;
 		if(bsize<BUF_LEN){tf.close();}
@@ -121,6 +118,7 @@ public class FastqReadInputStream extends ReadInputStream {
 		}
 	}
 	
+	@Override
 	public boolean close(){
 		if(verbose){System.err.println("Closing "+this.getClass().getName()+" for "+tf.name()+"; errorState="+errorState);}
 		errorState|=tf.close();
@@ -142,6 +140,7 @@ public class FastqReadInputStream extends ReadInputStream {
 	public boolean paired() {return interleaved;}
 	
 	/** Return true if this stream has detected an error */
+	@Override
 	public boolean errorState(){return errorState || FASTQ.errorState();}
 
 	private ArrayList<Read> buffer=null;
@@ -149,9 +148,10 @@ public class FastqReadInputStream extends ReadInputStream {
 	
 	private final ByteFile tf;
 	private final boolean interleaved;
+	private final int flag;
 
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
-	private final long MAX_DATA=Shared.READ_BUFFER_MAX_DATA; //TODO - lot of work for unlikely case of super-long fastq reads.  Must be disabled for paired-ends.
+	private final int BUF_LEN=Shared.bufferLen();;
+	private final long MAX_DATA=Shared.bufferData(); //TODO - lot of work for unlikely case of super-long fastq reads.  Must be disabled for paired-ends.
 
 	public long generated=0;
 	public long consumed=0;

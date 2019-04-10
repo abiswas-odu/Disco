@@ -2,17 +2,14 @@ package driver;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-
-import var.VarLine;
-import var.Variation;
 
 import dna.AminoAcid;
 import dna.Data;
-import dna.Gene;
 import fileIO.ChainLine;
-import fileIO.ReadWrite;
-import shared.Timer;
+import shared.Shared;
+import shared.Tools;
+import var.VarLine;
+import var.Variation;
 
 public class Translator {
 	
@@ -107,7 +104,7 @@ public class Translator {
 		assert(v!=null);
 		assert(v2!=null) : v;
 		
-		if(cl.qStrand==Gene.PLUS){
+		if(cl.qStrand==Shared.PLUS){
 			v2.chromosome=(byte)dest1[0];
 			v2.beginLoc=dest1[2];
 			v2.endLoc=dest2[2];
@@ -122,11 +119,11 @@ public class Translator {
 				v2.endLoc=dest1[2];
 			}
 			
-			if(v2.call!=null && Character.isLetter(v2.call.charAt(0)) && !v2.call.equalsIgnoreCase("ref")){
+			if(v2.call!=null && Tools.isLetter(v2.call.charAt(0)) && !v2.call.equalsIgnoreCase("ref")){
 				v2.call=AminoAcid.reverseComplementBases(v2.call);
 			}
 			
-			if(v2.ref!=null && Character.isLetter(v2.ref.charAt(0)) && !v2.ref.equalsIgnoreCase("ref")){
+			if(v2.ref!=null && Tools.isLetter(v2.ref.charAt(0)) && !v2.ref.equalsIgnoreCase("ref")){
 				v2.ref=AminoAcid.reverseComplementBases(v2.ref);
 			}
 			
@@ -166,7 +163,7 @@ public class Translator {
 		
 		Variation v2=v.clone();
 		
-		if(cl.qStrand==Gene.PLUS){
+		if(cl.qStrand==Shared.PLUS){
 			v2.chromosome=(byte)dest1[0];
 			v2.beginLoc=dest1[2];
 			v2.endLoc=dest2[2];
@@ -181,11 +178,11 @@ public class Translator {
 				v2.endLoc=dest1[2];
 			}
 			
-			if(v2.call!=null && Character.isLetter(v2.call.charAt(0)) && !v2.call.equalsIgnoreCase("ref")){
+			if(v2.call!=null && Tools.isLetter(v2.call.charAt(0)) && !v2.call.equalsIgnoreCase("ref")){
 				v2.call=AminoAcid.reverseComplementBases(v2.call);
 			}
 			
-			if(v2.ref!=null && Character.isLetter(v2.ref.charAt(0)) && !v2.ref.equalsIgnoreCase("ref")){
+			if(v2.ref!=null && Tools.isLetter(v2.ref.charAt(0)) && !v2.ref.equalsIgnoreCase("ref")){
 				v2.ref=AminoAcid.reverseComplementBases(v2.ref);
 			}
 			
@@ -206,7 +203,7 @@ public class Translator {
 	}
 	
 	
-	public final int fromBuild;	
+	public final int fromBuild;
 	public final int toBuild;
 	public final ChainLine[][] lines;
 	

@@ -202,7 +202,7 @@ public class ConcurrentReadOutputStreamD extends ConcurrentReadOutputStream{
 	}
 
 	/**
-	 * Master reports finishedSuccessfully status to slaves. 
+	 * Master reports finishedSuccessfully status to slaves.
 	 */
 	protected void broadcastFinishedSuccessfully(boolean b) {
 		if(verbose){System.err.println("crosD "+(master?"master":"slave ")+":    broadcastFinishedSuccessfully.");}
@@ -269,6 +269,7 @@ public class ConcurrentReadOutputStreamD extends ConcurrentReadOutputStream{
 			assert(sourceNum>=0 && sourceNum<ranks);
 		}
 		
+		@Override
 		public void run(){
 			assert(master);
 			ListNum<Read> ln=listen(sourceNum);
@@ -292,7 +293,9 @@ public class ConcurrentReadOutputStreamD extends ConcurrentReadOutputStream{
 	/*----------------           Getters            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	@Override
 	public ReadStreamWriter getRS1(){return master ? dest.getRS1() : null;}
+	@Override
 	public ReadStreamWriter getRS2(){return master ? dest.getRS2() : null;}
 	
 	/*--------------------------------------------------------------*/
@@ -306,13 +309,5 @@ public class ConcurrentReadOutputStreamD extends ConcurrentReadOutputStream{
 	protected ConcurrentReadOutputStream dest;
 	protected final boolean master;
 	protected final int rank, ranks;
-	
-	protected boolean finishedSuccessfully=false;
-	
-	/*--------------------------------------------------------------*/
-	/*----------------        Static Fields         ----------------*/
-	/*--------------------------------------------------------------*/
-	
-	public static boolean verbose=false;
 	
 }

@@ -3,12 +3,22 @@ package jgi;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
+import java.util.Random;
 
+import fileIO.ByteFile;
+import fileIO.ByteFile1;
+import fileIO.ByteFile2;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import fileIO.TextStreamWriter;
 import kmer.AbstractKmerTable;
 import kmer.HashArray1D;
 import kmer.HashForest;
 import kmer.KmerTable;
+import kmer.ScheduleMaker;
+import shared.Parser;
+import shared.PreParser;
 import shared.Shared;
 import shared.Timer;
 import shared.Tools;
@@ -18,13 +28,6 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import structures.ListNum;
-import dna.Parser;
-import fileIO.ByteFile;
-import fileIO.ByteFile1;
-import fileIO.ByteFile2;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import fileIO.TextStreamWriter;
 
 /**
  * @author Brian Bushnell
@@ -41,28 +44,25 @@ public class CalcUniqueness {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		CalcUniqueness rr=new CalcUniqueness(args);
-		rr.process(t);
+		CalcUniqueness x=new CalcUniqueness(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public CalcUniqueness(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
 		
-		
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_UNPIGZ=true;
-		
 		
 		int k_=25;
 		
@@ -72,7 +72,6 @@ public class CalcUniqueness {
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
@@ -116,7 +115,7 @@ public class CalcUniqueness {
 			minAverageQuality=parser.minAvgQuality;
 			minAverageQualityBases=parser.minAvgQualityBases;
 			
-			maxReads=parser.maxReads;	
+			maxReads=parser.maxReads;
 			samplerate=parser.samplerate;
 			sampleseed=parser.sampleseed;
 
@@ -151,10 +150,7 @@ public class CalcUniqueness {
 		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(in1==null){
-			printOptions();
-			throw new RuntimeException("Error - at least one input file is required.");
-		}
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -183,13 +179,16 @@ public class CalcUniqueness {
 		keySets=new AbstractKmerTable[WAYS];
 
 		//Initialize tables
+		ScheduleMaker scheduleMaker=new ScheduleMaker(WAYS, 12, false, 1);
+		int[] schedule=scheduleMaker.makeSchedule();
 		for(int j=0; j<WAYS; j++){
 			if(useForest){
 				keySets[j]=new HashForest(initialSize, true, false);
 			}else if(useTable){
 				keySets[j]=new KmerTable(initialSize, true);
 			}else if(useArray){
-				keySets[j]=new HashArray1D(initialSize, true);
+//				keySets[j]=new HashArray1D(initialSize, -1, -1L, true); //TODO: Set maxSize
+				keySets[j]=new HashArray1D(schedule, -1L);
 			}else{
 				throw new RuntimeException("Must use forest, table, or array data structure.");
 			}
@@ -209,7 +208,7 @@ public class CalcUniqueness {
 		
 		void incrementQuality(Read r){
 			qualCounts++;
-			double q=r.avgQualityByProbability(true, r.length());
+			double q=r.avgQualityByProbabilityDouble(true, r.length());
 			quality+=q;
 			double p=r.probabilityErrorFree(true, r.length());
 			perfectProb+=p;
@@ -262,7 +261,7 @@ public class CalcUniqueness {
 		}
 		
 		String percentS(){
-			return String.format("%.3f",percent());
+			return String.format(Locale.ROOT, "%.3f",percent());
 		}
 
 		long hits(){return cumulative ? chits : hits;}
@@ -345,7 +344,7 @@ public class CalcUniqueness {
 			}
 			
 			/* Process 1 list of reads per loop iteration */
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				/* Process 1 read per loop iteration */
 				for(Read r1 : reads){
 					if(minAverageQuality<1 || r1.avgQualityFirstNBases(minAverageQualityBases)>=minAverageQuality){
@@ -424,7 +423,7 @@ public class CalcUniqueness {
 
 							printCountsToBuffer(sb, pairsProcessed, paired);
 
-							tsw.print(sb.toString());
+							if(tsw!=null){tsw.print(sb.toString());}
 
 							//Reset things
 							sb.setLength(0);
@@ -434,7 +433,7 @@ public class CalcUniqueness {
 				}
 				
 				//Fetch a new list
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
@@ -447,7 +446,7 @@ public class CalcUniqueness {
 			
 			printCountsToBuffer(sb, pairsProcessed, paired);
 			
-			tsw.print(sb.toString());
+			if(tsw!=null){tsw.print(sb.toString());}
 			
 			//Reset things
 			sb.setLength(0);
@@ -457,30 +456,20 @@ public class CalcUniqueness {
 		
 		//Close things
 		errorState|=ReadWrite.closeStream(cris);
-		tsw.poisonAndWait();
-		errorState|=tsw.errorState;
+		if(tsw!=null){
+			tsw.poisonAndWait();
+			errorState|=tsw.errorState;
+		}
 		
 		t.stop();
-
-		//Calculate and display statistics
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
+		outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
 		
-		outstream.println("\nTime:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		if(testsize){
 			long bytesProcessed=(new File(in1).length()+(in2==null ? 0 : new File(in2).length()));
 			double xpnano=bytesProcessed/(double)(t.elapsed);
 			String xpstring=(bytesProcessed<100000 ? ""+bytesProcessed : bytesProcessed<100000000 ? (bytesProcessed/1000)+"k" : (bytesProcessed/1000000)+"m");
 			while(xpstring.length()<8){xpstring=" "+xpstring;}
-			outstream.println("Bytes Processed:    "+xpstring+" \t"+String.format("%.2fm bytes/sec", xpnano*1000));
+			outstream.println("Bytes Processed:    "+xpstring+" \t"+String.format(Locale.ROOT, "%.2fm bytes/sec", xpnano*1000));
 		}
 		
 		if(errorState){
@@ -533,8 +522,8 @@ public class CalcUniqueness {
 		}
 		
 		if(showQuality){
-			sb.append('\t').append(String.format("%.2f", bothCounterFirst.averageQuality()));
-			sb.append('\t').append(String.format("%.2f", bothCounterFirst.averagePerfectProb()));
+			sb.append('\t').append(String.format(Locale.ROOT, "%.2f", bothCounterFirst.averageQuality()));
+			sb.append('\t').append(String.format(Locale.ROOT, "%.2f", bothCounterFirst.averagePerfectProb()));
 		}
 		
 		sb.append('\n');
@@ -584,7 +573,7 @@ public class CalcUniqueness {
 	 * @param klen kmer length
 	 * @return kmer
 	 */
-	private final float toProb(final byte[] quals, final int start, final int klen){
+	private final static float toProb(final byte[] quals, final int start, final int klen){
 		final int stop=start+klen;
 		assert(stop<=quals.length);
 		float prob=1f;
@@ -599,27 +588,15 @@ public class CalcUniqueness {
 	
 	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("java -ea -Xmx512m -cp <path> jgi.CalcUniqueness in=<infile> in2=<infile2> out=<outfile>");
-		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-		outstream.println("Other parameters and their defaults:\n");
-		outstream.println("overwrite=false  \tOverwrites files that already exist");
-		outstream.println("interleaved=auto \tDetermines whether input file is considered interleaved");
-		outstream.println("bin=25000        \t(interval) Number of reads per data point");
-		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("k=20             \tKmer length");
-	}
-	
-	
 	public void setSampleSeed(long seed){
-		
-		//Note: ThreadLocalRandom does not allow seed to be set.
-		randy=java.util.concurrent.ThreadLocalRandom.current();
+		randy=Shared.threadLocalRandom();
 		if(seed>-1){
+			randy=new java.util.Random(seed);
+//			 && randy.getClass()==java.util.Random.class
 //			randy.setSeed(seed);
 		}else{
-//			randy.setSeed(System.nanoTime());
+			//Note: ThreadLocalRandom does not allow seed to be set.
+			randy=Shared.threadLocalRandom();
 		}
 	}
 	
@@ -656,7 +633,7 @@ public class CalcUniqueness {
 
 	private long interval=25000;
 	private float minprob=0;
-	private int minAverageQuality=0;
+	private float minAverageQuality=0;
 	private int minAverageQualityBases=20;
 	private int singleOffset=0;
 	private boolean cumulative=false;
@@ -695,7 +672,7 @@ public class CalcUniqueness {
 	
 	private static final boolean useForest=false, useTable=false, useArray=true;
 	
-	private java.util.concurrent.ThreadLocalRandom randy;
+	private Random randy;
 	
 	private static final float[] probCorrect=
 		{0.0000f, 0.2501f, 0.3690f, 0.4988f, 0.6019f, 0.6838f, 0.7488f, 0.8005f, 0.8415f, 0.8741f, 0.9000f, 0.9206f, 0.9369f, 0.9499f,

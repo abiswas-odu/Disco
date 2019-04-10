@@ -2,7 +2,6 @@ package fileIO;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 import dna.Gene;
@@ -59,8 +58,7 @@ public class ChainBlock implements Comparable<ChainBlock>{
 		
 	}
 	
-	
-	private int toChromosome(String s){
+	private static int toChromosome(String s){
 		int result;
 		try{
 			result=Gene.toChromosome(s);
@@ -70,11 +68,10 @@ public class ChainBlock implements Comparable<ChainBlock>{
 		return result;
 	}
 	
-	
 	public ChainLine[] toLines(){
 		ChainLine[] out=new ChainLine[chunks.length];
 		
-		if(qStrand==Gene.PLUS){
+		if(qStrand==Shared.PLUS){
 
 			int tloc=tStart, qloc=qStart;
 			for(int i=0; i<chunks.length; i++){
@@ -130,7 +127,7 @@ public class ChainBlock implements Comparable<ChainBlock>{
 	
 	
 	public static ArrayList<ChainBlock> loadChainBlocks(String fname){
-		TextFile tf=new TextFile(fname, false, true);
+		TextFile tf=new TextFile(fname, false);
 		String[] lines=tf.toStringLines();
 		tf.close();
 		String[][] text=TextFile.doublesplitWhitespace(lines, true);
@@ -220,6 +217,6 @@ public class ChainBlock implements Comparable<ChainBlock>{
 //    * qStrand -- strand (query sequence)
 //    * qStart -- alignment start position (query sequence)
 //    * qEnd -- alignment end position (query sequence)
-//    * id -- chain ID 
+//    * id -- chain ID
 	
 }

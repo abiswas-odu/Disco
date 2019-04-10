@@ -16,11 +16,11 @@ public class Genetic {
 		bits=(args.length>1 ? Integer.parseInt(args[1]) : 8);
 		iters=(args.length>2 ? Integer.parseInt(args[2]) : 20);
 		mutProb=(args.length>3 ? Double.parseDouble(args[3]) : 0.01);
-		mask=~((-1L)<<bits);
+		mask=(bits>63 ? -1L : ~((-1L)<<bits));
 	}
 	
 	public long solve(){
-		final long mask=~((-1L)<<bits);
+		final long mask=(bits>63 ? -1L : ~((-1L)<<bits));
 		double[] prob=new double[pop];
 		Bug[] current=new Bug[pop];
 		for(int i=0; i<pop; i++){
@@ -37,7 +37,7 @@ public class Genetic {
 			
 			current=iterate(current, prob);
 			Arrays.sort(current);
-			if(best.compareTo(current[current.length-1])<0){best=current[current.length-1];} 
+			if(best.compareTo(current[current.length-1])<0){best=current[current.length-1];}
 		}
 		
 		return best.dna;
@@ -98,10 +98,12 @@ public class Genetic {
 			fitness=f(dna);
 		}
 		
+		@Override
 		public int compareTo(Bug b){
 			return (fitness<b.fitness ? -1 : fitness>b.fitness ? 1 : 0);
 		}
 		
+		@Override
 		public String toString(){
 			return Long.toBinaryString(dna)+" \t-> "+fitness;
 		}

@@ -1,21 +1,25 @@
 package jgi;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Locale;
 import java.util.Random;
 
-import stream.ByteBuilder;
+import dna.AminoAcid;
+import fileIO.ByteStreamWriter;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
+import shared.Parser;
+import shared.PreParser;
+import shared.Shared;
+import shared.Timer;
+import shared.Tools;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.FASTQ;
 import stream.Read;
+import structures.ByteBuilder;
 import structures.ListNum;
-import dna.AminoAcid;
-import dna.Parser;
-import fileIO.FileFormat;
-import fileIO.ReadWrite;
-import shared.Shared;
-import shared.Timer;
+import var2.Var;
 
 /**
  * @author Brian Bushnell
@@ -26,52 +30,64 @@ public class MutateGenome {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		MutateGenome mg=new MutateGenome(args);
-		mg.process(t);
+		MutateGenome x=new MutateGenome(args);
+		x.process(t);
+		
+		//Close the print stream if it was redirected
+		Shared.closeStream(x.outstream);
 	}
 	
 	public MutateGenome(String[] args){
 		
-		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args, true)){
-			printOptions();
-			System.exit(0);
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, getClass(), false);
+			args=pp.args;
+			outstream=pp.outstream;
 		}
 		
-		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		
-		Shared.READ_BUFFER_LENGTH=1;
+		Shared.setBufferLen(1);
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		
 		Parser parser=new Parser();
+		parser.overwrite=true;
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
 			String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
-			if(b==null || b.equalsIgnoreCase("null")){b=null;}
-			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
+			}else if(a.equals("period")){
+				period=Integer.parseInt(b);
 			}else if(a.equals("subrate") || a.equals("snprate")){
 				subRate=Float.parseFloat(b);
-				if(subRate>0){subRate/=100;}
+				if(subRate>1){subRate/=100;}
 			}else if(a.equals("indelrate")){
 				indelRate=Float.parseFloat(b);
-				if(indelRate>0){indelRate/=100;}
+				if(indelRate>1){indelRate/=100;}
+			}else if(a.equals("maxindel")){
+				maxIndel=Tools.parseIntKMG(b);
+			}else if(a.equals("indelspacing")){
+				indelSpacing=Tools.parseIntKMG(b);
 			}else if(a.equals("seed")){
 				seed=Long.parseLong(b);
 			}else if(a.equals("prefix")){
 				prefix=b;
+			}else if(a.equals("vcf") || a.equals("outvcf") || a.equals("vcfout") || a.equals("vars") || a.equals("varsout") || a.equals("outvars")){
+				outVcf=b;
 			}else if(a.equals("id") || a.equals("identity")){
 				float x=Float.parseFloat(b);
 				if(x>1){x=x/100;}
 				x=1-x;
 				indelRate=x*0.01f;
 				subRate=x*0.99f;
+			}else if(a.equals("fraction") || a.equals("completeness")){
+				float x=Float.parseFloat(b);
+				if(x>1){x=x/100;}
+				genomeFraction=x;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -79,14 +95,15 @@ public class MutateGenome {
 			}
 		}
 		errorRate=subRate+indelRate;
-
+		errorRate2=subRate+(indelRate*0.16666f*(maxIndel+1));
+		
 		assert(subRate>=0 && subRate<=1) : "Substitution rate must be between 0 and 1, inclusive.  Invalid value: "+subRate;
 		assert(indelRate>=0 && indelRate<=1) : "Indel rate must be between 0 and 1, inclusive.  Invalid value: "+indelRate;
 		assert(errorRate>=0 && errorRate<=1) : "Total error rate must be between 0 and 1, inclusive.  Invalid value: "+errorRate;
 		
-		System.err.println(String.format("Target Identity:   \t%.2f%%", (1-errorRate)*100));
-		System.err.println(String.format("Substitution Rate: \t%.2f%%", subRate*100));
-		System.err.println(String.format("Indel Rate:        \t%.2f%%", indelRate*100));
+		System.err.println(String.format(Locale.ROOT, "Target Identity:   \t%.2f%%", (1-errorRate2)*100));
+		System.err.println(String.format(Locale.ROOT, "Substitution Rate: \t%.2f%%", subRate*100));
+		System.err.println(String.format(Locale.ROOT, "Indel Rate:        \t%.2f%%", indelRate*100));
 		
 		if(seed<0){randy=new Random();}
 		else{randy=new Random(seed);}
@@ -97,9 +114,31 @@ public class MutateGenome {
 			maxReads=parser.maxReads;
 			in1=parser.in1;
 			out1=parser.out1;
+			overwrite=parser.overwrite;
+			append=parser.append;
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTA, null, true, true, false, false);
+		//Ensure there is an input file
+		if(in1==null){throw new RuntimeException("Error - at least one input file is required.");}
+		
+		//Ensure output files can be written
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, outVcf)){
+			outstream.println((out1==null)+", "+(outVcf==null)+", "+out1+", "+outVcf);
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+outVcf+"\n");
+		}
+		
+		//Ensure input files can be read
+		if(!Tools.testInputFiles(false, true, in1)){
+			throw new RuntimeException("\nCan't read some input files.\n");  
+		}
+		
+		//Ensure that no file was specified multiple times
+		if(!Tools.testForDuplicateFiles(true, in1, out1, outVcf)){
+			throw new RuntimeException("\nSome file names were specified multiple times.\n");
+		}
+		
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTA, null, true, overwrite, append, false);
+		ffoutVcf=FileFormat.testOutput(outVcf, FileFormat.VCF, null, true, overwrite, append, false);
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTA, null, true, true);
 	}
 	
@@ -117,7 +156,7 @@ public class MutateGenome {
 			
 			if(cris.paired() && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
+			}
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
@@ -125,8 +164,6 @@ public class MutateGenome {
 			ros.start();
 		}else{ros=null;}
 
-		long readsProcessed=0;
-		long basesProcessed=0;
 		{
 			
 			ListNum<Read> ln=cris.nextList();
@@ -137,8 +174,11 @@ public class MutateGenome {
 				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
 			}
 			ByteBuilder bb=new ByteBuilder();
+			ArrayList<String> headers=(ffoutVcf==null ? null : new ArrayList<String>());
+			ArrayList<SmallVar> vars=(ffoutVcf==null ? null : new ArrayList<SmallVar>());
+			ArrayList<SmallVar> varsTemp=(ffoutVcf==null ? null : new ArrayList<SmallVar>());
 
-			while(reads!=null && reads.size()>0){
+			while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
 				
 				for(int idx=0; idx<reads.size(); idx++){
@@ -147,12 +187,13 @@ public class MutateGenome {
 					readsProcessed++;
 					basesProcessed+=r1.length();
 					
-					processRead(r1, bb);
+					processRead(r1, bb, varsTemp, headers);
+					if(vars!=null){vars.addAll(varsTemp);}
 				}
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln.id, ln.list.isEmpty());
+				cris.returnList(ln);
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
@@ -160,7 +201,10 @@ public class MutateGenome {
 			if(ln!=null){
 				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
+			
+			writeVars(vars, headers);
 		}
+		
 		ReadWrite.closeStreams(cris, ros);
 		if(verbose){outstream.println("Finished.");}
 		
@@ -169,86 +213,511 @@ public class MutateGenome {
 			t.stop();
 			
 			//Calculate units per nanosecond
-			double rpnano=readsProcessed/(double)(t.elapsed);
-			double bpnano=basesProcessed/(double)(t.elapsed);
+			double brnano=basesRetained/(double)(t.elapsed);
 			
 			//Add "k" and "m" for large numbers
-			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
+			long mutationsAdded=subsAdded+insAdded+delsAdded+junctionsAdded;
+			String brstring=(basesRetained<100000 ? ""+basesRetained : basesRetained<100000000 ? (basesRetained/1000)+"k" : (basesRetained/1000000)+"m");
 			String mastring=(mutationsAdded<100000 ? ""+mutationsAdded : mutationsAdded<100000000 ? (mutationsAdded/1000)+"k" : (mutationsAdded/1000000)+"m");
+			String sastring=(subsAdded<100000 ? ""+subsAdded : subsAdded<100000000 ? (subsAdded/1000)+"k" : (subsAdded/1000000)+"m");
+			String iastring=(insAdded<100000 ? ""+insAdded : insAdded<100000000 ? (insAdded/1000)+"k" : (insAdded/1000000)+"m");
+			String dastring=(delsAdded<100000 ? ""+delsAdded : delsAdded<100000000 ? (delsAdded/1000)+"k" : (delsAdded/1000000)+"m");
+			String jastring=(junctionsAdded<100000 ? ""+junctionsAdded : junctionsAdded<100000000 ? (junctionsAdded/1000)+"k" : (junctionsAdded/1000000)+"m");
 			
 			//Format the strings so they have they are right-justified
-			while(rpstring.length()<8){rpstring=" "+rpstring;}
-			while(bpstring.length()<8){bpstring=" "+bpstring;}
+			while(brstring.length()<8){brstring=" "+brstring;}
 			while(mastring.length()<8){mastring=" "+mastring;}
+			while(sastring.length()<8){sastring=" "+sastring;}
+			while(iastring.length()<8){iastring=" "+iastring;}
+			while(dastring.length()<8){dastring=" "+dastring;}
+			while(jastring.length()<8){jastring=" "+jastring;}
 			
-			outstream.println("\nTime:                         \t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-			outstream.println("Mutations Added:    "+mastring+" \t"+String.format("%.2f%% Identity", 100f-mutationsAdded*100f/basesProcessed));
+			outstream.println(Tools.timeReadsBasesProcessed(t, readsProcessed, basesProcessed, 8));
+			if(genomeFraction<1){outstream.println("Bases Retained:     "+brstring+" \t"+String.format(Locale.ROOT, "%.2fm bases/sec", brnano*1000));}
+			outstream.println("Mutations Added:    "+mastring+" \t"+String.format(Locale.ROOT, "%.2f%% Identity", 100f-mutationLengthAdded*100f/basesProcessed));
+			outstream.println("Subs Added:         "+sastring);
+			outstream.println("Insertions Added:   "+iastring);
+			outstream.println("Deletions Added:    "+dastring);
+			outstream.println("Junctions Added:    "+jastring);
 		}
 		
 		t.stop();
 	}
 	
-	public void processRead(Read r, ByteBuilder bb){
+	public void processRead(Read r, ByteBuilder bb, ArrayList<SmallVar> vars, ArrayList<String> headers){
+		
+		if(r.aminoacid()) {
+			processReadAmino(r, bb, vars, headers);
+			return;
+		}
+		
+		//Setup
 		bb.clear();
-		final byte[] bases=r.bases;
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			float x=randy.nextFloat();
-			if(x<=errorRate && AminoAcid.isFullyDefined(b)){
-				mutationsAdded++;
-				if(x<=subRate){
-					b=AminoAcid.numberToBase[((AminoAcid.baseToNumber[b]+randy.nextInt(3)+1)&3)];
-					bb.append(b);
-				}else if(randy.nextBoolean()){//del
-					//do nothing
-				}else{//ins
-					i--;
-					b=AminoAcid.numberToBase[randy.nextInt(4)];
-					bb.append(b);
+		r.quality=null;
+		if(headers!=null){headers.add("<ID="+r.id+",length="+r.length()+">");}
+		if(vars!=null){vars.clear();}
+		
+		//Handle genomeFraction
+		if(genomeFraction<1){
+			final byte[] bases0=r.bases;
+			int retain=(int)(bases0.length*(genomeFraction));
+			if(retain<bases0.length){
+				final int start=randy.nextInt(bases0.length);
+				int i=0, j=start;
+				for(; i<retain && j<bases0.length; i++, j++){
+					bb.append(bases0[j]);
 				}
-			}else{
-				bb.append(b);
+				j=0;
+				
+				if(i<retain){
+					junctionsAdded++;
+					mutationLengthAdded++;
+				} //Chimeric junction
+				
+				for(; i<retain; i++, j++){
+					bb.append(bases0[j]);
+				}
+				r.bases=bb.toBytes();
+				bb.clear();
 			}
 		}
-		r.quality=null;
+		
+		//Handle mutations
+		final byte[] bases=r.bases;
+		
+		if(period>-1){
+			int basesSinceMutation=0;
+			char prevChar='N';
+			for(int i=0; i<bases.length; i++){
+				final byte b0=bases[i];
+				byte b=b0;
+				if(basesSinceMutation>=period && AminoAcid.isFullyDefined(b)){
+					basesSinceMutation=0;
+					float x=randy.nextFloat()*errorRate;
+					if(x<subRate){
+						b=AminoAcid.numberToBase[((AminoAcid.baseToNumber[b]+randy.nextInt(3)+1)&3)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(SUB, i, i+1, Character.toString((char)b), Character.toString((char)b0), prevChar, r.id, r.numericID));}
+						subsAdded++;
+						mutationLengthAdded++;
+					}else if(randy.nextBoolean()){//del
+						//do nothing
+						if(vars!=null){vars.add(new SmallVar(DEL, i, i+1, "", Character.toString((char)b0), prevChar, r.id, r.numericID));}
+						delsAdded++;
+						mutationLengthAdded++;
+					}else{//ins
+						b=AminoAcid.numberToBase[randy.nextInt(4)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(INS, i, i, Character.toString((char)b), "", prevChar, r.id, r.numericID));}
+						i--;
+						insAdded++;
+						mutationLengthAdded++;
+					}
+				}else{
+					basesSinceMutation++;
+					bb.append(b);
+				}
+				prevChar=(char) b0;
+			}
+		}else{
+			char prevChar='N';
+			int lastIndel=-1;
+			for(int i=0; i<bases.length; i++){
+				final byte b0=bases[i];
+				byte b=b0;
+				float x=randy.nextFloat();
+				if(x<errorRate && AminoAcid.isFullyDefined(b)){
+//					System.err.println(x+", "+errorRate+", "+subRate);
+					if(x<subRate){
+						subsAdded++;
+						mutationLengthAdded++;
+						b=AminoAcid.numberToBase[((AminoAcid.baseToNumber[b]+randy.nextInt(3)+1)&3)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(SUB, i, i+1, Character.toString((char)b), Character.toString((char)b0), prevChar, r.id, r.numericID));}
+					}else if(i-lastIndel>indelSpacing){
+						int lim=Tools.min(maxIndel, bases.length-i-1);
+						if(lim>=1){
+							int len=1+(Tools.min(randy.nextInt(lim), randy.nextInt(lim), randy.nextInt(lim)));
+							
+							if(randy.nextBoolean()){//del
+								delsAdded++;
+								mutationLengthAdded+=len;
+								//do nothing
+								if(vars!=null){vars.add(new SmallVar(DEL, i, i+len, "", new String(bases, i, len), prevChar, r.id, r.numericID));}
+								i=i+len-1;
+							}else{//ins
+								insAdded++;
+								mutationLengthAdded+=len;
+								if(len==1){
+									b=AminoAcid.numberToBase[randy.nextInt(4)];
+									bb.append(b);
+									if(vars!=null){vars.add(new SmallVar(INS, i, i, Character.toString((char)b), "", prevChar, r.id, r.numericID));}
+								}else{
+									StringBuilder sb=new StringBuilder();
+									while(sb.length()<len){
+										b=AminoAcid.numberToBase[randy.nextInt(4)];
+										bb.append(b);
+										sb.append((char)b);
+									}
+									if(vars!=null){vars.add(new SmallVar(INS, i, i, sb.toString(), "", prevChar, r.id, r.numericID));}
+								}
+								i--;
+							}
+							lastIndel=i;
+						}
+					}
+				}else{
+					bb.append(b);
+				}
+				prevChar=(char) b0;
+			}
+		}
+		
+		condenseVars(vars);
+		
+		//Modify read
 		r.bases=bb.toBytes();
+		
 		if(prefix!=null){
 			r.id=prefix+r.numericID;
 		}
+		basesRetained+=r.bases.length;
+	}
+	
+	public void processReadAmino(Read r, ByteBuilder bb, ArrayList<SmallVar> vars, ArrayList<String> headers){
+		
+		assert(r.aminoacid());
+		
+		//Setup
+		bb.clear();
+		r.quality=null;
+		if(headers!=null){headers.add("<ID="+r.id+",length="+r.length()+">");}
+		if(vars!=null){vars.clear();}
+		
+		//Handle genomeFraction
+		if(genomeFraction<1){
+			final byte[] bases0=r.bases;
+			int retain=(int)(bases0.length*(genomeFraction));
+			if(retain<bases0.length){
+				final int start=randy.nextInt(bases0.length);
+				int i=0, j=start;
+				for(; i<retain && j<bases0.length; i++, j++){
+					bb.append(bases0[j]);
+				}
+				j=0;
+				
+				if(i<retain){
+					junctionsAdded++;
+					mutationLengthAdded++;
+				} //Chimeric junction
+				
+				for(; i<retain; i++, j++){
+					bb.append(bases0[j]);
+				}
+				r.bases=bb.toBytes();
+				bb.clear();
+			}
+		}
+		
+		//Handle mutations
+		final byte[] bases=r.bases;
+		
+		if(period>-1){
+			int basesSinceMutation=0;
+			char prevChar='X';
+			for(int i=0; i<bases.length; i++){
+				final byte b0=bases[i];
+				byte b=b0;
+				if(basesSinceMutation>=period && AminoAcid.isFullyDefinedAA(b)){
+					basesSinceMutation=0;
+					float x=randy.nextFloat()*errorRate;
+					if(x<subRate){
+						subsAdded++;
+						mutationLengthAdded++;
+						b=AminoAcid.numberToAcid[((AminoAcid.acidToNumber[b]+randy.nextInt(20)+1)%21)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(SUB, i, i+1, Character.toString((char)b), Character.toString((char)b0), prevChar, r.id, r.numericID));}
+					}else if(randy.nextBoolean()){//del
+						delsAdded++;
+						mutationLengthAdded++;
+						//do nothing
+						if(vars!=null){vars.add(new SmallVar(DEL, i, i+1, "", Character.toString((char)b0), prevChar, r.id, r.numericID));}
+					}else{//ins
+						insAdded++;
+						mutationLengthAdded++;
+						b=AminoAcid.numberToAcid[randy.nextInt(21)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(INS, i, i, Character.toString((char)b), "", prevChar, r.id, r.numericID));}
+						i--;
+					}
+				}else{
+					basesSinceMutation++;
+					bb.append(b);
+				}
+				prevChar=(char) b0;
+			}
+		}else{
+			char prevChar='N';
+			for(int i=0; i<bases.length; i++){
+				final byte b0=bases[i];
+				byte b=b0;
+				float x=randy.nextFloat();
+				if(x<errorRate && AminoAcid.isFullyDefinedAA(b)){
+					if(x<subRate){
+						subsAdded++;
+						mutationLengthAdded++;
+						b=AminoAcid.numberToAcid[((AminoAcid.acidToNumber[b]+randy.nextInt(20)+1)%21)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(SUB, i, i+1, Character.toString((char)b), Character.toString((char)b0), prevChar, r.id, r.numericID));}
+					}else if(randy.nextBoolean()){//del
+						delsAdded++;
+						mutationLengthAdded++;
+						//do nothing
+						if(vars!=null){vars.add(new SmallVar(DEL, i, i+1, "", Character.toString((char)b0), prevChar, r.id, r.numericID));}
+					}else{//ins
+						insAdded++;
+						mutationLengthAdded++;
+						b=AminoAcid.numberToAcid[randy.nextInt(21)];
+						bb.append(b);
+						if(vars!=null){vars.add(new SmallVar(INS, i, i, Character.toString((char)b), "", prevChar, r.id, r.numericID));}
+						i--;
+					}
+				}else{
+					bb.append(b);
+				}
+				prevChar=(char) b0;
+			}
+		}
+		
+		condenseVars(vars);
+		
+		//Modify read
+		r.bases=bb.toBytes();
+		
+		if(prefix!=null){
+			r.id=prefix+r.numericID;
+		}
+		basesRetained+=r.bases.length;
 	}
 	
 	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){
-		throw new RuntimeException("printOptions: TODO");
+	private void condenseVars(ArrayList<SmallVar> vars){
+		if(vars==null || vars.size()<2){return;}
+		
+		{//Pass 1: fuse indels into subs
+			SmallVar current=null;
+			for(int i=0; i<vars.size(); i++){
+				SmallVar next=vars.get(i);
+				if(next.type==SUB){
+					current=null;
+				}else if(current==null){
+					current=next;
+				}else if(current.stop==next.start && current.type!=next.type){
+					if(current.type==DEL){
+						assert(next.type==INS) : next.type;
+						//Change the del to a sub
+						current.type=SUB;
+						current.alt=next.alt;
+						current=null;
+						vars.set(i, null);
+					}else if(current.type==INS){
+						assert(next.type==DEL) : next.type;
+						//Change the ins to a sub
+						current.type=SUB;
+						current.ref=next.ref;
+						current.stop=next.stop;
+						current=null;
+						vars.set(i, null);
+					}else{
+						assert(false) : current.type;
+					}
+				}else{
+					current=next;
+				}
+			}
+			Tools.condenseStrict(vars);
+			if(vars.size()<2){return;}
+		}
+		
+		{//Pass 2: lengthen indels
+			SmallVar current=null;
+			for(int i=0; i<vars.size(); i++){
+				SmallVar next=vars.get(i);
+				if(next.type==SUB){
+					current=null;
+					if(!next.valid()){vars.set(i, null);}
+				}else if(current==null){
+					current=next;
+				}else if(current.stop==next.start && current.type==next.type){
+					if(current.type==DEL){
+						assert(next.type==DEL) : next.type;
+						//Lengthen the deletion
+						current.stop=next.stop;
+						current.ref+=next.ref;
+						vars.set(i, null);
+					}else if(current.type==INS){
+						assert(next.type==INS) : next.type;
+						//Lengthen the insertion
+						current.alt+=next.alt;
+						vars.set(i, null);
+					}else{
+						assert(false) : current.type;
+					}
+				}else{
+					current=next;
+				}
+			}
+			Tools.condenseStrict(vars);
+		}
+	}
+	
+	void writeVars(ArrayList<SmallVar> vars, ArrayList<String> headers){
+		if(ffoutVcf==null){return;}
+		ByteStreamWriter bsw=new ByteStreamWriter(ffoutVcf);
+		bsw.start();
+		ByteBuilder bb=new ByteBuilder();
+		bb.appendln("##fileformat=VCFv4.2");
+		bb.appendln("##BBMapVersion="+Shared.BBMAP_VERSION_STRING);
+		bb.appendln("##Program=MutateGenome");
+		for(String s : headers){
+			bb.append("##contig=").appendln(s);
+		}
+		bb.appendln("##FILTER=<ID=FAIL,Description=\"Fail\">");
+		bb.appendln("##FILTER=<ID=PASS,Description=\"Pass\">");
+		bb.appendln("##INFO=<ID=SN,Number=1,Type=Integer,Description=\"Scaffold Number\">");
+		bb.appendln("##INFO=<ID=STA,Number=1,Type=Integer,Description=\"Start\">");
+		bb.appendln("##INFO=<ID=STO,Number=1,Type=Integer,Description=\"Stop\">");
+		bb.appendln("##INFO=<ID=TYP,Number=1,Type=String,Description=\"Type\">");
+		bb.appendln("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">");
+		bb.appendln("##FORMAT=<ID=SC,Number=1,Type=Float,Description=\"Score\">");
+		bb.appendln("##FORMAT=<ID=PF,Number=1,Type=String,Description=\"Pass Filter\">");
+		bb.appendln("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+(out1==null ? "sample" : ReadWrite.stripToCore(out1)));
+		
+		bsw.print(bb);
+		bb.clear();
+		
+		for(SmallVar v : vars){
+			v.toVcf(bb);
+			bb.nl();
+			if(bb.length()>=64000){
+				bsw.print(bb);
+				bb.clear();
+			}
+		}
+		if(bb.length()>=0){
+			bsw.print(bb);
+			bb.clear();
+		}
+		errorState=bsw.poisonAndWait()|errorState;
+	}
+	
+	/*--------------------------------------------------------------*/
+	
+	private static class SmallVar{
+		
+		SmallVar(int type_, int start_, int stop_, String alt_, String ref_, char prevChar_, String rname_, long scafNum_){
+			type=type_;
+			start=start_;
+			stop=stop_;
+			alt=alt_;
+			ref=ref_;
+			prevChar=prevChar_;
+			rname=rname_;
+			scafNum=scafNum_;
+		}
+		
+		boolean valid(){
+			return type!=SUB || !alt.equals(ref);
+		}
+		
+		void toVcf(ByteBuilder bb){
+			bb.append(rname).append('\t');
+			if(type==SUB){
+				bb.append(start+1).append('\t');
+				bb.append('.').append('\t');
+				bb.append(ref).append('\t');
+				bb.append(alt).append('\t');
+			}else if(type==DEL || type==INS){
+				bb.append(start).append('\t');
+				bb.append('.').append('\t');
+				bb.append(prevChar).append(ref).append('\t');
+				bb.append(prevChar).append(alt).append('\t');
+			}else{assert(false);}
+			bb.append("60.00").append('\t');
+			bb.append("PASS").append('\t');
+			bb.append("SN=").append(scafNum).append(';');
+			bb.append("STA=").append(start).append(';');
+			bb.append("STO=").append(stop).append(';');
+			bb.append("TYP=").append(Var.typeArray[type]).append('\t');
+			bb.append("GT:SC:PF").append('\t');
+			bb.append(1).append(':');
+			bb.append("60.00").append(':');
+			bb.append("PASS");
+		}
+		
+		int type;
+		final int start;
+		int stop;
+		String ref;
+		String alt;
+		final char prevChar;
+		final String rname;
+		final long scafNum;
+		
 	}
 	
 	/*--------------------------------------------------------------*/
 	
 	private String in1=null;
 	private String out1=null;
+	private String outVcf=null;
 
 	private String prefix=null;
 	
 	private final FileFormat ffin1;
 	private final FileFormat ffout1;
+	private final FileFormat ffoutVcf;
 	
 	/*--------------------------------------------------------------*/
 
 	private long maxReads=-1;
-	private long mutationsAdded=0;
+//	private long mutationsAdded=0;
+	
+	private long mutationLengthAdded=0;
+	private long subsAdded=0;
+	private long insAdded=0;
+	private long delsAdded=0;
+	private long junctionsAdded=0;
+
+	private int period=-1;
+	
+	private float genomeFraction=1;
+	private long basesRetained;
+
+	private long readsProcessed=0;
+	private long basesProcessed=0;
 
 	private float subRate=0;
 	private float indelRate=0;
+	private int maxIndel=1;
+	private int indelSpacing=10;
 	private final float errorRate;
+	private final float errorRate2;
 	
 	private final Random randy;
 	private long seed=-1;
 	
 	/*--------------------------------------------------------------*/
+	
+	/** True if an error was encountered */
+	public boolean errorState=false;
+	/** Overwrite existing output files */
+	private boolean overwrite=true;
+	/** Append to existing output files */
+	private boolean append=false;
+	
+	private static final int SUB=Var.SUB, INS=Var.INS, DEL=Var.DEL;
 	
 	private java.io.PrintStream outstream=System.err;
 	public static boolean verbose=false;

@@ -96,7 +96,7 @@ public class FindPath {
 			name=s;
 		}
 		String name;
-		ArrayList<Edge> edges=new ArrayList<Edge>(); 
+		ArrayList<Edge> edges=new ArrayList<Edge>();
 		
 	}
 	

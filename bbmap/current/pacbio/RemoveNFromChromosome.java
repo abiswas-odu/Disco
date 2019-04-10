@@ -5,8 +5,8 @@ import java.io.File;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays2;
-import dna.Gene;
 import fileIO.ReadWrite;
+import shared.Shared;
 
 /**
  * @author Brian Bushnell
@@ -30,7 +30,7 @@ public class RemoveNFromChromosome {
 		for(int chrom=1; chrom<=Data.numChroms; chrom++){
 			ChromosomeArray cha=Data.getChromosome(chrom);
 			Data.unload(chrom, true);
-			ChromosomeArray chb=new ChromosomeArray(chrom, Gene.PLUS, 0, cha.countDefinedBases()+2*padding+1);
+			ChromosomeArray chb=new ChromosomeArray(chrom, Shared.PLUS, 0, cha.countDefinedBases()+2*padding+1);
 			chb.maxIndex=-1;
 			for(int i=0; i<padding; i++){
 				chb.set(i, 'N');

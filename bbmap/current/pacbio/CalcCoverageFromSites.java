@@ -1,20 +1,20 @@
 package pacbio;
 
-import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Locale;
 
+import dna.AminoAcid;
+import dna.ChromosomeArray;
+import dna.Data;
+import fileIO.ReadWrite;
+import fileIO.TextFile;
+import shared.PreParser;
+import shared.Timer;
+import shared.Tools;
 import stream.SiteScoreR;
 import structures.CoverageArray;
 import structures.CoverageArray2;
 import var.GenerateVarlets;
-import dna.AminoAcid;
-import dna.ChromosomeArray;
-import dna.Data;
-import dna.Parser;
-import fileIO.ReadWrite;
-import fileIO.TextFile;
-import shared.Timer;
-import shared.Tools;
 
 /**
  * @author Brian Bushnell
@@ -24,7 +24,12 @@ import shared.Tools;
 public class CalcCoverageFromSites {
 	
 	public static void main(String[] args){
-		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		Timer t=new Timer();
 		String infile=args[0];
 		String outfile=args[1];
@@ -38,9 +43,7 @@ public class CalcCoverageFromSites {
 			String a=split[0].toLowerCase();
 			String b=split[1];
 			
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(a.equals("mincoverage")){
+			if(a.equals("mincoverage")){
 				mincoverage=Integer.parseInt(b);
 			}
 		}
@@ -67,7 +70,7 @@ public class CalcCoverageFromSites {
 			correct[chrom]=new byte[Data.chromLengths[chrom]];
 		}
 		
-		TextFile tf=new TextFile(fname, true, false);
+		TextFile tf=new TextFile(fname, true);
 		String s=tf.nextLine();
 		
 		long totalSites=0;
@@ -148,7 +151,7 @@ public class CalcCoverageFromSites {
 			CoverageArray cov=coverage[chrom];
 			byte[] cor=correct[chrom];
 			for(int i=0; i<cov.maxIndex; i++){
-				char b=Character.toUpperCase((char)cha.get(i));
+				char b=Tools.toUpperCase((char)cha.get(i));
 				if(!AminoAcid.isFullyDefined(b)){b='N';}
 				
 				int total=cov.get(i);
@@ -245,41 +248,41 @@ public class CalcCoverageFromSites {
 		if(bs!=null){
 			System.out.println("Reads Represented:       \t"+bs.cardinality());
 		}
-		System.out.println(String.format("Total Correct Sites:     \t"+(correctSitesB<10?" ":"")+"%.3f%%  ", correctSitesB)+" \t"+correctSites);
-		System.out.println(String.format("Total Correct Site Length:\t"+(correctSiteLenB<10?" ":"")+"%.3f%%  ", correctSiteLenB)+" \t"+correctSiteLen);
+		System.out.println(String.format(Locale.ROOT, "Total Correct Sites:     \t"+(correctSitesB<10?" ":"")+"%.3f%%  ", correctSitesB)+" \t"+correctSites);
+		System.out.println(String.format(Locale.ROOT, "Total Correct Site Length:\t"+(correctSiteLenB<10?" ":"")+"%.3f%%  ", correctSiteLenB)+" \t"+correctSiteLen);
 
 		System.out.println("\nCoverage Statistics");
 		
-		System.out.println(String.format("Avg Coverage:            \t"+(totalCoverageB<10?" ":"")+"%.3f", totalCoverageB)+"  \t"+totalCoverage);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage:            \t"+(totalCoverageB<10?" ":"")+"%.3f", totalCoverageB)+"  \t"+totalCoverage);
 		
-		System.out.println(String.format("Avg Coverage Base:       \t"+(totalCoverageBaseB<10?" ":"")+"%.3f", totalCoverageBaseB)+"  \t"+totalCoverageBase);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage Base:       \t"+(totalCoverageBaseB<10?" ":"")+"%.3f", totalCoverageBaseB)+"  \t"+totalCoverageBase);
 		
-		System.out.println(String.format("Avg Coverage N:          \t"+(totalCoverageNB<10?" ":"")+"%.3f", totalCoverageNB)+"  \t"+totalCoverageN);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage N:          \t"+(totalCoverageNB<10?" ":"")+"%.3f", totalCoverageNB)+"  \t"+totalCoverageN);
 		
-		System.out.println(String.format("Correct Coverage:        \t"+(correctCoverageB<10?" ":"")+"%.3f", correctCoverageB)+"  \t"+correctCoverage);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage:        \t"+(correctCoverageB<10?" ":"")+"%.3f", correctCoverageB)+"  \t"+correctCoverage);
 		
-		System.out.println(String.format("Correct Coverage Base:   \t"+(correctCoverageBaseB<10?" ":"")+"%.3f", correctCoverageBaseB)+"  \t"+correctCoverageBase);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage Base:   \t"+(correctCoverageBaseB<10?" ":"")+"%.3f", correctCoverageBaseB)+"  \t"+correctCoverageBase);
 		
-		System.out.println(String.format("Correct Coverage N:      \t"+(correctCoverageNB<10?" ":"")+"%.3f", correctCoverageNB)+"  \t"+correctCoverageN);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage N:      \t"+(correctCoverageNB<10?" ":"")+"%.3f", correctCoverageNB)+"  \t"+correctCoverageN);
 		
 		System.out.println("\nStatistics over Defined Bases");
 		
-		System.out.println(String.format("onlyCorrect:             \t"+(onlyCorrectBaseB<10?" ":"")+"%.3f", onlyCorrectBaseB)+"%");
-		System.out.println(String.format("mostlyCorrect:           \t"+(mostlyCorrectBaseB<10?" ":"")+"%.3f", mostlyCorrectBaseB)+"%");
-		System.out.println(String.format("anyCorrect:              \t"+(anyCorrectBaseB<10?" ":"")+"%.3f", anyCorrectBaseB)+"%");
-		System.out.println(String.format("noCorrect:               \t"+(noCorrectBaseB<10?" ":"")+"%.3f", noCorrectBaseB)+"%");
-		System.out.println(String.format("mostlyIncorrect:         \t"+(mostlyIncorrectBaseB<10?" ":"")+"%.3f", mostlyIncorrectBaseB)+"%");
-		System.out.println(String.format("onlyIncorrect:           \t"+(onlyIncorrectBaseB<10?" ":"")+"%.3f", onlyIncorrectBaseB)+"%");
-		System.out.println(String.format("noCoverage:              \t"+(noCoverageBaseB<10?" ":"")+"%.3f", noCoverageBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyCorrect:             \t"+(onlyCorrectBaseB<10?" ":"")+"%.3f", onlyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyCorrect:           \t"+(mostlyCorrectBaseB<10?" ":"")+"%.3f", mostlyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "anyCorrect:              \t"+(anyCorrectBaseB<10?" ":"")+"%.3f", anyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCorrect:               \t"+(noCorrectBaseB<10?" ":"")+"%.3f", noCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyIncorrect:         \t"+(mostlyIncorrectBaseB<10?" ":"")+"%.3f", mostlyIncorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyIncorrect:           \t"+(onlyIncorrectBaseB<10?" ":"")+"%.3f", onlyIncorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCoverage:              \t"+(noCoverageBaseB<10?" ":"")+"%.3f", noCoverageBaseB)+"%");
 		
 		System.out.println("\nStatistics over N (for covered locations)");
 		
-		System.out.println(String.format("onlyCorrect:             \t"+(onlyCorrectNB<10?" ":"")+"%.3f", onlyCorrectNB)+"%");
-		System.out.println(String.format("mostlyCorrect:           \t"+(mostlyCorrectNB<10?" ":"")+"%.3f", mostlyCorrectNB)+"%");
-		System.out.println(String.format("anyCorrect:              \t"+(anyCorrectNB<10?" ":"")+"%.3f", anyCorrectNB)+"%");		
-		System.out.println(String.format("mostlyIncorrect:         \t"+(mostlyIncorrectNB<10?" ":"")+"%.3f", mostlyIncorrectNB)+"%");
-		System.out.println(String.format("onlyIncorrect:           \t"+(onlyIncorrectNB<10?" ":"")+"%.3f", onlyIncorrectNB)+"%");
-		System.out.println(String.format("noCoverage (over all N): \t"+(noCoverageNB<10?" ":"")+"%.3f", noCoverageNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyCorrect:             \t"+(onlyCorrectNB<10?" ":"")+"%.3f", onlyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyCorrect:           \t"+(mostlyCorrectNB<10?" ":"")+"%.3f", mostlyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "anyCorrect:              \t"+(anyCorrectNB<10?" ":"")+"%.3f", anyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyIncorrect:         \t"+(mostlyIncorrectNB<10?" ":"")+"%.3f", mostlyIncorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyIncorrect:           \t"+(onlyIncorrectNB<10?" ":"")+"%.3f", onlyIncorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCoverage (over all N): \t"+(noCoverageNB<10?" ":"")+"%.3f", noCoverageNB)+"%");
 		
 		
 	}
@@ -298,7 +301,7 @@ public class CalcCoverageFromSites {
 			correct[chrom]=new byte[Data.chromLengths[chrom]];
 		}
 		
-		TextFile tf=new TextFile(fname, true, false);
+		TextFile tf=new TextFile(fname, true);
 		String s=tf.nextLine();
 		
 		long totalSites=0;
@@ -372,7 +375,7 @@ public class CalcCoverageFromSites {
 			byte[] cov=coverage[chrom];
 			byte[] cor=correct[chrom];
 			for(int i=0; i<cov.length; i++){
-				char b=Character.toUpperCase((char)cha.get(i));
+				char b=Tools.toUpperCase((char)cha.get(i));
 				if(!AminoAcid.isFullyDefined(b)){b='N';}
 				
 				int total=cov[i];
@@ -469,41 +472,41 @@ public class CalcCoverageFromSites {
 		if(bs!=null){
 			System.out.println("Reads Represented:       \t"+bs.cardinality());
 		}
-		System.out.println(String.format("Total Correct Sites:     \t"+(correctSitesB<10?" ":"")+"%.3f%%  ", correctSitesB)+" \t"+correctSites);
-		System.out.println(String.format("Total Correct Site Length:\t"+(correctSiteLenB<10?" ":"")+"%.3f%%  ", correctSiteLenB)+" \t"+correctSiteLen);
+		System.out.println(String.format(Locale.ROOT, "Total Correct Sites:     \t"+(correctSitesB<10?" ":"")+"%.3f%%  ", correctSitesB)+" \t"+correctSites);
+		System.out.println(String.format(Locale.ROOT, "Total Correct Site Length:\t"+(correctSiteLenB<10?" ":"")+"%.3f%%  ", correctSiteLenB)+" \t"+correctSiteLen);
 
 		System.out.println("\nCoverage Statistics");
 		
-		System.out.println(String.format("Avg Coverage:            \t"+(totalCoverageB<10?" ":"")+"%.3f", totalCoverageB)+"  \t"+totalCoverage);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage:            \t"+(totalCoverageB<10?" ":"")+"%.3f", totalCoverageB)+"  \t"+totalCoverage);
 		
-		System.out.println(String.format("Avg Coverage Base:       \t"+(totalCoverageBaseB<10?" ":"")+"%.3f", totalCoverageBaseB)+"  \t"+totalCoverageBase);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage Base:       \t"+(totalCoverageBaseB<10?" ":"")+"%.3f", totalCoverageBaseB)+"  \t"+totalCoverageBase);
 		
-		System.out.println(String.format("Avg Coverage N:          \t"+(totalCoverageNB<10?" ":"")+"%.3f", totalCoverageNB)+"  \t"+totalCoverageN);
+		System.out.println(String.format(Locale.ROOT, "Avg Coverage N:          \t"+(totalCoverageNB<10?" ":"")+"%.3f", totalCoverageNB)+"  \t"+totalCoverageN);
 		
-		System.out.println(String.format("Correct Coverage:        \t"+(correctCoverageB<10?" ":"")+"%.3f", correctCoverageB)+"  \t"+correctCoverage);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage:        \t"+(correctCoverageB<10?" ":"")+"%.3f", correctCoverageB)+"  \t"+correctCoverage);
 		
-		System.out.println(String.format("Correct Coverage Base:   \t"+(correctCoverageBaseB<10?" ":"")+"%.3f", correctCoverageBaseB)+"  \t"+correctCoverageBase);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage Base:   \t"+(correctCoverageBaseB<10?" ":"")+"%.3f", correctCoverageBaseB)+"  \t"+correctCoverageBase);
 		
-		System.out.println(String.format("Correct Coverage N:      \t"+(correctCoverageNB<10?" ":"")+"%.3f", correctCoverageNB)+"  \t"+correctCoverageN);
+		System.out.println(String.format(Locale.ROOT, "Correct Coverage N:      \t"+(correctCoverageNB<10?" ":"")+"%.3f", correctCoverageNB)+"  \t"+correctCoverageN);
 		
 		System.out.println("\nStatistics over Defined Bases");
 		
-		System.out.println(String.format("onlyCorrect:             \t"+(onlyCorrectBaseB<10?" ":"")+"%.3f", onlyCorrectBaseB)+"%");
-		System.out.println(String.format("mostlyCorrect:           \t"+(mostlyCorrectBaseB<10?" ":"")+"%.3f", mostlyCorrectBaseB)+"%");
-		System.out.println(String.format("anyCorrect:              \t"+(anyCorrectBaseB<10?" ":"")+"%.3f", anyCorrectBaseB)+"%");
-		System.out.println(String.format("noCorrect:               \t"+(noCorrectBaseB<10?" ":"")+"%.3f", noCorrectBaseB)+"%");
-		System.out.println(String.format("mostlyIncorrect:         \t"+(mostlyIncorrectBaseB<10?" ":"")+"%.3f", mostlyIncorrectBaseB)+"%");
-		System.out.println(String.format("onlyIncorrect:           \t"+(onlyIncorrectBaseB<10?" ":"")+"%.3f", onlyIncorrectBaseB)+"%");
-		System.out.println(String.format("noCoverage:              \t"+(noCoverageBaseB<10?" ":"")+"%.3f", noCoverageBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyCorrect:             \t"+(onlyCorrectBaseB<10?" ":"")+"%.3f", onlyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyCorrect:           \t"+(mostlyCorrectBaseB<10?" ":"")+"%.3f", mostlyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "anyCorrect:              \t"+(anyCorrectBaseB<10?" ":"")+"%.3f", anyCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCorrect:               \t"+(noCorrectBaseB<10?" ":"")+"%.3f", noCorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyIncorrect:         \t"+(mostlyIncorrectBaseB<10?" ":"")+"%.3f", mostlyIncorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyIncorrect:           \t"+(onlyIncorrectBaseB<10?" ":"")+"%.3f", onlyIncorrectBaseB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCoverage:              \t"+(noCoverageBaseB<10?" ":"")+"%.3f", noCoverageBaseB)+"%");
 		
 		System.out.println("\nStatistics over N (for covered locations)");
 		
-		System.out.println(String.format("onlyCorrect:             \t"+(onlyCorrectNB<10?" ":"")+"%.3f", onlyCorrectNB)+"%");
-		System.out.println(String.format("mostlyCorrect:           \t"+(mostlyCorrectNB<10?" ":"")+"%.3f", mostlyCorrectNB)+"%");
-		System.out.println(String.format("anyCorrect:              \t"+(anyCorrectNB<10?" ":"")+"%.3f", anyCorrectNB)+"%");		
-		System.out.println(String.format("mostlyIncorrect:         \t"+(mostlyIncorrectNB<10?" ":"")+"%.3f", mostlyIncorrectNB)+"%");
-		System.out.println(String.format("onlyIncorrect:           \t"+(onlyIncorrectNB<10?" ":"")+"%.3f", onlyIncorrectNB)+"%");
-		System.out.println(String.format("noCoverage (over all N): \t"+(noCoverageNB<10?" ":"")+"%.3f", noCoverageNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyCorrect:             \t"+(onlyCorrectNB<10?" ":"")+"%.3f", onlyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyCorrect:           \t"+(mostlyCorrectNB<10?" ":"")+"%.3f", mostlyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "anyCorrect:              \t"+(anyCorrectNB<10?" ":"")+"%.3f", anyCorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "mostlyIncorrect:         \t"+(mostlyIncorrectNB<10?" ":"")+"%.3f", mostlyIncorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "onlyIncorrect:           \t"+(onlyIncorrectNB<10?" ":"")+"%.3f", onlyIncorrectNB)+"%");
+		System.out.println(String.format(Locale.ROOT, "noCoverage (over all N): \t"+(noCoverageNB<10?" ":"")+"%.3f", noCoverageNB)+"%");
 		
 		
 	}
@@ -514,7 +517,7 @@ public class CalcCoverageFromSites {
 		String[] split=s.split("\t");
 		SiteScoreR[] scores=new SiteScoreR[split.length];
 		for(int i=0; i<split.length; i++){
-			SiteScoreR ssr=scores[i]=SiteScoreR.fromText(split[i]);
+			scores[i]=SiteScoreR.fromText(split[i]);
 		}
 		return scores;
 	}

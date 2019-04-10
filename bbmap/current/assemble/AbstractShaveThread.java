@@ -6,7 +6,7 @@ package assemble;
  *
  */
 /**
- * Removes dead-end kmers. 
+ * Removes dead-end kmers.
  */
 abstract class AbstractShaveThread extends Thread{
 
@@ -24,7 +24,7 @@ abstract class AbstractShaveThread extends Thread{
 	
 	abstract boolean processNextTable();
 	
-	/*--------------------------------------------------------------*/	
+	/*--------------------------------------------------------------*/
 	
 	long kmersRemovedT=0;
 	

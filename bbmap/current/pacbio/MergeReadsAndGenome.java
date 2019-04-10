@@ -2,25 +2,22 @@ package pacbio;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentLegacyReadInputStream;
-import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.KillSwitch;
-import stream.Read;
-import stream.SequentialReadInputStream;
-import structures.ListNum;
 import dna.Data;
-import dna.Parser;
-
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import shared.KillSwitch;
+import shared.Parser;
+import shared.PreParser;
 import shared.ReadStats;
 import shared.Tools;
+import stream.ConcurrentLegacyReadInputStream;
+import stream.ConcurrentReadInputStream;
+import stream.FastaReadInputStream;
+import stream.Read;
+import stream.SequentialReadInputStream;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -31,6 +28,13 @@ public class MergeReadsAndGenome {
 	
 	
 	public static void main(String[] args){
+		
+		{//Preparse block for help, config files, and outstream
+			PreParser pp=new PreParser(args, new Object() { }.getClass().getEnclosingClass(), false);
+			args=pp.args;
+			//outstream=pp.outstream;
+		}
+		
 		int genome=-1;
 		String in[]=null;
 		String out=null;
@@ -50,11 +54,9 @@ public class MergeReadsAndGenome {
 			final String arg=args[i];
 			final String[] split=arg.split("=");
 			String a=split[0].toLowerCase();
-			String b=(split.length>1 ? split[1] : "true");
+			String b=split.length>1 ? split[1] : null;
 
-			if(Parser.isJavaFlag(arg)){
-				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
+			if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -138,7 +140,7 @@ public class MergeReadsAndGenome {
 	public static long appendReads(ConcurrentReadInputStream cris, TextStreamWriter tsw, long id){
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
-		while(reads!=null && reads.size()>0){
+		while(ln!=null && reads!=null && reads.size()>0){//ln!=null prevents a compiler potential null access warning
 
 			for(Read r : reads){
 				Read b=r.mate;
@@ -154,13 +156,13 @@ public class MergeReadsAndGenome {
 				}
 			}
 			
-			cris.returnList(ln.id, ln.list.isEmpty());
+			cris.returnList(ln);
 			//System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		if(verbose){System.err.println("Finished reading");}
-		cris.returnList(ln.id, ln.list.isEmpty());
+		cris.returnList(ln);
 		if(verbose){System.err.println("Returned list");}
 		return id;
 	}

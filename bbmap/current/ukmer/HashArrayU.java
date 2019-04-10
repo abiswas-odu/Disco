@@ -2,14 +2,16 @@ package ukmer;
 
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import stream.ByteBuilder;
-import shared.Primes;
-import shared.Tools;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
+import shared.Primes;
+import shared.Tools;
+import structures.ByteBuilder;
+import structures.SuperLongList;
 
 /**
  * Stores kmers in a long[] and values in an int[][], with a victim cache.
@@ -23,25 +25,45 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	HashArrayU(int initialSize, int kbig_, boolean autoResize_, boolean twod){
-		if(initialSize>1){
-			initialSize=(int)Tools.min(maxPrime, Primes.primeAtLeast(initialSize));
-		}else{
-			initialSize=1;
-		}
-		prime=initialSize;
-		sizeLimit=(long)(sizeLimit=(long)(maxLoadFactor*prime));
+	HashArrayU(int[] schedule_, int k_, int kbig_, boolean twod_){
+		schedule=schedule_;
+		autoResize=schedule.length>1;
+		prime=schedule[0];
+		
+		sizeLimit=(long)((schedule.length==1 ? maxLoadFactorFinal : maxLoadFactor)*prime);
+		k=k_;
 		kbig=kbig_;
-		mult=Kmer.getMult(kbig);
+		mult=kbig/k;
 		arrays=new long[mult][];
 		for(int i=0; i<mult; i++){
 			arrays[i]=allocLong1D(prime+extra);
 			Arrays.fill(arrays[i], NOT_PRESENT);
 		}
-		victims=new HashForestU(Tools.max(10, initialSize/8), autoResize_, twod);
-		autoResize=autoResize_;
-		TWOD=twod;
+		victims=new HashForestU(Tools.max(10, prime/victimRatio), k, autoResize, twod_);
+		TWOD=twod_;
 	}
+	
+//	HashArrayU(int initialSize, int k_, int kbig_, boolean autoResize_, boolean twod){
+//		if(initialSize>1){
+//			initialSize=(int)Tools.min(maxPrime, Primes.primeAtLeast(initialSize));
+//		}else{
+//			initialSize=1;
+//		}
+//		schedule=null;
+//		prime=initialSize;
+//		sizeLimit=(long)(sizeLimit=(long)(maxLoadFactor*prime));
+//		k=k_;
+//		kbig=kbig_;
+//		mult=kbig/k;
+//		arrays=new long[mult][];
+//		for(int i=0; i<mult; i++){
+//			arrays[i]=allocLong1D(prime+extra);
+//			Arrays.fill(arrays[i], NOT_PRESENT);
+//		}
+//		victims=new HashForestU(Tools.max(10, initialSize/victimRatio), k, autoResize_, twod);
+//		autoResize=autoResize_;
+//		TWOD=twod;
+//	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Public Methods        ----------------*/
@@ -67,7 +89,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 //		}
 //		return x;
 //	}
-//	
+//
 //	public final int set_Test(final long kmer, final int v[]){
 //		assert(TESTMODE);
 //		final int x;
@@ -91,7 +113,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 //		}
 //		return x;
 //	}
-//	
+//
 //	public final int setIfNotPresent_Test(long kmer, int v){
 //		assert(TESTMODE);
 //		final int x;
@@ -111,6 +133,11 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 //		}
 //		return x;
 //	}
+	
+	public final int kmerToCell(Kmer kmer){
+		int cell=(int)(kmer.xor()%prime);
+		return cell;
+	}
 	
 	@Override
 	public final int set(Kmer kmer, final int[] v){
@@ -222,6 +249,17 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 		if(cell==HASH_COLLISION){return victims.getValue(kmer);}
 		return readCellValue(cell);
 	}
+	
+	public final int getValue(Kmer kmer, int startCell){
+		int cell=findKmer(kmer, startCell);
+		if(cell==NOT_PRESENT){return NOT_PRESENT;}
+		if(cell==HASH_COLLISION){return victims.getValue(kmer);}
+		return readCellValue(cell);
+	}
+	
+	public final int getCount(Kmer kmer){
+		return getValue(kmer);
+	}
 
 	/* (non-Javadoc)
 	 * @see ukmer.AbstractKmerTableU#getValue(long[], long)
@@ -236,7 +274,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	}
 	
 	public final Kmer fillKmer(int cell, Kmer kmer) {
-		return fillKmer(cell, kmer, arrays); 
+		return fillKmer(cell, kmer, arrays);
 	}
 	
 	public final Kmer fillKmer(int cell, Kmer kmer, long[][] matrix) {
@@ -364,16 +402,42 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	final Object get(long[] kmer){
 		throw new RuntimeException("Unimplemented.");
 	}
-		
+	
 	final int findKmer(Kmer kmer){
-		return findKmer(kmer.key(), kmer.xor());
+		return findKmer(kmer.key(), (int)(kmer.xor()%prime));
+	}
+		
+	final int findKmer(Kmer kmer, int startCell){
+		return findKmer(kmer.key(), startCell);
 	}
 
-	final int findKmer(long[] key, long xor){
-		int cell=(int)(xor%prime);
+//	final int findKmer(long[] key, long xor){
+//		return findKmer(key, (int)(xor%prime));
+//	}
+
+//	final int findKmer(final long[] key, final int startCell){
+//		int cell=startCell;
+//		for(final int max=cell+extra; cell<max; cell++){
+//			final long n=arrays[0][cell];
+//			if(n==key[0]){
+//				boolean success=true;
+//				for(int i=1; i<mult && success; i++){
+//					if(key[i]!=arrays[i][cell]){success=false;}
+//				}
+//				if(success){return cell;}
+//			}else if(n==NOT_PRESENT){return NOT_PRESENT;}
+//		}
+//		return HASH_COLLISION;
+//	}
+
+	final int findKmer(final long[] key, final int startCell){
+		int cell=startCell;
+		
+		final long[] array0=arrays[0];
+		final long key0=key[0];
 		for(final int max=cell+extra; cell<max; cell++){
-			final long n=arrays[0][cell];
-			if(n==key[0]){
+			final long n=array0[cell];
+			if(n==key0){
 				boolean success=true;
 				for(int i=1; i<mult && success; i++){
 					if(key[i]!=arrays[i][cell]){success=false;}
@@ -385,23 +449,26 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	}
 	
 	final int findKmerOrEmpty(Kmer kmer){
-		int cell=(int)(kmer.xor()%prime);
+		int cell=kmerToCell(kmer);
 		if(verbose){System.err.println("Started at cell "+cell+" for "+kmer);}
 		
-		long[] key=kmer.key();
+		final long[] key=kmer.key();
+		final long[] array0=arrays[0];
+		final long key0=key[0];
 		for(final int max=cell+extra; cell<max; cell++){
-			final long n=arrays[0][cell];
+			final long n=array0[cell];
 			if(n==NOT_PRESENT){
 				if(verbose){System.err.println("Chose empty cell "+cell+" for "+kmer);}
 				return cell;
-			}
-			boolean success=true;
-			for(int i=0; i<mult && success; i++){
-				if(key[i]!=arrays[i][cell]){success=false;}
-			}
-			if(success){
-				if(verbose){System.err.println("Found cell "+cell+" containing "+kmer);}
-				return cell;
+			}else if(n==key0){
+				boolean success=true;
+				for(int i=1; i<mult && success; i++){
+					if(key[i]!=arrays[i][cell]){success=false;}
+				}
+				if(success){
+					if(verbose){System.err.println("Found cell "+cell+" containing "+kmer);}
+					return cell;
+				}
 			}
 		}
 		return HASH_COLLISION;
@@ -409,11 +476,10 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	
 	final boolean matches(long[] key, int cell){
 		assert(cell>=0);
-		boolean success=true;
-		for(int i=0; i<mult && success; i++){
-			if(key[i]!=arrays[i][cell]){success=false;}
+		for(int i=0; i<mult; i++){
+			if(key[i]!=arrays[i][cell]){return false;}
 		}
-		return success;
+		return true;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -439,7 +505,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	protected long[] cellToArray(int cell){throw new RuntimeException("Unimplemented");}
 	
 	@Override
-	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount, int maxcount){
 		final long[] key=new long[mult];
 		final int alen=arrays[0].length;
 		if(TWOD){
@@ -459,13 +525,13 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			}
 		}
 		if(victims!=null){
-			victims.dumpKmersAsText(tsw, k, mincount);
+			victims.dumpKmersAsText(tsw, k, mincount, maxcount);
 		}
 		return true;
 	}
 	
 	@Override
-	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount, int maxcount, AtomicLong remaining){
 		final long[] key=new long[mult];
 		final int alen=arrays[0].length;
 		if(TWOD){
@@ -473,6 +539,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			for(int i=0; i<alen; i++){
 				long[] temp=fillKey(i, key);
 				if(temp!=null){
+					if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 					bsw.printlnKmer(temp, readCellValues(i, singleton), k);
 				}
 			}
@@ -480,18 +547,19 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			for(int i=0; i<alen; i++){
 				long[] temp=fillKey(i, key);
 				if(temp!=null && readCellValue(i)>=mincount){
+					if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 					bsw.printlnKmer(temp, readCellValue(i), k);
 				}
 			}
 		}
 		if(victims!=null){
-			victims.dumpKmersAsBytes(bsw, k, mincount);
+			victims.dumpKmersAsBytes(bsw, k, mincount, maxcount, remaining);
 		}
 		return true;
 	}
 	
 	@Override
-	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount, final int maxcount, AtomicLong remaining){
 		final long[] key=new long[mult];
 		final int alen=arrays[0].length;
 		if(TWOD){
@@ -499,8 +567,9 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			for(int i=0; i<alen; i++){
 				long[] temp=fillKey(i, key);
 				if(temp!=null){
+					if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 					toBytes(temp, readCellValues(i, singleton), k, bb);
-					bb.append('\n');
+					bb.nl();
 					if(bb.length()>=16000){
 						ByteBuilder bb2=new ByteBuilder(bb);
 						synchronized(bsw){bsw.addJob(bb2);}
@@ -512,8 +581,9 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			for(int i=0; i<alen; i++){
 				long[] temp=fillKey(i, key);
 				if(temp!=null && readCellValue(i)>=mincount){
+					if(remaining!=null && remaining.decrementAndGet()<0){return true;}
 					toBytes(temp, readCellValue(i), k, bb);
-					bb.append('\n');
+					bb.nl();
 					if(bb.length()>=16000){
 						ByteBuilder bb2=new ByteBuilder(bb);
 						synchronized(bsw){bsw.addJob(bb2);}
@@ -523,7 +593,7 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 			}
 		}
 		if(victims!=null){
-			victims.dumpKmersAsBytes_MT(bsw, bb, k, mincount);
+			victims.dumpKmersAsBytes_MT(bsw, bb, k, mincount, maxcount, remaining);
 		}
 		return true;
 	}
@@ -531,8 +601,9 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	@Override
 	public final void fillHistogram(long[] ca, int max){
 		final int alen=arrays[0].length;
+		final long[] array0=arrays[0];
 		for(int i=0; i<alen; i++){
-			long kmer=arrays[0][i];
+			long kmer=array0[i];
 			if(kmer!=NOT_PRESENT){
 				int count=Tools.min(readCellValue(i), max);
 				ca[count]++;
@@ -540,6 +611,22 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 		}
 		if(victims!=null){
 			victims.fillHistogram(ca, max);
+		}
+	}
+	
+	@Override
+	public void fillHistogram(SuperLongList sll){
+		final int alen=arrays[0].length;
+		final long[] array0=arrays[0];
+		for(int i=0; i<alen; i++){
+			long kmer=array0[i];
+			if(kmer!=NOT_PRESENT){
+				int count=readCellValue(i);
+				sll.add(count);
+			}
+		}
+		if(victims!=null){
+			victims.fillHistogram(sll);
 		}
 	}
 	
@@ -576,12 +663,25 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	long sizeLimit;
 	final HashForestU victims;
 	final boolean autoResize;
+	final int k;
 	final int kbig;
 	final int mult;//Length of Kmer arrays.
 	public final boolean TWOD;
 	private final Lock lock=new ReentrantLock();
 	
 	public AtomicIntegerArray owners() {return owners;}
+	
+	protected int nextScheduleSize(){
+		if(schedulePos<schedule.length-1){schedulePos++;}
+		return schedule[schedulePos];
+	}
+	
+	protected boolean atMaxSize(){
+		return schedulePos>=schedule.length-1;
+	}
+	
+	protected final int[] schedule;
+	private int schedulePos=0;
 	
 	@Override
 	final Lock getLock(){return lock;}
@@ -590,11 +690,13 @@ public abstract class HashArrayU extends AbstractKmerTableU {
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	final static int extra=21;
-	final static int maxPrime=(int)Primes.primeAtMost(Integer.MAX_VALUE-extra);
-	final static float resizeMult=2f; //Resize by a minimum of this much
-	final static float minLoadFactor=0.58f; //Resize by enough to get the load above this factor
-	final static float maxLoadFactor=0.905f; //Reaching this load triggers resizing
+	final static int victimRatio=16; //Initial divisor for victim cache size; it self-resizes.
+	final static int extra=60; //Amazingly, increasing this gave increasing returns past 300.  Old default was 21.  Could allow higher maxLoadFactorFinal and smaller victim cache.
+	final static int maxPrime=Primes.primeAtMost(Integer.MAX_VALUE-extra-20);
+	final static float resizeMult=2f; //Resize by a minimum of this much; not needed for schedule
+	final static float minLoadFactor=0.58f; //Resize by enough to get the load above this factor; not needed for schedule
+	final static float maxLoadFactor=0.88f; //Reaching this load triggers resizing
+	final static float maxLoadFactorFinal=0.95f; //Reaching this load triggers killing
 	final static float minLoadMult=1/minLoadFactor;
 	final static float maxLoadMult=1/maxLoadFactor;
 	
