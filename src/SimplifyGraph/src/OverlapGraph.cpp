@@ -2439,19 +2439,21 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 			}
 		}
 	}
-	std::fstream scaffFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+"_join2.txt");
+	//std::fstream scaffFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+"_join2.txt");
 	std::string line;
-	if(scaffFile.good())
-	{
-		Utils::getRefNames(scaffFile, contigRefStrs);
-		for (auto it=contigRefStrs.begin(); it!=contigRefStrs.end();)
-		{
-		   if((*it).size()<=5000)
-		      it = contigRefStrs.erase(it);
-		  else
-		      ++it;
-		}
-	}
+	//bool isRefGood=false;
+	//if(scaffFile.good())
+	//{
+	//	Utils::getRefNames(scaffFile, contigRefStrs);
+	//	for (auto it=contigRefStrs.begin(); it!=contigRefStrs.end();)
+	//	{
+	//	   if((*it).size()<=5000)
+	//	      it = contigRefStrs.erase(it);
+	//	  else
+	//	      ++it;
+	//	}
+	//	isRefGood=true;
+	//}
 	std::ifstream misAsmFile(simplifyPartialPath+"/test/"+Utils::unsignedIntToString(thresVal)+".txt");
 	if(misAsmFile.good())
 	{
@@ -2597,14 +2599,14 @@ void OverlapGraph::streamContigsThresh(const vector<std::string> &read_SingleFil
 		contigStrsFinal.insert(contigStrsFinal.end(), contigStrs.begin(), contigStrs.end());
 	}
 	//Write to File
-	for (auto it=contigStrsFinal.begin(); it!=contigStrsFinal.end();)
-	{
-	   if((*it).size()>5000)
-	      it = contigStrsFinal.erase(it);
-	  else
-	      ++it;
-	}
-	contigStrsFinal.insert(contigStrsFinal.end(), contigRefStrs.begin(), contigRefStrs.end());
+	//for (auto it=contigStrsFinal.begin(); it!=contigStrsFinal.end() && isRefGood;)
+	//{
+	//   if((*it).size()>5000)
+	//      it = contigStrsFinal.erase(it);
+	//  else
+	//      ++it;
+	//}
+	//contigStrsFinal.insert(contigStrsFinal.end(), contigRefStrs.begin(), contigRefStrs.end());
 	sort(contigStrsFinal.rbegin(),contigStrsFinal.rend(), c);
 	UINT64 covIndx=0;
 	for(auto it = contigStrsFinal.begin(); it < contigStrsFinal.end(); ++it)

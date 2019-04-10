@@ -671,7 +671,7 @@ namespace Utils
     void populateThresh(std::map<UINT64,UINT64> *ref)
     {
     	ref->insert(std::pair<UINT64,UINT64>(22286068,60000));
-    	ref->insert(std::pair<UINT64,UINT64>(107718722,62300));
+    	ref->insert(std::pair<UINT64,UINT64>(107690098,62300));
     	ref->insert(std::pair<UINT64,UINT64>(107,62300));
     	ref->insert(std::pair<UINT64,UINT64>(106998276,62300));
     	ref->insert(std::pair<UINT64,UINT64>(770,102100));

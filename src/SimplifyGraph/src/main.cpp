@@ -137,6 +137,7 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 		overlapGraph = new OverlapGraph(parGlobalGraph, simplifyPartialPath, dataSet,
 						minOvl, threadPoolSize);
 	}
+	omp_set_num_threads(1);
 	//Initial Simplification
 	if(checkPointParams[interationCount-1][1]==0)		//Check if initial simplification complete
 	{
@@ -259,13 +260,8 @@ bool SimplifyGraph(const vector<std::string> &read_SingleFiles,const vector<std:
 			string contig_file = outputFilenamePrefix+"_scaffoldsFinal_"+SSTR(interationCount)+".fasta";
 			string edge_cov_file = outputFilenamePrefix+"_scaffoldEdgeCoverageFinal_"+SSTR(interationCount)+".txt";
 			string usedReadFileName = outputFilenamePrefix+"_UsedReads_"+SSTR(interationCount)+".txt";
-			if(overlapGraph->refThresh->find(dataSet->size())!=overlapGraph->refThresh->end())
-				overlapGraph->streamContigsThresh(read_SingleFiles,read_PairFiles, read_PairInterFiles,
-					contig_file, edge_file, edge_cov_file,usedReadFileName, simplifyPartialPath, overlapGraph->refThresh->find(dataSet->size())->second,"scaff",scfCount);
-			else
-				overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
+			overlapGraph->streamContigs(read_SingleFiles,read_PairFiles, read_PairInterFiles,
 									contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
-			//overlapGraph->printContigs(contig_file, edge_file, edge_cov_file,usedReadFileName,"scaff",scfCount);
 		}
 		//Write checkpoint graph
 		overlapGraph->printAllEdges(outputFilenamePrefix+"_CurrGraph_.txt");
